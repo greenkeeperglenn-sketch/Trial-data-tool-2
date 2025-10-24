@@ -13,6 +13,26 @@ const DataEntryField = ({
   const [showTreatments, setShowTreatments] = useState(false);
   const [reverseColorScale, setReverseColorScale] = useState(false);
 
+  // Validate gridLayout
+  if (!gridLayout || !Array.isArray(gridLayout) || gridLayout.length === 0) {
+    return (
+      <div className="p-4 bg-red-50 border border-red-200 rounded">
+        <p className="text-red-800">Error: Invalid grid layout. Please check the trial data.</p>
+      </div>
+    );
+  }
+
+  // Filter out any undefined blocks
+  const validGridLayout = gridLayout.filter(block => block && Array.isArray(block));
+
+  if (validGridLayout.length === 0) {
+    return (
+      <div className="p-4 bg-red-50 border border-red-200 rounded">
+        <p className="text-red-800">Error: No valid blocks found in grid layout.</p>
+      </div>
+    );
+  }
+
   const assessment = config.assessmentTypes.find(a => a.name === selectedAssessmentType);
 
   // Get color based on value
@@ -55,7 +75,7 @@ const DataEntryField = ({
     const range = assessment.max - assessment.min;
     const midPoint = assessment.min + (range * 0.6);
     
-    gridLayout.flat().filter(p => !p.isBlank).forEach(plot => {
+    validGridLayout.flat().filter(p => !p.isBlank).forEach(plot => {
       let value;
       if (plot.treatment === bestTreatment) {
         value = midPoint + (range * 0.15) + (Math.random() * range * 0.15);
@@ -120,7 +140,7 @@ const DataEntryField = ({
       {/* Field Grid */}
       <div className="overflow-x-auto mb-4">
         <div className="space-y-2">
-          {gridLayout.map((row, rowIdx) => (
+          {validGridLayout.map((row, rowIdx) => (
             <div key={rowIdx} className="grid gap-1" style={{ gridTemplateColumns: `repeat(${row.length}, minmax(0, 1fr))` }}>
               {row.map((plot, colIdx) => {
                 if (plot.isBlank) {

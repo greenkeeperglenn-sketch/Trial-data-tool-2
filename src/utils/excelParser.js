@@ -326,6 +326,12 @@ function convertToTrialFormat(parsedSheets) {
  * Create grid layout from plot data
  */
 function createGridLayout(plots, numBlocks, treatmentsList) {
+  console.log('[createGridLayout] Input:', {
+    plotsCount: plots.length,
+    numBlocks,
+    treatments: treatmentsList
+  });
+
   // Create treatment index mapping (Excel treatment number -> 0-based index)
   const treatmentMap = new Map();
   treatmentsList.forEach((t, idx) => {
@@ -336,27 +342,38 @@ function createGridLayout(plots, numBlocks, treatmentsList) {
   const grid = [];
 
   for (let blockIdx = 0; blockIdx < numBlocks; blockIdx++) {
-    const blockPlots = [];
     const blockNum = blockIdx + 1;
 
     // Find all plots in this block
     const plotsInBlock = plots.filter(p => p.block === blockNum)
       .sort((a, b) => a.plot - b.plot);
 
-    plotsInBlock.forEach(plot => {
+    console.log(`[createGridLayout] Block ${blockNum}: ${plotsInBlock.length} plots`);
+
+    const blockPlots = plotsInBlock.map(plot => {
       const treatmentIdx = treatmentMap.get(plot.treatment);
-      blockPlots.push({
+
+      if (treatmentIdx === undefined) {
+        console.warn(`[createGridLayout] Treatment ${plot.treatment} not found in map!`);
+      }
+
+      return {
         id: `${plot.block}-${plot.plot}`,
         block: plot.block,
-        treatment: treatmentIdx,
+        treatment: treatmentIdx !== undefined ? treatmentIdx : 0,
         treatmentName: `Treatment ${plot.treatment}`,
         isBlank: false,
         plotNumber: plot.plot
-      });
+      };
     });
 
     grid.push(blockPlots);
   }
+
+  console.log('[createGridLayout] Grid created:', {
+    blocks: grid.length,
+    plotsPerBlock: grid.map(b => b.length)
+  });
 
   return grid;
 }
