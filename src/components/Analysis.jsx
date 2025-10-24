@@ -5,6 +5,7 @@ import { LineChart, BarChart3, Box } from 'lucide-react';
 
 const Analysis = ({ config, gridLayout, assessmentDates, selectedAssessmentType }) => {
   const [chartType, setChartType] = useState('box'); // 'line', 'box', 'bar'
+  const [barGrouping, setBarGrouping] = useState('treatment'); // 'treatment' or 'date'
   
   // Calculate comprehensive statistics for a single date
   const calculateStats = (dateObj) => {
@@ -330,6 +331,35 @@ const Analysis = ({ config, gridLayout, assessmentDates, selectedAssessmentType 
           </div>
         </div>
 
+        {/* Bar Chart Grouping Toggle */}
+        {chartType === 'bar' && (
+          <div className="mb-4 flex items-center gap-3">
+            <span className="text-sm font-medium text-gray-700">Group by:</span>
+            <div className="flex gap-1 bg-gray-100 p-1 rounded">
+              <button
+                onClick={() => setBarGrouping('treatment')}
+                className={`px-3 py-1 rounded text-sm transition-colors ${
+                  barGrouping === 'treatment'
+                    ? 'bg-white shadow text-gray-900 font-medium'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                Treatment
+              </button>
+              <button
+                onClick={() => setBarGrouping('date')}
+                className={`px-3 py-1 rounded text-sm transition-colors ${
+                  barGrouping === 'date'
+                    ? 'bg-white shadow text-gray-900 font-medium'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                Date
+              </button>
+            </div>
+          </div>
+        )}
+
         <div className="overflow-x-auto">
           {/* Line Chart */}
           {chartType === 'line' && (
@@ -557,91 +587,183 @@ const Analysis = ({ config, gridLayout, assessmentDates, selectedAssessmentType 
                 const barWidth = 30;
 
                 const dateColors = ['#3b82f6', '#8b5cf6', '#ec4899', '#f97316', '#14b8a6', '#84cc16', '#eab308', '#ef4444', '#06b6d4', '#10b981', '#f59e0b', '#6366f1'];
+                const treatmentColors = ['#3b82f6', '#8b5cf6', '#ec4899', '#f97316', '#14b8a6', '#84cc16', '#eab308', '#ef4444', '#06b6d4'];
 
                 return (
                   <div>
-                    <div className="flex gap-8 items-end pb-8" style={{ height: chartHeight + 100 }}>
-                      {/* Y-axis */}
-                      <div className="flex flex-col justify-between text-xs text-gray-600 h-full pb-16">
-                        <span>{globalMax.toFixed(1)}</span>
-                        <span>{(globalMax * 0.75).toFixed(1)}</span>
-                        <span>{(globalMax * 0.5).toFixed(1)}</span>
-                        <span>{(globalMax * 0.25).toFixed(1)}</span>
-                        <span>0</span>
-                      </div>
-
-                      {/* Bar groups for each treatment */}
-                      {config.treatments.map((treatment, treatmentIdx) => {
-                        const groupWidth = assessmentDates.length * (barWidth + 4);
-
-                        return (
-                          <div key={treatmentIdx} className="flex flex-col items-center" style={{ width: groupWidth + 'px' }}>
-                            <div className="flex gap-1 items-end h-full pb-4">
-                              {assessmentDates.map((dateObj, dateIdx) => {
-                                const stats = calculateStats(dateObj);
-                                if (!stats) return <div key={dateIdx} style={{ width: barWidth + 'px' }} />;
-
-                                const treatmentStat = stats.treatmentStats.find(ts => ts.treatment === treatmentIdx);
-                                if (!treatmentStat) return <div key={dateIdx} style={{ width: barWidth + 'px' }} />;
-
-                                const barHeight = (treatmentStat.mean / globalMax) * (chartHeight - 60);
-                                const errorBarHeight = (treatmentStat.stdError / globalMax) * (chartHeight - 60);
-
-                                return (
-                                  <div key={dateIdx} className="flex flex-col items-center" style={{ width: barWidth + 'px' }}>
-                                    {/* Value label */}
-                                    <div className="text-xs font-medium mb-1 text-center whitespace-nowrap" style={{ fontSize: '10px' }}>
-                                      {treatmentStat.mean.toFixed(1)}
-                                    </div>
-                                    {/* Letter group (only show on last date) */}
-                                    {dateIdx === assessmentDates.length - 1 && (
-                                      <div className="text-xs text-blue-600 font-bold mb-1" style={{ fontSize: '10px' }}>
-                                        ({treatmentStat.group})
-                                      </div>
-                                    )}
-                                    {/* Error bar */}
-                                    <div className="relative" style={{ height: errorBarHeight + 'px', marginBottom: '2px' }}>
-                                      <div
-                                        className="absolute left-1/2 w-0.5 bg-black -translate-x-1/2 bottom-0"
-                                        style={{ height: '100%' }}
-                                      />
-                                      <div
-                                        className="absolute left-1/2 w-2 h-0.5 bg-black -translate-x-1/2 top-0"
-                                      />
-                                    </div>
-                                    {/* Bar */}
-                                    <div
-                                      className="w-full rounded-t transition-all"
-                                      style={{
-                                        height: `${barHeight}px`,
-                                        backgroundColor: dateColors[dateIdx % dateColors.length]
-                                      }}
-                                    />
-                                  </div>
-                                );
-                              })}
-                            </div>
-                            {/* Treatment label */}
-                            <div className="text-sm font-medium text-center mt-2">
-                              {treatment}
-                            </div>
+                    {/* Bar Chart grouped by Treatment */}
+                    {barGrouping === 'treatment' && (
+                      <div>
+                        <div className="flex gap-8 items-end pb-8" style={{ height: chartHeight + 100 }}>
+                          {/* Y-axis */}
+                          <div className="flex flex-col justify-between text-xs text-gray-600 h-full pb-16">
+                            <span>{globalMax.toFixed(1)}</span>
+                            <span>{(globalMax * 0.75).toFixed(1)}</span>
+                            <span>{(globalMax * 0.5).toFixed(1)}</span>
+                            <span>{(globalMax * 0.25).toFixed(1)}</span>
+                            <span>0</span>
                           </div>
-                        );
-                      })}
-                    </div>
 
-                    {/* Legend */}
-                    <div className="flex flex-wrap gap-3 mt-4 justify-center text-xs">
-                      {assessmentDates.map((dateObj, idx) => (
-                        <div key={idx} className="flex items-center gap-2">
-                          <div
-                            className="w-4 h-4 rounded"
-                            style={{ backgroundColor: dateColors[idx % dateColors.length] }}
-                          />
-                          <span>{dateObj.date}</span>
+                          {/* Bar groups for each treatment */}
+                          {config.treatments.map((treatment, treatmentIdx) => {
+                            const groupWidth = assessmentDates.length * (barWidth + 4);
+
+                            return (
+                              <div key={treatmentIdx} className="flex flex-col items-center" style={{ width: groupWidth + 'px' }}>
+                                <div className="flex gap-1 items-end h-full pb-4">
+                                  {assessmentDates.map((dateObj, dateIdx) => {
+                                    const stats = calculateStats(dateObj);
+                                    if (!stats) return <div key={dateIdx} style={{ width: barWidth + 'px' }} />;
+
+                                    const treatmentStat = stats.treatmentStats.find(ts => ts.treatment === treatmentIdx);
+                                    if (!treatmentStat) return <div key={dateIdx} style={{ width: barWidth + 'px' }} />;
+
+                                    const barHeight = (treatmentStat.mean / globalMax) * (chartHeight - 60);
+                                    const errorBarHeight = (treatmentStat.stdError / globalMax) * (chartHeight - 60);
+
+                                    return (
+                                      <div key={dateIdx} className="flex flex-col items-center" style={{ width: barWidth + 'px' }}>
+                                        {/* Value label */}
+                                        <div className="text-xs font-medium mb-1 text-center whitespace-nowrap" style={{ fontSize: '10px' }}>
+                                          {treatmentStat.mean.toFixed(1)}
+                                        </div>
+                                        {/* Letter group (only show on last date) */}
+                                        {dateIdx === assessmentDates.length - 1 && (
+                                          <div className="text-xs text-blue-600 font-bold mb-1" style={{ fontSize: '10px' }}>
+                                            ({treatmentStat.group})
+                                          </div>
+                                        )}
+                                        {/* Error bar */}
+                                        <div className="relative" style={{ height: errorBarHeight + 'px', marginBottom: '2px' }}>
+                                          <div
+                                            className="absolute left-1/2 w-0.5 bg-black -translate-x-1/2 bottom-0"
+                                            style={{ height: '100%' }}
+                                          />
+                                          <div
+                                            className="absolute left-1/2 w-2 h-0.5 bg-black -translate-x-1/2 top-0"
+                                          />
+                                        </div>
+                                        {/* Bar */}
+                                        <div
+                                          className="w-full rounded-t transition-all"
+                                          style={{
+                                            height: `${barHeight}px`,
+                                            backgroundColor: dateColors[dateIdx % dateColors.length]
+                                          }}
+                                        />
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                                {/* Treatment label */}
+                                <div className="text-sm font-medium text-center mt-2">
+                                  {treatment}
+                                </div>
+                              </div>
+                            );
+                          })}
                         </div>
-                      ))}
-                    </div>
+
+                        {/* Legend */}
+                        <div className="flex flex-wrap gap-3 mt-4 justify-center text-xs">
+                          {assessmentDates.map((dateObj, idx) => (
+                            <div key={idx} className="flex items-center gap-2">
+                              <div
+                                className="w-4 h-4 rounded"
+                                style={{ backgroundColor: dateColors[idx % dateColors.length] }}
+                              />
+                              <span>{dateObj.date}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Bar Chart grouped by Date */}
+                    {barGrouping === 'date' && (
+                      <div>
+                        <div className="flex gap-8 items-end pb-8" style={{ height: chartHeight + 100 }}>
+                          {/* Y-axis */}
+                          <div className="flex flex-col justify-between text-xs text-gray-600 h-full pb-16">
+                            <span>{globalMax.toFixed(1)}</span>
+                            <span>{(globalMax * 0.75).toFixed(1)}</span>
+                            <span>{(globalMax * 0.5).toFixed(1)}</span>
+                            <span>{(globalMax * 0.25).toFixed(1)}</span>
+                            <span>0</span>
+                          </div>
+
+                          {/* Bar groups for each date */}
+                          {assessmentDates.map((dateObj, dateIdx) => {
+                            const groupWidth = config.treatments.length * (barWidth + 4);
+                            const stats = calculateStats(dateObj);
+
+                            return (
+                              <div key={dateIdx} className="flex flex-col items-center" style={{ width: groupWidth + 'px' }}>
+                                <div className="flex gap-1 items-end h-full pb-4">
+                                  {config.treatments.map((treatment, treatmentIdx) => {
+                                    if (!stats) return <div key={treatmentIdx} style={{ width: barWidth + 'px' }} />;
+
+                                    const treatmentStat = stats.treatmentStats.find(ts => ts.treatment === treatmentIdx);
+                                    if (!treatmentStat) return <div key={treatmentIdx} style={{ width: barWidth + 'px' }} />;
+
+                                    const barHeight = (treatmentStat.mean / globalMax) * (chartHeight - 60);
+                                    const errorBarHeight = (treatmentStat.stdError / globalMax) * (chartHeight - 60);
+
+                                    return (
+                                      <div key={treatmentIdx} className="flex flex-col items-center" style={{ width: barWidth + 'px' }}>
+                                        {/* Value label */}
+                                        <div className="text-xs font-medium mb-1 text-center whitespace-nowrap" style={{ fontSize: '10px' }}>
+                                          {treatmentStat.mean.toFixed(1)}
+                                        </div>
+                                        {/* Letter group */}
+                                        <div className="text-xs text-blue-600 font-bold mb-1" style={{ fontSize: '10px' }}>
+                                          ({treatmentStat.group})
+                                        </div>
+                                        {/* Error bar */}
+                                        <div className="relative" style={{ height: errorBarHeight + 'px', marginBottom: '2px' }}>
+                                          <div
+                                            className="absolute left-1/2 w-0.5 bg-black -translate-x-1/2 bottom-0"
+                                            style={{ height: '100%' }}
+                                          />
+                                          <div
+                                            className="absolute left-1/2 w-2 h-0.5 bg-black -translate-x-1/2 top-0"
+                                          />
+                                        </div>
+                                        {/* Bar */}
+                                        <div
+                                          className="w-full rounded-t transition-all"
+                                          style={{
+                                            height: `${barHeight}px`,
+                                            backgroundColor: treatmentColors[treatmentIdx % treatmentColors.length]
+                                          }}
+                                        />
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                                {/* Date label */}
+                                <div className="text-sm font-medium text-center mt-2">
+                                  {dateObj.date}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+
+                        {/* Legend */}
+                        <div className="flex flex-wrap gap-3 mt-4 justify-center text-xs">
+                          {config.treatments.map((treatment, idx) => (
+                            <div key={idx} className="flex items-center gap-2">
+                              <div
+                                className="w-4 h-4 rounded"
+                                style={{ backgroundColor: treatmentColors[idx % treatmentColors.length] }}
+                              />
+                              <span>{treatment}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 );
               })()}
@@ -663,11 +785,18 @@ const Analysis = ({ config, gridLayout, assessmentDates, selectedAssessmentType 
               <p>Letters below indicate statistical groupings (LSD test)</p>
             </>
           )}
-          {chartType === 'bar' && (
+          {chartType === 'bar' && barGrouping === 'treatment' && (
             <>
               <p>Grouped bars show all assessment dates for each treatment with error bars (±SE)</p>
               <p>Different colors represent different dates - see legend below chart</p>
               <p>Letters show statistical groupings for the latest date (LSD test)</p>
+            </>
+          )}
+          {chartType === 'bar' && barGrouping === 'date' && (
+            <>
+              <p>Grouped bars show all treatments for each assessment date with error bars (±SE)</p>
+              <p>Different colors represent different treatments - see legend below chart</p>
+              <p>Letters show statistical groupings for each date (LSD test)</p>
             </>
           )}
         </div>
