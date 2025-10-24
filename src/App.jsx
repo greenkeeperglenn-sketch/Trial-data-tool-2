@@ -165,6 +165,8 @@ const App = () => {
   // Import trial from Excel
   const importTrialFromExcel = (parsedData) => {
     try {
+      console.log('[App] Importing trial data:', parsedData);
+
       // The parser already returns data in the correct format
       const trialData = {
         id: parsedData.id,
@@ -187,10 +189,14 @@ const App = () => {
         metadata: parsedData.metadata
       };
 
+      console.log('[App] Trial data prepared:', trialData);
       setTrials(prev => ({ ...prev, [trialData.id]: trialData }));
+      console.log('[App] Trial saved to state');
       setShowExcelImport(false);
+      console.log('[App] Import complete!');
       alert(`Trial "${parsedData.name}" imported successfully with ${parsedData.assessmentDates.length} assessment dates!`);
     } catch (err) {
+      console.error('[App] Import error:', err);
       alert('Error importing trial from Excel: ' + err.message);
     }
   };

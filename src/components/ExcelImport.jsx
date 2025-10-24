@@ -48,10 +48,13 @@ export default function ExcelImport({ onImport, onCancel }) {
     setParsing(true);
 
     try {
+      console.log('Starting to parse Excel file:', selectedFile.name);
       const data = await parseExcelFile(selectedFile);
+      console.log('Parse successful:', data);
       setParsedData(data);
       setParsing(false);
     } catch (err) {
+      console.error('Parse error:', err);
       setError(err.message || 'Failed to parse Excel file');
       setParsing(false);
       setParsedData(null);

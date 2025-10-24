@@ -160,47 +160,63 @@ function parseSheet(sheet, sheetName) {
  */
 export function parseExcelFile(file) {
   return new Promise((resolve, reject) => {
-    const reader = new FileReader();
+    try {
+      console.log('[Parser] Starting file read...');
+      const reader = new FileReader();
 
-    reader.onload = (e) => {
-      try {
-        const data = new Uint8Array(e.target.result);
-        const workbook = XLSX.read(data, { type: 'array' });
+      reader.onload = (e) => {
+        try {
+          console.log('[Parser] File loaded, starting parse...');
+          const data = new Uint8Array(e.target.result);
+          const workbook = XLSX.read(data, { type: 'array' });
 
-        // Filter out sheets like "Sheet1", "Trial Plan", "spare empty"
-        const dataSheets = workbook.SheetNames.filter(name => {
-          const lowerName = name.toLowerCase();
-          return !lowerName.includes('sheet1') &&
-                 !lowerName.includes('trial plan') &&
-                 !lowerName.includes('spare') &&
-                 !lowerName.includes('empty');
-        });
+          console.log('[Parser] Workbook read, sheet names:', workbook.SheetNames);
 
-        if (dataSheets.length === 0) {
-          reject(new Error('No data sheets found in the Excel file'));
-          return;
+          // Filter out sheets like "Sheet1", "Trial Plan", "spare empty"
+          const dataSheets = workbook.SheetNames.filter(name => {
+            const lowerName = name.toLowerCase();
+            return !lowerName.includes('sheet1') &&
+                   !lowerName.includes('trial plan') &&
+                   !lowerName.includes('spare') &&
+                   !lowerName.includes('empty');
+          });
+
+          console.log('[Parser] Data sheets found:', dataSheets);
+
+          if (dataSheets.length === 0) {
+            reject(new Error('No data sheets found in the Excel file'));
+            return;
+          }
+
+          // Parse all sheets
+          console.log('[Parser] Parsing sheets...');
+          const parsedSheets = dataSheets.map(sheetName => {
+            const sheet = workbook.Sheets[sheetName];
+            return parseSheet(sheet, sheetName);
+          });
+
+          console.log('[Parser] Converting to trial format...');
+          // Convert to Trial Data Tool format
+          const trialData = convertToTrialFormat(parsedSheets);
+
+          console.log('[Parser] Success! Trial data created:', trialData.name);
+          resolve(trialData);
+        } catch (error) {
+          console.error('[Parser] Error in onload:', error);
+          reject(error);
         }
+      };
 
-        // Parse all sheets
-        const parsedSheets = dataSheets.map(sheetName => {
-          const sheet = workbook.Sheets[sheetName];
-          return parseSheet(sheet, sheetName);
-        });
+      reader.onerror = (error) => {
+        console.error('[Parser] FileReader error:', error);
+        reject(new Error('Failed to read file'));
+      };
 
-        // Convert to Trial Data Tool format
-        const trialData = convertToTrialFormat(parsedSheets);
-
-        resolve(trialData);
-      } catch (error) {
-        reject(error);
-      }
-    };
-
-    reader.onerror = () => {
-      reject(new Error('Failed to read file'));
-    };
-
-    reader.readAsArrayBuffer(file);
+      reader.readAsArrayBuffer(file);
+    } catch (error) {
+      console.error('[Parser] Error setting up reader:', error);
+      reject(error);
+    }
   });
 }
 
