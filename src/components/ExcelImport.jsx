@@ -143,6 +143,16 @@ export default function ExcelImport({ onImport, onCancel }) {
             </div>
           )}
 
+          {/* Debug Info */}
+          <div className="mb-4 p-3 bg-gray-100 rounded text-xs space-y-1">
+            <p><strong>Debug Info:</strong></p>
+            <p>File selected: {file ? 'Yes' : 'No'} {file && `(${file.name})`}</p>
+            <p>Parsing: {parsing ? 'Yes' : 'No'}</p>
+            <p>Has error: {error ? 'Yes' : 'No'}</p>
+            <p>Parsed data: {parsedData ? 'Yes' : 'No'}</p>
+            {parsedData && <p>Trial name: {parsedData.name}</p>}
+          </div>
+
           {/* Error Message */}
           {error && (
             <div className="border border-red-300 rounded-lg p-4 bg-red-50">
