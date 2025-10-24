@@ -198,63 +198,67 @@ export default function ExcelImport({ onImport, onCancel }) {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <span className="text-sm font-medium text-gray-600">Trial Name:</span>
-                    <p className="text-gray-900">{parsedData.name}</p>
+                    <p className="text-gray-900">{parsedData.name || 'Unknown'}</p>
                   </div>
                   <div>
                     <span className="text-sm font-medium text-gray-600">Trial ID:</span>
-                    <p className="text-gray-900">{parsedData.id}</p>
+                    <p className="text-gray-900">{parsedData.id || 'N/A'}</p>
                   </div>
                   <div>
                     <span className="text-sm font-medium text-gray-600">Blocks:</span>
-                    <p className="text-gray-900">{parsedData.config.blocks}</p>
+                    <p className="text-gray-900">{parsedData.config?.blocks || 0}</p>
                   </div>
                   <div>
                     <span className="text-sm font-medium text-gray-600">Treatments:</span>
-                    <p className="text-gray-900">{parsedData.config.treatments}</p>
+                    <p className="text-gray-900">{parsedData.config?.treatments || 0}</p>
                   </div>
                   <div>
                     <span className="text-sm font-medium text-gray-600">Assessment Dates:</span>
-                    <p className="text-gray-900">{parsedData.assessmentDates.length}</p>
+                    <p className="text-gray-900">{parsedData.assessmentDates?.length || 0}</p>
                   </div>
                   <div>
                     <span className="text-sm font-medium text-gray-600">Assessment Types:</span>
-                    <p className="text-gray-900">{parsedData.config.assessmentTypes.length}</p>
+                    <p className="text-gray-900">{parsedData.config?.assessmentTypes?.length || 0}</p>
                   </div>
                 </div>
 
                 {/* Assessment Types */}
-                <div>
-                  <span className="text-sm font-medium text-gray-600 block mb-2">
-                    Assessment Types Found:
-                  </span>
-                  <div className="flex flex-wrap gap-2">
-                    {parsedData.config.assessmentTypes.map((type, idx) => (
-                      <span
-                        key={idx}
-                        className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm"
-                      >
-                        {type.name} {type.unit && `(${type.unit})`}
-                      </span>
-                    ))}
+                {parsedData.config?.assessmentTypes && parsedData.config.assessmentTypes.length > 0 && (
+                  <div>
+                    <span className="text-sm font-medium text-gray-600 block mb-2">
+                      Assessment Types Found:
+                    </span>
+                    <div className="flex flex-wrap gap-2">
+                      {parsedData.config.assessmentTypes.map((type, idx) => (
+                        <span
+                          key={idx}
+                          className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm"
+                        >
+                          {type.name} {type.unit && `(${type.unit})`}
+                        </span>
+                      ))}
+                    </div>
                   </div>
-                </div>
+                )}
 
                 {/* Assessment Dates */}
-                <div>
-                  <span className="text-sm font-medium text-gray-600 block mb-2">
-                    Assessment Dates:
-                  </span>
-                  <div className="flex flex-wrap gap-2">
-                    {parsedData.assessmentDates.map((date, idx) => (
-                      <span
-                        key={idx}
-                        className="px-3 py-1 bg-purple-100 text-purple-800 rounded-full text-sm"
-                      >
-                        {date.date} ({date.plots.length} plots)
-                      </span>
-                    ))}
+                {parsedData.assessmentDates && parsedData.assessmentDates.length > 0 && (
+                  <div>
+                    <span className="text-sm font-medium text-gray-600 block mb-2">
+                      Assessment Dates:
+                    </span>
+                    <div className="flex flex-wrap gap-2">
+                      {parsedData.assessmentDates.map((dateObj, idx) => (
+                        <span
+                          key={idx}
+                          className="px-3 py-1 bg-purple-100 text-purple-800 rounded-full text-sm"
+                        >
+                          {dateObj.date}
+                        </span>
+                      ))}
+                    </div>
                   </div>
-                </div>
+                )}
 
                 {/* Metadata */}
                 {parsedData.metadata && (
