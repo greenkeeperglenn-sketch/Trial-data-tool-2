@@ -149,12 +149,12 @@ const Analysis = ({ config, gridLayout, assessmentDates, selectedAssessmentType 
                     if (!stats) {
                       return <td key={dateIdx} className="p-3 text-center text-gray-400">-</td>;
                     }
-                    
+
                     const treatmentStat = stats.treatmentStats.find(ts => ts.treatment === treatmentIdx);
                     if (!treatmentStat) {
                       return <td key={dateIdx} className="p-3 text-center text-gray-400">-</td>;
                     }
-                    
+
                     return (
                       <td key={dateIdx} className="p-3 text-center">
                         <div className="font-medium">
@@ -168,43 +168,58 @@ const Analysis = ({ config, gridLayout, assessmentDates, selectedAssessmentType 
                   })}
                 </tr>
               ))}
+
+              {/* Statistical Summary Rows */}
+              <tr className="border-t-2 border-gray-400 bg-blue-50">
+                <td className="p-3 font-bold">F-value</td>
+                {assessmentDates.map((dateObj, dateIdx) => {
+                  const stats = calculateStats(dateObj);
+                  return (
+                    <td key={dateIdx} className="p-3 text-center font-mono">
+                      {stats ? stats.anova.fValue.toFixed(3) : '-'}
+                    </td>
+                  );
+                })}
+              </tr>
+
+              <tr className="bg-blue-50">
+                <td className="p-3 font-bold">P-value</td>
+                {assessmentDates.map((dateObj, dateIdx) => {
+                  const stats = calculateStats(dateObj);
+                  return (
+                    <td key={dateIdx} className="p-3 text-center font-mono">
+                      {stats ? stats.anova.pValue.toFixed(4) : '-'}
+                    </td>
+                  );
+                })}
+              </tr>
+
+              <tr className="bg-blue-50">
+                <td className="p-3 font-bold">LSD (95%)</td>
+                {assessmentDates.map((dateObj, dateIdx) => {
+                  const stats = calculateStats(dateObj);
+                  return (
+                    <td key={dateIdx} className="p-3 text-center font-mono">
+                      {stats ? stats.lsd.toFixed(3) : '-'}
+                    </td>
+                  );
+                })}
+              </tr>
+
+              <tr className="bg-blue-50 border-b">
+                <td className="p-3 font-bold">Significance</td>
+                {assessmentDates.map((dateObj, dateIdx) => {
+                  const stats = calculateStats(dateObj);
+                  if (!stats) return <td key={dateIdx} className="p-3 text-center">-</td>;
+                  return (
+                    <td key={dateIdx} className={`p-3 text-center font-medium ${stats.anova.significant ? 'text-green-600' : 'text-gray-500'}`}>
+                      {stats.anova.significant ? '✓ p < 0.05' : '○ n.s.'}
+                    </td>
+                  );
+                })}
+              </tr>
             </tbody>
           </table>
-          
-          {/* ANOVA Summary */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
-            {assessmentDates.map((dateObj, idx) => {
-              const stats = calculateStats(dateObj);
-              if (!stats) return null;
-              
-              return (
-                <div key={idx} className="p-4 bg-gray-50 rounded border">
-                  <div className="font-semibold mb-3 text-base">{dateObj.date}</div>
-                  <div className="space-y-2 text-xs">
-                    <div className="flex justify-between">
-                      <span>F-value:</span>
-                      <span className="font-mono">{stats.anova.fValue.toFixed(3)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>P-value:</span>
-                      <span className="font-mono">{stats.anova.pValue.toFixed(4)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>LSD (95%):</span>
-                      <span className="font-mono">{stats.lsd.toFixed(3)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>MS Error:</span>
-                      <span className="font-mono">{stats.anova.msError.toFixed(3)}</span>
-                    </div>
-                    <div className={`pt-2 border-t ${stats.anova.significant ? 'text-green-600' : 'text-gray-600'} font-medium`}>
-                      {stats.anova.significant ? '✓ Significant (p < 0.05)' : '○ Not Significant'}
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
         </div>
       </div>
 
