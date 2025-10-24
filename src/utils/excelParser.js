@@ -235,9 +235,9 @@ function convertToTrialFormat(parsedSheets) {
   }));
 
   // Create grid layout
-  const gridLayout = createGridLayout(allPlots, blocks.length, treatments.length);
+  const gridLayout = createGridLayout(allPlots, blocks.length, treatments);
 
-  // Process assessment dates
+  // Process assessment dates - convert to app format
   const assessmentDates = parsedSheets.map(sheet => {
     // Try to parse the date from sheet name or metadata
     let date = sheet.sheetName;
@@ -245,10 +245,35 @@ function convertToTrialFormat(parsedSheets) {
       date = sheet.metadata.date;
     }
 
+    // Create assessments object in the format the app expects
+    const assessments = {};
+
+    // Initialize all assessment types
+    assessmentTypes.forEach(assessmentType => {
+      assessments[assessmentType.name] = {};
+
+      // Add data for each plot
+      sheet.plots.forEach(plot => {
+        const plotId = `${plot.block}-${plot.plot}`;
+        const value = plot.values[assessmentType.name];
+
+        if (value !== undefined && value !== null && value !== '') {
+          assessments[assessmentType.name][plotId] = {
+            value: String(value),
+            entered: true
+          };
+        } else {
+          assessments[assessmentType.name][plotId] = {
+            value: '',
+            entered: false
+          };
+        }
+      });
+    });
+
     return {
       date,
-      originalSheetName: sheet.sheetName,
-      plots: sheet.plots
+      assessments
     };
   });
 
@@ -284,17 +309,11 @@ function convertToTrialFormat(parsedSheets) {
 /**
  * Create grid layout from plot data
  */
-function createGridLayout(plots, numBlocks, numTreatments) {
-  // Find the maximum plot number to determine grid size
-  const maxPlot = Math.max(...plots.map(p => p.plot));
-
-  // Calculate plots per block
-  const plotsPerBlock = Math.ceil(maxPlot / numBlocks);
-
-  // Create a map of plot data
-  const plotMap = new Map();
-  plots.forEach(plot => {
-    plotMap.set(plot.plot, plot);
+function createGridLayout(plots, numBlocks, treatmentsList) {
+  // Create treatment index mapping (Excel treatment number -> 0-based index)
+  const treatmentMap = new Map();
+  treatmentsList.forEach((t, idx) => {
+    treatmentMap.set(t, idx);
   });
 
   // Build grid: array of blocks, each block is an array of plots
@@ -305,14 +324,18 @@ function createGridLayout(plots, numBlocks, numTreatments) {
     const blockNum = blockIdx + 1;
 
     // Find all plots in this block
-    const plotsInBlock = plots.filter(p => p.block === blockNum);
+    const plotsInBlock = plots.filter(p => p.block === blockNum)
+      .sort((a, b) => a.plot - b.plot);
 
     plotsInBlock.forEach(plot => {
+      const treatmentIdx = treatmentMap.get(plot.treatment);
       blockPlots.push({
+        id: `${plot.block}-${plot.plot}`,
         block: plot.block,
-        plot: plot.plot,
-        treatment: plot.treatment,
-        type: 'plot'
+        treatment: treatmentIdx,
+        treatmentName: `Treatment ${plot.treatment}`,
+        isBlank: false,
+        plotNumber: plot.plot
       });
     });
 

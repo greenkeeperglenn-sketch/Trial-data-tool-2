@@ -165,7 +165,7 @@ const App = () => {
   // Import trial from Excel
   const importTrialFromExcel = (parsedData) => {
     try {
-      // Convert Excel format to app format
+      // The parser already returns data in the correct format
       const trialData = {
         id: parsedData.id,
         name: parsedData.name,
@@ -179,7 +179,7 @@ const App = () => {
         gridLayout: parsedData.gridLayout,
         orientation: 0,
         layoutLocked: true, // Lock layout since it came from Excel
-        assessmentDates: convertAssessmentDates(parsedData.assessmentDates, parsedData.config.assessmentTypes),
+        assessmentDates: parsedData.assessmentDates,
         photos: parsedData.photos || {},
         notes: parsedData.notes || {},
         lastModified: new Date().toISOString(),
@@ -193,39 +193,6 @@ const App = () => {
     } catch (err) {
       alert('Error importing trial from Excel: ' + err.message);
     }
-  };
-
-  // Convert assessment dates from Excel format to app format
-  const convertAssessmentDates = (excelDates, assessmentTypes) => {
-    const appDates = [];
-
-    excelDates.forEach(excelDate => {
-      // For each assessment type found in this date's data
-      assessmentTypes.forEach(assessmentType => {
-        // Check if this assessment type has data in this date
-        const hasData = excelDate.plots.some(plot =>
-          plot.values[assessmentType.name] !== undefined
-        );
-
-        if (hasData) {
-          // Create an assessment date entry for this type
-          const values = {};
-          excelDate.plots.forEach(plot => {
-            if (plot.values[assessmentType.name] !== undefined) {
-              values[plot.plot] = plot.values[assessmentType.name];
-            }
-          });
-
-          appDates.push({
-            date: excelDate.date,
-            assessmentType: assessmentType.name,
-            values
-          });
-        }
-      });
-    });
-
-    return appDates;
   };
 
   // Router - render appropriate component based on step
