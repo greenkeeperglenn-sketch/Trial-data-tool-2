@@ -5,11 +5,13 @@ import TrialLibrary from './components/TrialLibrary';
 import TrialSetup from './components/TrialSetup';
 import TrialLayoutEditor from './components/TrialLayoutEditor';
 import DataEntry from './components/DataEntry';
+import ExcelImport from './components/ExcelImport';
 
 const App = () => {
   // Navigation state
   const [step, setStep] = useState('library'); // 'library', 'setup', 'layoutBuilder', 'entry'
   const [currentTrialId, setCurrentTrialId] = useState(null);
+  const [showExcelImport, setShowExcelImport] = useState(false);
 
   // Data state
   const [trials, setTrials] = useState({});
@@ -143,7 +145,7 @@ const App = () => {
   const importTrialJSON = (e) => {
     const file = e.target.files[0];
     if (!file) return;
-    
+
     const reader = new FileReader();
     reader.onload = (event) => {
       try {
@@ -160,16 +162,91 @@ const App = () => {
     reader.readAsText(file);
   };
 
+  // Import trial from Excel
+  const importTrialFromExcel = (parsedData) => {
+    try {
+      // Convert Excel format to app format
+      const trialData = {
+        id: parsedData.id,
+        name: parsedData.name,
+        config: {
+          trialName: parsedData.name,
+          numBlocks: parsedData.config.blocks,
+          numTreatments: parsedData.config.treatments,
+          treatments: parsedData.config.treatmentNames,
+          assessmentTypes: parsedData.config.assessmentTypes
+        },
+        gridLayout: parsedData.gridLayout,
+        orientation: 0,
+        layoutLocked: true, // Lock layout since it came from Excel
+        assessmentDates: convertAssessmentDates(parsedData.assessmentDates, parsedData.config.assessmentTypes),
+        photos: parsedData.photos || {},
+        notes: parsedData.notes || {},
+        lastModified: new Date().toISOString(),
+        created: new Date().toISOString(),
+        metadata: parsedData.metadata
+      };
+
+      setTrials(prev => ({ ...prev, [trialData.id]: trialData }));
+      setShowExcelImport(false);
+      alert(`Trial "${parsedData.name}" imported successfully with ${parsedData.assessmentDates.length} assessment dates!`);
+    } catch (err) {
+      alert('Error importing trial from Excel: ' + err.message);
+    }
+  };
+
+  // Convert assessment dates from Excel format to app format
+  const convertAssessmentDates = (excelDates, assessmentTypes) => {
+    const appDates = [];
+
+    excelDates.forEach(excelDate => {
+      // For each assessment type found in this date's data
+      assessmentTypes.forEach(assessmentType => {
+        // Check if this assessment type has data in this date
+        const hasData = excelDate.plots.some(plot =>
+          plot.values[assessmentType.name] !== undefined
+        );
+
+        if (hasData) {
+          // Create an assessment date entry for this type
+          const values = {};
+          excelDate.plots.forEach(plot => {
+            if (plot.values[assessmentType.name] !== undefined) {
+              values[plot.plot] = plot.values[assessmentType.name];
+            }
+          });
+
+          appDates.push({
+            date: excelDate.date,
+            assessmentType: assessmentType.name,
+            values
+          });
+        }
+      });
+    });
+
+    return appDates;
+  };
+
   // Router - render appropriate component based on step
   if (step === 'library') {
     return (
-      <TrialLibrary
-        trials={trials}
-        onCreateNew={createNewTrial}
-        onLoadTrial={loadTrial}
-        onDeleteTrial={deleteTrial}
-        onImportTrial={importTrialJSON}
-      />
+      <>
+        <TrialLibrary
+          trials={trials}
+          onCreateNew={createNewTrial}
+          onLoadTrial={loadTrial}
+          onDeleteTrial={deleteTrial}
+          onImportTrial={importTrialJSON}
+          onImportExcel={() => setShowExcelImport(true)}
+        />
+        {showExcelImport && (
+          <ExcelImport
+            onImport={importTrialFromExcel}
+            onCancel={() => setShowExcelImport(false)}
+          />
+        )}
+      </>
     );
   }
 

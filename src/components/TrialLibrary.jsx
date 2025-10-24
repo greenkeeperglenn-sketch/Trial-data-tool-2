@@ -1,7 +1,7 @@
 import React from 'react';
-import { Plus, Trash2, Upload } from 'lucide-react';
+import { Plus, Trash2, Upload, FileSpreadsheet } from 'lucide-react';
 
-const TrialLibrary = ({ trials, onCreateNew, onLoadTrial, onDeleteTrial, onImportTrial }) => {
+const TrialLibrary = ({ trials, onCreateNew, onLoadTrial, onDeleteTrial, onImportTrial, onImportExcel }) => {
   const trialList = Object.values(trials).sort((a, b) => 
     new Date(b.lastModified) - new Date(a.lastModified)
   );
@@ -16,20 +16,27 @@ const TrialLibrary = ({ trials, onCreateNew, onLoadTrial, onDeleteTrial, onImpor
 
       {/* Action Buttons */}
       <div className="mb-6 flex gap-2 flex-wrap">
-        <button 
-          onClick={onCreateNew} 
+        <button
+          onClick={onCreateNew}
           className="flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
         >
           <Plus size={20} /> Create New Trial
         </button>
-        
+
+        <button
+          onClick={onImportExcel}
+          className="flex items-center gap-2 px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition"
+        >
+          <FileSpreadsheet size={20} /> Import from Excel
+        </button>
+
         <label className="flex items-center gap-2 px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 cursor-pointer transition">
           <Upload size={20} /> Import Trial (JSON)
-          <input 
-            type="file" 
-            accept=".json" 
-            onChange={onImportTrial} 
-            className="hidden" 
+          <input
+            type="file"
+            accept=".json"
+            onChange={onImportTrial}
+            className="hidden"
           />
         </label>
       </div>
@@ -37,7 +44,7 @@ const TrialLibrary = ({ trials, onCreateNew, onLoadTrial, onDeleteTrial, onImpor
       {/* Info Box */}
       <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
         <p className="text-sm text-gray-700">
-          <strong>💡 Tip:</strong> Use "Backup Trial" inside each trial to export as JSON. 
+          <strong>💡 Tip:</strong> Import existing trial data from Excel spreadsheets or use "Backup Trial" inside each trial to export as JSON.
           You can re-import here to restore data or share with colleagues.
         </p>
       </div>
