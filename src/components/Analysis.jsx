@@ -915,7 +915,7 @@ const Analysis = ({ config, gridLayout, assessmentDates, selectedAssessmentType 
             <thead>
               <tr className="border-b-2 border-gray-300">
                 <th className="p-3 text-left bg-gray-100">Treatment</th>
-                {assessmentDates.map((dateObj, idx) => (
+                {validAssessmentDates.map((dateObj, idx) => (
                   <th key={idx} className="p-3 text-center bg-gray-100 min-w-40">
                     <div className="font-semibold">{dateObj.date}</div>
                     <div className="text-xs font-normal text-gray-600 mt-1">Mean ± SE (Group)</div>
@@ -927,7 +927,7 @@ const Analysis = ({ config, gridLayout, assessmentDates, selectedAssessmentType 
               {config.treatments.map((treatment, treatmentIdx) => (
                 <tr key={treatmentIdx} className="border-b hover:bg-gray-50">
                   <td className="p-3 font-medium bg-gray-50">{treatment}</td>
-                  {assessmentDates.map((dateObj, dateIdx) => {
+                  {validAssessmentDates.map((dateObj, dateIdx) => {
                     const stats = calculateStats(dateObj);
                     if (!stats) {
                       return <td key={dateIdx} className="p-3 text-center text-gray-400">-</td>;
@@ -955,7 +955,7 @@ const Analysis = ({ config, gridLayout, assessmentDates, selectedAssessmentType 
               {/* Statistical Summary Rows */}
               <tr className="border-t-2 border-gray-400 bg-blue-50">
                 <td className="p-3 font-bold">F-value</td>
-                {assessmentDates.map((dateObj, dateIdx) => {
+                {validAssessmentDates.map((dateObj, dateIdx) => {
                   const stats = calculateStats(dateObj);
                   return (
                     <td key={dateIdx} className="p-3 text-center font-mono">
@@ -967,7 +967,7 @@ const Analysis = ({ config, gridLayout, assessmentDates, selectedAssessmentType 
 
               <tr className="bg-blue-50">
                 <td className="p-3 font-bold">P-value</td>
-                {assessmentDates.map((dateObj, dateIdx) => {
+                {validAssessmentDates.map((dateObj, dateIdx) => {
                   const stats = calculateStats(dateObj);
                   return (
                     <td key={dateIdx} className="p-3 text-center font-mono">
@@ -979,7 +979,7 @@ const Analysis = ({ config, gridLayout, assessmentDates, selectedAssessmentType 
 
               <tr className="bg-blue-50">
                 <td className="p-3 font-bold">LSD (95%)</td>
-                {assessmentDates.map((dateObj, dateIdx) => {
+                {validAssessmentDates.map((dateObj, dateIdx) => {
                   const stats = calculateStats(dateObj);
                   return (
                     <td key={dateIdx} className="p-3 text-center font-mono">
@@ -991,7 +991,7 @@ const Analysis = ({ config, gridLayout, assessmentDates, selectedAssessmentType 
 
               <tr className="bg-blue-50 border-b">
                 <td className="p-3 font-bold">Significance</td>
-                {assessmentDates.map((dateObj, dateIdx) => {
+                {validAssessmentDates.map((dateObj, dateIdx) => {
                   const stats = calculateStats(dateObj);
                   if (!stats) return <td key={dateIdx} className="p-3 text-center">-</td>;
                   return (
