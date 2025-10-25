@@ -777,6 +777,45 @@ const Analysis = ({ config, gridLayout, assessmentDates, selectedAssessmentType 
 
         <div className="mt-4 text-xs text-gray-600">
           {chartType === 'line' && lineGrouping === 'treatment' && (
+            <>
+              <p>Each treatment shows its timeline across all assessment dates with error bars (±SE)</p>
+              <p>Separate charts allow easy comparison of individual treatment patterns over time</p>
+            </>
+          )}
+          {chartType === 'line' && lineGrouping === 'date' && (
+            <>
+              <p>Lines show date progression across all treatments with error bars (±SE)</p>
+              <p>Different colors represent different assessment dates</p>
+            </>
+          )}
+          {chartType === 'box' && boxGrouping === 'treatment' && (
+            <>
+              <p>Each treatment shows box plots for all assessment dates side by side</p>
+              <p>Different colors represent different assessment dates</p>
+              <p>Letters below indicate statistical groupings (LSD test)</p>
+            </>
+          )}
+          {chartType === 'box' && boxGrouping === 'date' && (
+            <>
+              <p>Each assessment date shows box plots for all treatments side by side</p>
+              <p>Different colors represent different treatments</p>
+              <p>Letters below indicate statistical groupings (LSD test)</p>
+            </>
+          )}
+          {chartType === 'bar' && barGrouping === 'treatment' && (
+            <>
+              <p>Grouped bars show all assessment dates for each treatment with error bars (±SE)</p>
+              <p>Different colors represent different dates - see legend below chart</p>
+              <p>Letters show statistical groupings for the latest date (LSD test)</p>
+            </>
+          )}
+          {chartType === 'bar' && barGrouping === 'date' && (
+            <>
+              <p>Grouped bars show all treatments for each assessment date with error bars (±SE)</p>
+              <p>Different colors represent different treatments - see legend below chart</p>
+              <p>Letters show statistical groupings for each date (LSD test)</p>
+            </>
+          )}
         </div>
       </div>
 
