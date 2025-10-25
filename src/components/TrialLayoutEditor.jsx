@@ -1,18 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Minus, Shuffle, Lock } from 'lucide-react';
 
-const TrialLayoutEditor = ({ 
-  config, 
-  gridLayout, 
-  orientation, 
-  onLayoutChange, 
+const TrialLayoutEditor = ({
+  config,
+  gridLayout,
+  orientation,
+  onLayoutChange,
   onOrientationChange,
   onFinalize,
-  onBack 
+  onBack
 }) => {
   const [localGridLayout, setLocalGridLayout] = useState(gridLayout);
   const [localOrientation, setLocalOrientation] = useState(orientation);
   const [draggedItem, setDraggedItem] = useState(null);
+  const [touchStartPos, setTouchStartPos] = useState(null);
 
   // Treatment colors (up to 17 treatments A-Q)
   const treatmentColors = {
@@ -106,7 +107,22 @@ const TrialLayoutEditor = ({
       block: blockIdx + 1
     };
     newGrid[blockIdx].splice(position, 0, blank);
-    
+
+    setLocalGridLayout(newGrid);
+    onLayoutChange(newGrid);
+  };
+
+  // Add blank to all rows (for equal layout)
+  const addBlankToAllRows = () => {
+    const newGrid = localGridLayout.map((row, blockIdx) => {
+      const blank = {
+        id: `BLANK-${Date.now()}-${blockIdx}`,
+        isBlank: true,
+        block: blockIdx + 1
+      };
+      return [...row, blank];
+    });
+
     setLocalGridLayout(newGrid);
     onLayoutChange(newGrid);
   };
@@ -115,12 +131,12 @@ const TrialLayoutEditor = ({
   const removeBlank = (blockIdx, plotIdx) => {
     const newGrid = [...localGridLayout];
     newGrid[blockIdx] = newGrid[blockIdx].filter((_, idx) => idx !== plotIdx);
-    
+
     setLocalGridLayout(newGrid);
     onLayoutChange(newGrid);
   };
 
-  // Drag handlers
+  // Drag handlers (mouse)
   const handleDragStart = (e, blockIdx, plotIdx) => {
     setDraggedItem({ blockIdx, plotIdx });
     e.dataTransfer.effectAllowed = 'move';
@@ -154,6 +170,78 @@ const TrialLayoutEditor = ({
     setDraggedItem(null);
   };
 
+  // Touch handlers (iPad/mobile)
+  const handleTouchStart = (e, blockIdx, plotIdx, plot) => {
+    if (plot.isBlank) return;
+
+    const touch = e.touches[0];
+    setTouchStartPos({ x: touch.clientX, y: touch.clientY });
+    setDraggedItem({ blockIdx, plotIdx });
+
+    // Visual feedback
+    e.currentTarget.style.opacity = '0.5';
+  };
+
+  const handleTouchMove = (e) => {
+    e.preventDefault(); // Prevent scrolling while dragging
+  };
+
+  const handleTouchEnd = (e, targetBlockIdx, targetPlotIdx) => {
+    if (!draggedItem || !touchStartPos) {
+      // Reset visual feedback
+      if (e.currentTarget) e.currentTarget.style.opacity = '1';
+      return;
+    }
+
+    const touch = e.changedTouches[0];
+    const element = document.elementFromPoint(touch.clientX, touch.clientY);
+
+    // Reset visual feedback
+    e.currentTarget.style.opacity = '1';
+
+    // Find the target plot element
+    let targetElement = element;
+    let targetBlock = null;
+    let targetPlot = null;
+
+    // Walk up the DOM to find data attributes
+    while (targetElement && !targetBlock) {
+      if (targetElement.dataset && targetElement.dataset.blockidx !== undefined) {
+        targetBlock = parseInt(targetElement.dataset.blockidx);
+        targetPlot = parseInt(targetElement.dataset.plotidx);
+        break;
+      }
+      targetElement = targetElement.parentElement;
+    }
+
+    if (targetBlock === null || targetPlot === null) {
+      setDraggedItem(null);
+      setTouchStartPos(null);
+      return;
+    }
+
+    // Only allow swapping within same block
+    if (draggedItem.blockIdx !== targetBlock) {
+      alert('Cannot move plots between blocks! Drag within the same row only.');
+      setDraggedItem(null);
+      setTouchStartPos(null);
+      return;
+    }
+
+    // Swap plots
+    const newGrid = [...localGridLayout];
+    const block = [...newGrid[targetBlock]];
+    const temp = block[draggedItem.plotIdx];
+    block[draggedItem.plotIdx] = block[targetPlot];
+    block[targetPlot] = temp;
+    newGrid[targetBlock] = block;
+
+    setLocalGridLayout(newGrid);
+    onLayoutChange(newGrid);
+    setDraggedItem(null);
+    setTouchStartPos(null);
+  };
+
   // Rotate compass
   const rotateCompass = (degrees) => {
     const newOrientation = (localOrientation + degrees + 360) % 360;
@@ -179,15 +267,24 @@ const TrialLayoutEditor = ({
 
       {/* Controls */}
       <div className="bg-white p-4 rounded-lg shadow mb-4 flex gap-4 flex-wrap items-center">
-        <button 
+        <button
           onClick={randomizeAllBlocks}
           className="flex items-center gap-2 px-4 py-2 bg-purple-500 hover:bg-purple-600 text-white rounded transition"
         >
           <Shuffle size={20} />
           Randomize All Blocks
         </button>
-        
-        <button 
+
+        <button
+          onClick={addBlankToAllRows}
+          className="flex items-center gap-2 px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded transition"
+          title="Add one blank plot to the end of each row"
+        >
+          <Plus size={20} />
+          Add Blank to All Rows
+        </button>
+
+        <button
           onClick={onFinalize}
           className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded transition ml-auto"
         >
@@ -310,18 +407,23 @@ const TrialLayoutEditor = ({
                 {block.map((plot, plotIdx) => (
                   <div
                     key={plot.id}
+                    data-blockidx={blockIdx}
+                    data-plotidx={plotIdx}
                     draggable={!plot.isBlank}
                     onDragStart={(e) => handleDragStart(e, blockIdx, plotIdx)}
                     onDragOver={handleDragOver}
                     onDrop={(e) => handleDrop(e, blockIdx, plotIdx)}
+                    onTouchStart={(e) => handleTouchStart(e, blockIdx, plotIdx, plot)}
+                    onTouchMove={handleTouchMove}
+                    onTouchEnd={(e) => handleTouchEnd(e, blockIdx, plotIdx)}
                     className={`
                       aspect-square rounded-lg shadow-md transition-all flex items-center justify-center
-                      ${plot.isBlank 
-                        ? 'bg-gray-100 border-2 border-dashed border-gray-300' 
-                        : 'cursor-move hover:shadow-xl hover:scale-105'
+                      ${plot.isBlank
+                        ? 'bg-gray-100 border-2 border-dashed border-gray-300'
+                        : 'cursor-move hover:shadow-xl hover:scale-105 touch-none'
                       }
                     `}
-                    style={{ 
+                    style={{
                       backgroundColor: plot.isBlank ? undefined : treatmentColors[plot.treatment],
                     }}
                   >
@@ -364,9 +466,9 @@ const TrialLayoutEditor = ({
           <ul className="text-sm space-y-1 text-gray-700">
             <li>• <strong>Each row = 1 complete block</strong> containing all treatments (plots resize to fit)</li>
             <li>• <strong>Compass:</strong> Adjust field orientation in 5° increments</li>
-            <li>• <strong>Drag & Drop:</strong> Swap plots within the same row only</li>
+            <li>• <strong>Drag & Drop:</strong> Swap plots within the same row only (works on desktop and iPad)</li>
             <li>• <strong>Randomize:</strong> Use shuffle button on each block or randomize all</li>
-            <li>• <strong>Add Blanks:</strong> Click + button or the dashed square at end of row</li>
+            <li>• <strong>Add Blanks:</strong> Use "Add Blank to All Rows" button for equal layout, or click + on individual rows</li>
             <li>• <strong>Remove Blanks:</strong> Click − on any blank space</li>
             <li>• <strong>Finalize:</strong> Lock layout when ready to start data entry</li>
           </ul>
