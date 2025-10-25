@@ -6,6 +6,7 @@ import TrialSetup from './components/TrialSetup';
 import TrialLayoutEditor from './components/TrialLayoutEditor';
 import DataEntry from './components/DataEntry';
 import ExcelImport from './components/ExcelImport';
+import { parseExcelFile } from './utils/excelParser';
 
 const App = () => {
   // Navigation state
@@ -39,6 +40,62 @@ const App = () => {
     if (savedTrials) {
       setTrials(JSON.parse(savedTrials));
     }
+  }, []);
+
+  // Load demo trial automatically on first load
+  useEffect(() => {
+    const loadDemoTrial = async () => {
+      // Check if demo trial already exists
+      const savedTrials = localStorage.getItem('trials');
+      const existingTrials = savedTrials ? JSON.parse(savedTrials) : {};
+
+      if (existingTrials['demo-stri']) {
+        console.log('[App] Demo trial already exists');
+        return;
+      }
+
+      try {
+        console.log('[App] Loading demo trial...');
+        const response = await fetch('/demo-trial.xlsx');
+        const blob = await response.blob();
+        const file = new File([blob], 'STRI DS Curative Assessment sheet.xlsx', {
+          type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        });
+
+        const parsedData = await parseExcelFile(file);
+
+        // Create demo trial with fixed ID
+        const demoTrial = {
+          id: 'demo-stri',
+          name: '🌟 DEMO: ' + parsedData.name,
+          config: {
+            trialName: '🌟 DEMO: ' + parsedData.name,
+            numBlocks: parsedData.config.blocks,
+            numTreatments: parsedData.config.treatments,
+            treatments: parsedData.config.treatmentNames,
+            assessmentTypes: parsedData.config.assessmentTypes
+          },
+          gridLayout: parsedData.gridLayout,
+          orientation: 0,
+          layoutLocked: true,
+          assessmentDates: parsedData.assessmentDates,
+          photos: parsedData.photos || {},
+          notes: parsedData.notes || {},
+          lastModified: new Date().toISOString(),
+          created: new Date().toISOString(),
+          metadata: parsedData.metadata,
+          isDemo: true // Mark as demo trial
+        };
+
+        console.log('[App] Demo trial loaded successfully');
+        setTrials(prev => ({ ...prev, 'demo-stri': demoTrial }));
+      } catch (error) {
+        console.error('[App] Error loading demo trial:', error);
+        // Don't show alert - just fail silently
+      }
+    };
+
+    loadDemoTrial();
   }, []);
 
   // Save trials to localStorage (database-ready structure)
@@ -117,6 +174,12 @@ const App = () => {
 
   // Delete trial
   const deleteTrial = (trialId) => {
+    // Prevent deleting demo trial
+    if (trialId === 'demo-stri') {
+      alert('Cannot delete the demo trial! It will be restored on next page load.');
+      return;
+    }
+
     if (confirm('Delete this trial? This cannot be undone.')) {
       setTrials(prev => {
         const newTrials = { ...prev };
