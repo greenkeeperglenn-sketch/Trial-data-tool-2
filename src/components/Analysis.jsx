@@ -132,175 +132,18 @@ const Analysis = ({ config, gridLayout, assessmentDates, selectedAssessmentType 
     return stats !== null;
   });
 
+  // Get assessment type configuration for min/max scale
+  const assessment = config.assessmentTypes.find(a => a.name === selectedAssessmentType);
+  const scaleMin = assessment?.min || 0;
+  const scaleMax = assessment?.max || 10;
+
   return (
     <div className="space-y-6">
-      {/* Summary Statistics Table */}
+      {/* Charts - Moved to top */}
       <div className="bg-white p-6 rounded-lg shadow">
-        <h3 className="text-xl font-bold mb-4">Statistical Analysis - {selectedAssessmentType}</h3>
-        
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm border-collapse mb-6">
-            <thead>
-              <tr className="border-b-2 border-gray-300">
-                <th className="p-3 text-left bg-gray-100">Treatment</th>
-                {assessmentDates.map((dateObj, idx) => (
-                  <th key={idx} className="p-3 text-center bg-gray-100 min-w-40">
-                    <div className="font-semibold">{dateObj.date}</div>
-                    <div className="text-xs font-normal text-gray-600 mt-1">Mean ± SE (Group)</div>
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {config.treatments.map((treatment, treatmentIdx) => (
-                <tr key={treatmentIdx} className="border-b hover:bg-gray-50">
-                  <td className="p-3 font-medium bg-gray-50">{treatment}</td>
-                  {assessmentDates.map((dateObj, dateIdx) => {
-                    const stats = calculateStats(dateObj);
-                    if (!stats) {
-                      return <td key={dateIdx} className="p-3 text-center text-gray-400">-</td>;
-                    }
+        <h3 className="text-xl font-bold mb-4">{selectedAssessmentType} - Data Visualization</h3>
 
-                    const treatmentStat = stats.treatmentStats.find(ts => ts.treatment === treatmentIdx);
-                    if (!treatmentStat) {
-                      return <td key={dateIdx} className="p-3 text-center text-gray-400">-</td>;
-                    }
-
-                    return (
-                      <td key={dateIdx} className="p-3 text-center">
-                        <div className="font-medium">
-                          {treatmentStat.mean.toFixed(2)} ± {treatmentStat.stdError.toFixed(2)}
-                        </div>
-                        <div className="text-xs font-bold text-blue-600">
-                          ({treatmentStat.group})
-                        </div>
-                      </td>
-                    );
-                  })}
-                </tr>
-              ))}
-
-              {/* Statistical Summary Rows */}
-              <tr className="border-t-2 border-gray-400 bg-blue-50">
-                <td className="p-3 font-bold">F-value</td>
-                {assessmentDates.map((dateObj, dateIdx) => {
-                  const stats = calculateStats(dateObj);
-                  return (
-                    <td key={dateIdx} className="p-3 text-center font-mono">
-                      {stats ? stats.anova.fValue.toFixed(3) : '-'}
-                    </td>
-                  );
-                })}
-              </tr>
-
-              <tr className="bg-blue-50">
-                <td className="p-3 font-bold">P-value</td>
-                {assessmentDates.map((dateObj, dateIdx) => {
-                  const stats = calculateStats(dateObj);
-                  return (
-                    <td key={dateIdx} className="p-3 text-center font-mono">
-                      {stats ? stats.anova.pValue.toFixed(4) : '-'}
-                    </td>
-                  );
-                })}
-              </tr>
-
-              <tr className="bg-blue-50">
-                <td className="p-3 font-bold">LSD (95%)</td>
-                {assessmentDates.map((dateObj, dateIdx) => {
-                  const stats = calculateStats(dateObj);
-                  return (
-                    <td key={dateIdx} className="p-3 text-center font-mono">
-                      {stats ? stats.lsd.toFixed(3) : '-'}
-                    </td>
-                  );
-                })}
-              </tr>
-
-              <tr className="bg-blue-50 border-b">
-                <td className="p-3 font-bold">Significance</td>
-                {assessmentDates.map((dateObj, dateIdx) => {
-                  const stats = calculateStats(dateObj);
-                  if (!stats) return <td key={dateIdx} className="p-3 text-center">-</td>;
-                  return (
-                    <td key={dateIdx} className={`p-3 text-center font-medium ${stats.anova.significant ? 'text-green-600' : 'text-gray-500'}`}>
-                      {stats.anova.significant ? '✓ p < 0.05' : '○ n.s.'}
-                    </td>
-                  );
-                })}
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* ANOVA Table Detail for Latest Date */}
-      {assessmentDates.length > 0 && (() => {
-        const latestDate = assessmentDates[assessmentDates.length - 1];
-        const stats = calculateStats(latestDate);
-        if (!stats) return null;
-        
-        return (
-          <div className="bg-white p-6 rounded-lg shadow">
-            <h3 className="text-xl font-bold mb-4">
-              ANOVA Table - {latestDate.date}
-            </h3>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm border-collapse">
-                <thead>
-                  <tr className="border-b-2 border-gray-300 bg-gray-100">
-                    <th className="p-3 text-left">Source</th>
-                    <th className="p-3 text-right">DF</th>
-                    <th className="p-3 text-right">Sum of Squares</th>
-                    <th className="p-3 text-right">Mean Square</th>
-                    <th className="p-3 text-right">F-Value</th>
-                    <th className="p-3 text-right">P-Value</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr className="border-b">
-                    <td className="p-3 font-medium">Treatment</td>
-                    <td className="p-3 text-right font-mono">{stats.anova.dfTreatment}</td>
-                    <td className="p-3 text-right font-mono">{stats.anova.ssTreatment.toFixed(3)}</td>
-                    <td className="p-3 text-right font-mono">{stats.anova.msTreatment.toFixed(3)}</td>
-                    <td className="p-3 text-right font-mono">{stats.anova.fValue.toFixed(3)}</td>
-                    <td className="p-3 text-right font-mono">{stats.anova.pValue.toFixed(4)}</td>
-                  </tr>
-                  <tr className="border-b">
-                    <td className="p-3 font-medium">Error</td>
-                    <td className="p-3 text-right font-mono">{stats.anova.dfError}</td>
-                    <td className="p-3 text-right font-mono">{stats.anova.ssError.toFixed(3)}</td>
-                    <td className="p-3 text-right font-mono">{stats.anova.msError.toFixed(3)}</td>
-                    <td className="p-3 text-right">-</td>
-                    <td className="p-3 text-right">-</td>
-                  </tr>
-                  <tr className="bg-gray-50 font-semibold">
-                    <td className="p-3">Total</td>
-                    <td className="p-3 text-right font-mono">{stats.anova.dfTotal}</td>
-                    <td className="p-3 text-right font-mono">{stats.anova.ssTotal.toFixed(3)}</td>
-                    <td className="p-3 text-right">-</td>
-                    <td className="p-3 text-right">-</td>
-                    <td className="p-3 text-right">-</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-            <div className="mt-4 p-3 bg-blue-50 rounded text-sm">
-              <p className="font-medium mb-1">Interpretation:</p>
-              <p>
-                Fisher's LSD at 95% confidence: {stats.lsd.toFixed(3)}. 
-                Treatments with different letters are significantly different at p &lt; 0.05.
-              </p>
-            </div>
-          </div>
-        );
-      })()}
-
-      {/* Charts */}
-      <div className="bg-white p-6 rounded-lg shadow">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-xl font-bold">Data Visualization - All Assessment Dates</h3>
-
           {/* Chart Type Selector */}
           <div className="flex gap-2">
             <button
@@ -424,6 +267,7 @@ const Analysis = ({ config, gridLayout, assessmentDates, selectedAssessmentType 
           </div>
         )}
 
+        {/* Chart Area */}
         <div className="overflow-x-auto">
           {/* Line Chart - Grouped by Treatment (Separate charts) */}
           {chartType === 'line' && lineGrouping === 'treatment' && (
@@ -432,15 +276,12 @@ const Analysis = ({ config, gridLayout, assessmentDates, selectedAssessmentType 
                 const allStats = validAssessmentDates.map(d => calculateStats(d)).filter(s => s !== null);
                 if (allStats.length === 0) return <p className="text-gray-500">No data available</p>;
 
-                const allValues = allStats.flatMap(s => s.treatmentStats.flatMap(ts => ts.values));
-                const globalMin = Math.min(...allValues);
-                const globalMax = Math.max(...allValues);
-                const range = globalMax - globalMin;
+                const range = scaleMax - scaleMin;
                 const padding = range * 0.1;
 
                 const chartHeight = 150;
                 const chartWidth = Math.max(500, validAssessmentDates.length * 80);
-                const scale = (val) => chartHeight - ((val - (globalMin - padding)) / (range + 2 * padding)) * chartHeight;
+                const scale = (val) => chartHeight - ((val - (scaleMin - padding)) / (range + 2 * padding)) * chartHeight;
 
                 const colors = ['#3b82f6', '#8b5cf6', '#ec4899', '#f97316', '#14b8a6', '#84cc16', '#eab308', '#ef4444', '#06b6d4'];
 
@@ -463,9 +304,9 @@ const Analysis = ({ config, gridLayout, assessmentDates, selectedAssessmentType 
                       <h4 className="text-sm font-bold mb-2">{treatment}</h4>
                       <div className="relative" style={{ height: chartHeight + 40, width: chartWidth }}>
                         <div className="absolute left-0 top-0 bottom-8 flex flex-col justify-between text-xs text-gray-600">
-                          <span>{(globalMax + padding).toFixed(1)}</span>
-                          <span>{((globalMax + globalMin) / 2).toFixed(1)}</span>
-                          <span>{(globalMin - padding).toFixed(1)}</span>
+                          <span>{(scaleMax + padding).toFixed(1)}</span>
+                          <span>{((scaleMax + scaleMin) / 2).toFixed(1)}</span>
+                          <span>{(scaleMin - padding).toFixed(1)}</span>
                         </div>
 
                         <svg className="absolute left-10 top-0" width={chartWidth - 40} height={chartHeight}>
@@ -504,24 +345,21 @@ const Analysis = ({ config, gridLayout, assessmentDates, selectedAssessmentType 
                 const allStats = validAssessmentDates.map(d => calculateStats(d)).filter(s => s !== null);
                 if (allStats.length === 0) return <p className="text-gray-500">No data available</p>;
 
-                const allValues = allStats.flatMap(s => s.treatmentStats.flatMap(ts => ts.values));
-                const globalMin = Math.min(...allValues);
-                const globalMax = Math.max(...allValues);
-                const range = globalMax - globalMin;
+                const range = scaleMax - scaleMin;
                 const padding = range * 0.1;
 
                 const chartHeight = 220;
                 const chartWidth = Math.max(500, config.treatments.length * 100);
-                const scale = (val) => chartHeight - ((val - (globalMin - padding)) / (range + 2 * padding)) * chartHeight;
+                const scale = (val) => chartHeight - ((val - (scaleMin - padding)) / (range + 2 * padding)) * chartHeight;
 
                 const dateColors = ['#3b82f6', '#8b5cf6', '#ec4899', '#f97316', '#14b8a6', '#84cc16', '#eab308', '#ef4444', '#06b6d4', '#10b981', '#f59e0b', '#6366f1'];
 
                 return (
                   <div className="relative" style={{ height: chartHeight + 50, width: chartWidth }}>
                     <div className="absolute left-0 top-0 bottom-10 flex flex-col justify-between text-xs text-gray-600">
-                      <span>{(globalMax + padding).toFixed(1)}</span>
-                      <span>{((globalMax + globalMin) / 2).toFixed(1)}</span>
-                      <span>{(globalMin - padding).toFixed(1)}</span>
+                      <span>{(scaleMax + padding).toFixed(1)}</span>
+                      <span>{((scaleMax + scaleMin) / 2).toFixed(1)}</span>
+                      <span>{(scaleMin - padding).toFixed(1)}</span>
                     </div>
 
                     <svg className="absolute left-10 top-0" width={chartWidth - 40} height={chartHeight}>
@@ -602,12 +440,8 @@ const Analysis = ({ config, gridLayout, assessmentDates, selectedAssessmentType 
                       const q3 = ss.quantile(sorted, 0.75);
                       const median = ss.median(sorted);
 
-                      const allStats = validAssessmentDates.map(d => calculateStats(d)).filter(s => s !== null);
-                      const allValues = allStats.flatMap(s => s.treatmentStats.flatMap(ts => ts.values));
-                      const globalMin = Math.min(...allValues);
-                      const globalMax = Math.max(...allValues);
-                      const range = globalMax - globalMin;
-                      const scale = (val) => ((val - globalMin) / range) * 140;
+                      const range = scaleMax - scaleMin;
+                      const scale = (val) => ((val - scaleMin) / range) * 140;
 
                       const colors = [
                         'bg-blue-200 border-blue-400',
@@ -685,12 +519,8 @@ const Analysis = ({ config, gridLayout, assessmentDates, selectedAssessmentType 
                         const q3 = ss.quantile(sorted, 0.75);
                         const median = ss.median(sorted);
 
-                        const allStats = validAssessmentDates.map(d => calculateStats(d)).filter(s => s !== null);
-                        const allValues = allStats.flatMap(s => s.treatmentStats.flatMap(ts => ts.values));
-                        const globalMin = Math.min(...allValues);
-                        const globalMax = Math.max(...allValues);
-                        const range = globalMax - globalMin;
-                        const scale = (val) => ((val - globalMin) / range) * 140;
+                        const range = scaleMax - scaleMin;
+                        const scale = (val) => ((val - scaleMin) / range) * 140;
 
                         const treatmentColors = [
                           'bg-blue-200 border-blue-400',
@@ -757,8 +587,6 @@ const Analysis = ({ config, gridLayout, assessmentDates, selectedAssessmentType 
                 const allStats = assessmentDates.map(d => calculateStats(d)).filter(s => s !== null);
                 if (allStats.length === 0) return <p className="text-gray-500">No data available</p>;
 
-                const allValues = allStats.flatMap(s => s.treatmentStats.flatMap(ts => ts.values));
-                const globalMax = Math.max(...allValues);
                 const chartHeight = 220;
                 const barWidth = 20;
 
@@ -773,10 +601,10 @@ const Analysis = ({ config, gridLayout, assessmentDates, selectedAssessmentType 
                         <div className="flex gap-4 items-end pb-6" style={{ height: chartHeight + 80 }}>
                           {/* Y-axis */}
                           <div className="flex flex-col justify-between text-xs text-gray-600 h-full pb-16">
-                            <span>{globalMax.toFixed(1)}</span>
-                            <span>{(globalMax * 0.75).toFixed(1)}</span>
-                            <span>{(globalMax * 0.5).toFixed(1)}</span>
-                            <span>{(globalMax * 0.25).toFixed(1)}</span>
+                            <span>{scaleMax.toFixed(1)}</span>
+                            <span>{(scaleMax * 0.75).toFixed(1)}</span>
+                            <span>{(scaleMax * 0.5).toFixed(1)}</span>
+                            <span>{(scaleMax * 0.25).toFixed(1)}</span>
                             <span>0</span>
                           </div>
 
@@ -794,8 +622,8 @@ const Analysis = ({ config, gridLayout, assessmentDates, selectedAssessmentType 
                                     const treatmentStat = stats.treatmentStats.find(ts => ts.treatment === treatmentIdx);
                                     if (!treatmentStat) return <div key={dateIdx} style={{ width: barWidth + 'px' }} />;
 
-                                    const barHeight = (treatmentStat.mean / globalMax) * (chartHeight - 45);
-                                    const errorBarHeight = (treatmentStat.stdError / globalMax) * (chartHeight - 45);
+                                    const barHeight = (treatmentStat.mean / scaleMax) * (chartHeight - 45);
+                                    const errorBarHeight = (treatmentStat.stdError / scaleMax) * (chartHeight - 45);
 
                                     return (
                                       <div key={dateIdx} className="flex flex-col items-center" style={{ width: barWidth + 'px' }}>
@@ -861,10 +689,10 @@ const Analysis = ({ config, gridLayout, assessmentDates, selectedAssessmentType 
                         <div className="flex gap-4 items-end pb-6" style={{ height: chartHeight + 80 }}>
                           {/* Y-axis */}
                           <div className="flex flex-col justify-between text-xs text-gray-600 h-full pb-16">
-                            <span>{globalMax.toFixed(1)}</span>
-                            <span>{(globalMax * 0.75).toFixed(1)}</span>
-                            <span>{(globalMax * 0.5).toFixed(1)}</span>
-                            <span>{(globalMax * 0.25).toFixed(1)}</span>
+                            <span>{scaleMax.toFixed(1)}</span>
+                            <span>{(scaleMax * 0.75).toFixed(1)}</span>
+                            <span>{(scaleMax * 0.5).toFixed(1)}</span>
+                            <span>{(scaleMax * 0.25).toFixed(1)}</span>
                             <span>0</span>
                           </div>
 
@@ -882,8 +710,8 @@ const Analysis = ({ config, gridLayout, assessmentDates, selectedAssessmentType 
                                     const treatmentStat = stats.treatmentStats.find(ts => ts.treatment === treatmentIdx);
                                     if (!treatmentStat) return <div key={treatmentIdx} style={{ width: barWidth + 'px' }} />;
 
-                                    const barHeight = (treatmentStat.mean / globalMax) * (chartHeight - 45);
-                                    const errorBarHeight = (treatmentStat.stdError / globalMax) * (chartHeight - 45);
+                                    const barHeight = (treatmentStat.mean / scaleMax) * (chartHeight - 45);
+                                    const errorBarHeight = (treatmentStat.stdError / scaleMax) * (chartHeight - 45);
 
                                     return (
                                       <div key={treatmentIdx} className="flex flex-col items-center" style={{ width: barWidth + 'px' }}>
@@ -949,6 +777,109 @@ const Analysis = ({ config, gridLayout, assessmentDates, selectedAssessmentType 
 
         <div className="mt-4 text-xs text-gray-600">
           {chartType === 'line' && lineGrouping === 'treatment' && (
+        </div>
+      </div>
+
+      {/* Summary Statistics Table */}
+      <div className="bg-white p-6 rounded-lg shadow">
+        <h3 className="text-xl font-bold mb-4">Statistical Analysis - {selectedAssessmentType}</h3>
+        
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm border-collapse mb-6">
+            <thead>
+              <tr className="border-b-2 border-gray-300">
+                <th className="p-3 text-left bg-gray-100">Treatment</th>
+                {assessmentDates.map((dateObj, idx) => (
+                  <th key={idx} className="p-3 text-center bg-gray-100 min-w-40">
+                    <div className="font-semibold">{dateObj.date}</div>
+                    <div className="text-xs font-normal text-gray-600 mt-1">Mean ± SE (Group)</div>
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {config.treatments.map((treatment, treatmentIdx) => (
+                <tr key={treatmentIdx} className="border-b hover:bg-gray-50">
+                  <td className="p-3 font-medium bg-gray-50">{treatment}</td>
+                  {assessmentDates.map((dateObj, dateIdx) => {
+                    const stats = calculateStats(dateObj);
+                    if (!stats) {
+                      return <td key={dateIdx} className="p-3 text-center text-gray-400">-</td>;
+                    }
+
+                    const treatmentStat = stats.treatmentStats.find(ts => ts.treatment === treatmentIdx);
+                    if (!treatmentStat) {
+                      return <td key={dateIdx} className="p-3 text-center text-gray-400">-</td>;
+                    }
+
+                    return (
+                      <td key={dateIdx} className="p-3 text-center">
+                        <div className="font-medium">
+                          {treatmentStat.mean.toFixed(2)} ± {treatmentStat.stdError.toFixed(2)}
+                        </div>
+                        <div className="text-xs font-bold text-blue-600">
+                          ({treatmentStat.group})
+                        </div>
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+
+              {/* Statistical Summary Rows */}
+              <tr className="border-t-2 border-gray-400 bg-blue-50">
+                <td className="p-3 font-bold">F-value</td>
+                {assessmentDates.map((dateObj, dateIdx) => {
+                  const stats = calculateStats(dateObj);
+                  return (
+                    <td key={dateIdx} className="p-3 text-center font-mono">
+                      {stats ? stats.anova.fValue.toFixed(3) : '-'}
+                    </td>
+                  );
+                })}
+              </tr>
+
+              <tr className="bg-blue-50">
+                <td className="p-3 font-bold">P-value</td>
+                {assessmentDates.map((dateObj, dateIdx) => {
+                  const stats = calculateStats(dateObj);
+                  return (
+                    <td key={dateIdx} className="p-3 text-center font-mono">
+                      {stats ? stats.anova.pValue.toFixed(4) : '-'}
+                    </td>
+                  );
+                })}
+              </tr>
+
+              <tr className="bg-blue-50">
+                <td className="p-3 font-bold">LSD (95%)</td>
+                {assessmentDates.map((dateObj, dateIdx) => {
+                  const stats = calculateStats(dateObj);
+                  return (
+                    <td key={dateIdx} className="p-3 text-center font-mono">
+                      {stats ? stats.lsd.toFixed(3) : '-'}
+                    </td>
+                  );
+                })}
+              </tr>
+
+              <tr className="bg-blue-50 border-b">
+                <td className="p-3 font-bold">Significance</td>
+                {assessmentDates.map((dateObj, dateIdx) => {
+                  const stats = calculateStats(dateObj);
+                  if (!stats) return <td key={dateIdx} className="p-3 text-center">-</td>;
+                  return (
+                    <td key={dateIdx} className={`p-3 text-center font-medium ${stats.anova.significant ? 'text-green-600' : 'text-gray-500'}`}>
+                      {stats.anova.significant ? '✓ p < 0.05' : '○ n.s.'}
+                    </td>
+                  );
+                })}
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
             <>
               <p>Each treatment shows its timeline across all assessment dates with error bars (±SE)</p>
               <p>Separate charts allow easy comparison of individual treatment patterns over time</p>
