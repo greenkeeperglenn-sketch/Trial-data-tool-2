@@ -671,8 +671,7 @@ const Analysis = ({ config, gridLayout, assessmentDates, selectedAssessmentType 
           {chartType === 'bar' && (
             <div className="min-w-max">
               {(() => {
-                const allStats = assessmentDates.map(d => calculateStats(d)).filter(s => s !== null);
-                if (allStats.length === 0) return <p className="text-gray-500">No data available</p>;
+                if (validAssessmentDates.length === 0) return <p className="text-gray-500">No data available</p>;
 
                 const chartHeight = 220;
                 const barWidth = 20;
@@ -697,12 +696,12 @@ const Analysis = ({ config, gridLayout, assessmentDates, selectedAssessmentType 
 
                           {/* Bar groups for each treatment */}
                           {config.treatments.map((treatment, treatmentIdx) => {
-                            const groupWidth = assessmentDates.length * (barWidth + 3);
+                            const groupWidth = validAssessmentDates.length * (barWidth + 3);
 
                             return (
                               <div key={treatmentIdx} className="flex flex-col items-center" style={{ width: groupWidth + 'px' }}>
                                 <div className="flex gap-0.5 items-end h-full pb-3">
-                                  {assessmentDates.map((dateObj, dateIdx) => {
+                                  {validAssessmentDates.map((dateObj, dateIdx) => {
                                     const stats = calculateStats(dateObj);
                                     if (!stats) return <div key={dateIdx} style={{ width: barWidth + 'px' }} />;
 
@@ -719,7 +718,7 @@ const Analysis = ({ config, gridLayout, assessmentDates, selectedAssessmentType 
                                           {treatmentStat.mean.toFixed(1)}
                                         </div>
                                         {/* Letter group (only show on last date) */}
-                                        {dateIdx === assessmentDates.length - 1 && (
+                                        {dateIdx === validAssessmentDates.length - 1 && (
                                           <div className="text-xs text-blue-600 font-bold mb-0.5" style={{ fontSize: '8px' }}>
                                             ({treatmentStat.group})
                                           </div>
@@ -757,7 +756,7 @@ const Analysis = ({ config, gridLayout, assessmentDates, selectedAssessmentType 
 
                         {/* Legend */}
                         <div className="flex flex-wrap gap-2 mt-3 justify-center text-xs">
-                          {assessmentDates.map((dateObj, idx) => (
+                          {validAssessmentDates.map((dateObj, idx) => (
                             <div key={idx} className="flex items-center gap-2">
                               <div
                                 className="w-4 h-4 rounded"
@@ -784,7 +783,7 @@ const Analysis = ({ config, gridLayout, assessmentDates, selectedAssessmentType 
                           </div>
 
                           {/* Bar groups for each date */}
-                          {assessmentDates.map((dateObj, dateIdx) => {
+                          {validAssessmentDates.map((dateObj, dateIdx) => {
                             const groupWidth = config.treatments.length * (barWidth + 3);
                             const stats = calculateStats(dateObj);
 
