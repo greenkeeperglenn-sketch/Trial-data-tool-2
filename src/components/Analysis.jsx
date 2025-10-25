@@ -582,11 +582,11 @@ const Analysis = ({ config, gridLayout, assessmentDates, selectedAssessmentType 
 
           {/* Box Plot - Grouped by Treatment */}
           {chartType === 'box' && boxGrouping === 'treatment' && (
-            <div className="flex gap-8 items-end min-w-max pb-8">
+            <div className="flex gap-4 items-end min-w-max pb-6">
               {config.treatments.map((treatment, treatmentIdx) => (
                 <div key={treatmentIdx} className="flex flex-col items-center">
-                  <div className="text-sm font-medium mb-2">{treatment}</div>
-                  <div className="flex gap-2 items-end h-64">
+                  <div className="text-xs font-medium mb-1">{treatment}</div>
+                  <div className="flex gap-1 items-end h-48">
                     {validAssessmentDates.map((dateObj, dateIdx) => {
                       const stats = calculateStats(dateObj);
                       if (!stats) return null;
@@ -607,7 +607,7 @@ const Analysis = ({ config, gridLayout, assessmentDates, selectedAssessmentType 
                       const globalMin = Math.min(...allValues);
                       const globalMax = Math.max(...allValues);
                       const range = globalMax - globalMin;
-                      const scale = (val) => ((val - globalMin) / range) * 200;
+                      const scale = (val) => ((val - globalMin) / range) * 140;
 
                       const colors = [
                         'bg-blue-200 border-blue-400',
@@ -620,7 +620,7 @@ const Analysis = ({ config, gridLayout, assessmentDates, selectedAssessmentType 
 
                       return (
                         <div key={dateIdx} className="flex flex-col items-center">
-                          <div className="relative h-48 w-12 bg-gray-100 rounded border">
+                          <div className="relative h-36 w-8 bg-gray-100 rounded border">
                             {/* Box (Q1 to Q3) */}
                             <div
                               className={`absolute w-full ${colorClass} border-2`}
@@ -651,8 +651,8 @@ const Analysis = ({ config, gridLayout, assessmentDates, selectedAssessmentType 
                               }}
                             />
                           </div>
-                          <div className="text-xs mt-2 text-center">{dateObj.date}</div>
-                          <div className="text-xs text-gray-600">{treatmentStat.group}</div>
+                          <div className="text-xs mt-1 text-center" style={{ fontSize: '9px' }}>{dateObj.date}</div>
+                          <div className="text-xs text-gray-600" style={{ fontSize: '9px' }}>{treatmentStat.group}</div>
                         </div>
                       );
                     })}
@@ -664,15 +664,15 @@ const Analysis = ({ config, gridLayout, assessmentDates, selectedAssessmentType 
 
           {/* Box Plot - Grouped by Date */}
           {chartType === 'box' && boxGrouping === 'date' && (
-            <div className="flex gap-8 items-end min-w-max pb-8">
+            <div className="flex gap-4 items-end min-w-max pb-6">
               {validAssessmentDates.map((dateObj, dateIdx) => {
                 const stats = calculateStats(dateObj);
                 if (!stats) return null;
 
                 return (
                   <div key={dateIdx} className="flex flex-col items-center">
-                    <div className="text-sm font-medium mb-2">{dateObj.date}</div>
-                    <div className="flex gap-2 items-end h-64">
+                    <div className="text-xs font-medium mb-1">{dateObj.date}</div>
+                    <div className="flex gap-1 items-end h-48">
                       {config.treatments.map((treatment, treatmentIdx) => {
                         const treatmentStat = stats.treatmentStats.find(ts => ts.treatment === treatmentIdx);
                         if (!treatmentStat) return null;
@@ -690,7 +690,7 @@ const Analysis = ({ config, gridLayout, assessmentDates, selectedAssessmentType 
                         const globalMin = Math.min(...allValues);
                         const globalMax = Math.max(...allValues);
                         const range = globalMax - globalMin;
-                        const scale = (val) => ((val - globalMin) / range) * 200;
+                        const scale = (val) => ((val - globalMin) / range) * 140;
 
                         const treatmentColors = [
                           'bg-blue-200 border-blue-400',
@@ -707,7 +707,7 @@ const Analysis = ({ config, gridLayout, assessmentDates, selectedAssessmentType 
 
                         return (
                           <div key={treatmentIdx} className="flex flex-col items-center">
-                            <div className="relative h-48 w-12 bg-gray-100 rounded border">
+                            <div className="relative h-36 w-8 bg-gray-100 rounded border">
                               {/* Box (Q1 to Q3) */}
                               <div
                                 className={`absolute w-full ${colorClass} border-2`}
@@ -738,8 +738,8 @@ const Analysis = ({ config, gridLayout, assessmentDates, selectedAssessmentType 
                                 }}
                               />
                             </div>
-                            <div className="text-xs mt-2 text-center">{treatment}</div>
-                            <div className="text-xs text-gray-600">{treatmentStat.group}</div>
+                            <div className="text-xs mt-1 text-center" style={{ fontSize: '9px' }}>{treatment}</div>
+                            <div className="text-xs text-gray-600" style={{ fontSize: '9px' }}>{treatmentStat.group}</div>
                           </div>
                         );
                       })}
@@ -759,8 +759,8 @@ const Analysis = ({ config, gridLayout, assessmentDates, selectedAssessmentType 
 
                 const allValues = allStats.flatMap(s => s.treatmentStats.flatMap(ts => ts.values));
                 const globalMax = Math.max(...allValues);
-                const chartHeight = 350;
-                const barWidth = 30;
+                const chartHeight = 220;
+                const barWidth = 20;
 
                 const dateColors = ['#3b82f6', '#8b5cf6', '#ec4899', '#f97316', '#14b8a6', '#84cc16', '#eab308', '#ef4444', '#06b6d4', '#10b981', '#f59e0b', '#6366f1'];
                 const treatmentColors = ['#3b82f6', '#8b5cf6', '#ec4899', '#f97316', '#14b8a6', '#84cc16', '#eab308', '#ef4444', '#06b6d4'];
@@ -770,7 +770,7 @@ const Analysis = ({ config, gridLayout, assessmentDates, selectedAssessmentType 
                     {/* Bar Chart grouped by Treatment */}
                     {barGrouping === 'treatment' && (
                       <div>
-                        <div className="flex gap-8 items-end pb-8" style={{ height: chartHeight + 100 }}>
+                        <div className="flex gap-4 items-end pb-6" style={{ height: chartHeight + 80 }}>
                           {/* Y-axis */}
                           <div className="flex flex-col justify-between text-xs text-gray-600 h-full pb-16">
                             <span>{globalMax.toFixed(1)}</span>
@@ -782,11 +782,11 @@ const Analysis = ({ config, gridLayout, assessmentDates, selectedAssessmentType 
 
                           {/* Bar groups for each treatment */}
                           {config.treatments.map((treatment, treatmentIdx) => {
-                            const groupWidth = assessmentDates.length * (barWidth + 4);
+                            const groupWidth = assessmentDates.length * (barWidth + 3);
 
                             return (
                               <div key={treatmentIdx} className="flex flex-col items-center" style={{ width: groupWidth + 'px' }}>
-                                <div className="flex gap-1 items-end h-full pb-4">
+                                <div className="flex gap-0.5 items-end h-full pb-3">
                                   {assessmentDates.map((dateObj, dateIdx) => {
                                     const stats = calculateStats(dateObj);
                                     if (!stats) return <div key={dateIdx} style={{ width: barWidth + 'px' }} />;
@@ -794,18 +794,18 @@ const Analysis = ({ config, gridLayout, assessmentDates, selectedAssessmentType 
                                     const treatmentStat = stats.treatmentStats.find(ts => ts.treatment === treatmentIdx);
                                     if (!treatmentStat) return <div key={dateIdx} style={{ width: barWidth + 'px' }} />;
 
-                                    const barHeight = (treatmentStat.mean / globalMax) * (chartHeight - 60);
-                                    const errorBarHeight = (treatmentStat.stdError / globalMax) * (chartHeight - 60);
+                                    const barHeight = (treatmentStat.mean / globalMax) * (chartHeight - 45);
+                                    const errorBarHeight = (treatmentStat.stdError / globalMax) * (chartHeight - 45);
 
                                     return (
                                       <div key={dateIdx} className="flex flex-col items-center" style={{ width: barWidth + 'px' }}>
                                         {/* Value label */}
-                                        <div className="text-xs font-medium mb-1 text-center whitespace-nowrap" style={{ fontSize: '10px' }}>
+                                        <div className="text-xs font-medium mb-0.5 text-center whitespace-nowrap" style={{ fontSize: '8px' }}>
                                           {treatmentStat.mean.toFixed(1)}
                                         </div>
                                         {/* Letter group (only show on last date) */}
                                         {dateIdx === assessmentDates.length - 1 && (
-                                          <div className="text-xs text-blue-600 font-bold mb-1" style={{ fontSize: '10px' }}>
+                                          <div className="text-xs text-blue-600 font-bold mb-0.5" style={{ fontSize: '8px' }}>
                                             ({treatmentStat.group})
                                           </div>
                                         )}
@@ -832,7 +832,7 @@ const Analysis = ({ config, gridLayout, assessmentDates, selectedAssessmentType 
                                   })}
                                 </div>
                                 {/* Treatment label */}
-                                <div className="text-sm font-medium text-center mt-2">
+                                <div className="text-xs font-medium text-center mt-1">
                                   {treatment}
                                 </div>
                               </div>
@@ -841,7 +841,7 @@ const Analysis = ({ config, gridLayout, assessmentDates, selectedAssessmentType 
                         </div>
 
                         {/* Legend */}
-                        <div className="flex flex-wrap gap-3 mt-4 justify-center text-xs">
+                        <div className="flex flex-wrap gap-2 mt-3 justify-center text-xs">
                           {assessmentDates.map((dateObj, idx) => (
                             <div key={idx} className="flex items-center gap-2">
                               <div
@@ -858,7 +858,7 @@ const Analysis = ({ config, gridLayout, assessmentDates, selectedAssessmentType 
                     {/* Bar Chart grouped by Date */}
                     {barGrouping === 'date' && (
                       <div>
-                        <div className="flex gap-8 items-end pb-8" style={{ height: chartHeight + 100 }}>
+                        <div className="flex gap-4 items-end pb-6" style={{ height: chartHeight + 80 }}>
                           {/* Y-axis */}
                           <div className="flex flex-col justify-between text-xs text-gray-600 h-full pb-16">
                             <span>{globalMax.toFixed(1)}</span>
@@ -870,29 +870,29 @@ const Analysis = ({ config, gridLayout, assessmentDates, selectedAssessmentType 
 
                           {/* Bar groups for each date */}
                           {assessmentDates.map((dateObj, dateIdx) => {
-                            const groupWidth = config.treatments.length * (barWidth + 4);
+                            const groupWidth = config.treatments.length * (barWidth + 3);
                             const stats = calculateStats(dateObj);
 
                             return (
                               <div key={dateIdx} className="flex flex-col items-center" style={{ width: groupWidth + 'px' }}>
-                                <div className="flex gap-1 items-end h-full pb-4">
+                                <div className="flex gap-0.5 items-end h-full pb-3">
                                   {config.treatments.map((treatment, treatmentIdx) => {
                                     if (!stats) return <div key={treatmentIdx} style={{ width: barWidth + 'px' }} />;
 
                                     const treatmentStat = stats.treatmentStats.find(ts => ts.treatment === treatmentIdx);
                                     if (!treatmentStat) return <div key={treatmentIdx} style={{ width: barWidth + 'px' }} />;
 
-                                    const barHeight = (treatmentStat.mean / globalMax) * (chartHeight - 60);
-                                    const errorBarHeight = (treatmentStat.stdError / globalMax) * (chartHeight - 60);
+                                    const barHeight = (treatmentStat.mean / globalMax) * (chartHeight - 45);
+                                    const errorBarHeight = (treatmentStat.stdError / globalMax) * (chartHeight - 45);
 
                                     return (
                                       <div key={treatmentIdx} className="flex flex-col items-center" style={{ width: barWidth + 'px' }}>
                                         {/* Value label */}
-                                        <div className="text-xs font-medium mb-1 text-center whitespace-nowrap" style={{ fontSize: '10px' }}>
+                                        <div className="text-xs font-medium mb-0.5 text-center whitespace-nowrap" style={{ fontSize: '8px' }}>
                                           {treatmentStat.mean.toFixed(1)}
                                         </div>
                                         {/* Letter group */}
-                                        <div className="text-xs text-blue-600 font-bold mb-1" style={{ fontSize: '10px' }}>
+                                        <div className="text-xs text-blue-600 font-bold mb-0.5" style={{ fontSize: '8px' }}>
                                           ({treatmentStat.group})
                                         </div>
                                         {/* Error bar */}
@@ -918,7 +918,7 @@ const Analysis = ({ config, gridLayout, assessmentDates, selectedAssessmentType 
                                   })}
                                 </div>
                                 {/* Date label */}
-                                <div className="text-sm font-medium text-center mt-2">
+                                <div className="text-xs font-medium text-center mt-1">
                                   {dateObj.date}
                                 </div>
                               </div>
@@ -927,7 +927,7 @@ const Analysis = ({ config, gridLayout, assessmentDates, selectedAssessmentType 
                         </div>
 
                         {/* Legend */}
-                        <div className="flex flex-wrap gap-3 mt-4 justify-center text-xs">
+                        <div className="flex flex-wrap gap-2 mt-3 justify-center text-xs">
                           {config.treatments.map((treatment, idx) => (
                             <div key={idx} className="flex items-center gap-2">
                               <div
