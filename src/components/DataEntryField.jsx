@@ -61,10 +61,10 @@ const DataEntryField = ({
     else if (normalized < 0.4) return 'bg-green-200 border-green-400';
     else if (normalized < 0.5) return 'bg-green-300 border-green-500';
     else if (normalized < 0.6) return 'bg-green-400 border-green-600';
-    else if (normalized < 0.7) return 'bg-green-500 border-green-700 text-white';
-    else if (normalized < 0.8) return 'bg-green-600 border-green-800 text-white';
-    else if (normalized < 0.9) return 'bg-green-700 border-green-900 text-white';
-    else return 'bg-green-800 border-green-950 text-white';
+    else if (normalized < 0.7) return 'bg-green-500 border-green-700 text-black';
+    else if (normalized < 0.8) return 'bg-green-600 border-green-800 text-black';
+    else if (normalized < 0.9) return 'bg-green-700 border-green-900 text-black';
+    else return 'bg-green-800 border-green-950 text-black';
   };
 
   // Generate test data
