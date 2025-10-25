@@ -420,11 +420,11 @@ const Analysis = ({ config, gridLayout, assessmentDates, selectedAssessmentType 
 
           {/* Box Plot - Grouped by Treatment */}
           {chartType === 'box' && boxGrouping === 'treatment' && (
-            <div className="flex gap-4 items-end min-w-max pb-6">
+            <div className="flex gap-2 items-end min-w-max pb-4">
               {config.treatments.map((treatment, treatmentIdx) => (
                 <div key={treatmentIdx} className="flex flex-col items-center">
                   <div className="text-xs font-medium mb-1">{treatment}</div>
-                  <div className="flex gap-1 items-end h-48">
+                  <div className="flex gap-0.5 items-end h-40">
                     {validAssessmentDates.map((dateObj, dateIdx) => {
                       const stats = calculateStats(dateObj);
                       if (!stats) return null;
@@ -441,23 +441,14 @@ const Analysis = ({ config, gridLayout, assessmentDates, selectedAssessmentType 
                       const median = ss.median(sorted);
 
                       const range = scaleMax - scaleMin;
-                      const scale = (val) => ((val - scaleMin) / range) * 140;
-
-                      const colors = [
-                        'bg-blue-200 border-blue-400',
-                        'bg-purple-200 border-purple-400',
-                        'bg-pink-200 border-pink-400',
-                        'bg-orange-200 border-orange-400',
-                        'bg-teal-200 border-teal-400'
-                      ];
-                      const colorClass = colors[dateIdx % colors.length];
+                      const scale = (val) => ((val - scaleMin) / range) * 120;
 
                       return (
                         <div key={dateIdx} className="flex flex-col items-center">
-                          <div className="relative h-36 w-8 bg-gray-100 rounded border">
+                          <div className="relative h-32 w-6 bg-white border border-gray-300">
                             {/* Box (Q1 to Q3) */}
                             <div
-                              className={`absolute w-full ${colorClass} border-2`}
+                              className="absolute w-full bg-white border-2 border-gray-800"
                               style={{
                                 bottom: `${scale(q1)}px`,
                                 height: `${Math.max(2, scale(q3) - scale(q1))}px`
@@ -465,28 +456,38 @@ const Analysis = ({ config, gridLayout, assessmentDates, selectedAssessmentType 
                             />
                             {/* Median line */}
                             <div
-                              className="absolute w-full h-1 bg-black"
+                              className="absolute w-full h-0.5 bg-gray-800"
                               style={{ bottom: `${scale(median)}px` }}
                             />
                             {/* Whisker to min */}
                             <div
-                              className="absolute left-1/2 w-0.5 bg-black -translate-x-1/2"
+                              className="absolute left-1/2 w-0.5 bg-gray-800 -translate-x-1/2"
                               style={{
                                 bottom: `${scale(min)}px`,
                                 height: `${scale(q1) - scale(min)}px`
                               }}
                             />
+                            {/* Min cap */}
+                            <div
+                              className="absolute left-1/4 w-1/2 h-0.5 bg-gray-800"
+                              style={{ bottom: `${scale(min)}px` }}
+                            />
                             {/* Whisker to max */}
                             <div
-                              className="absolute left-1/2 w-0.5 bg-black -translate-x-1/2"
+                              className="absolute left-1/2 w-0.5 bg-gray-800 -translate-x-1/2"
                               style={{
                                 bottom: `${scale(q3)}px`,
                                 height: `${scale(max) - scale(q3)}px`
                               }}
                             />
+                            {/* Max cap */}
+                            <div
+                              className="absolute left-1/4 w-1/2 h-0.5 bg-gray-800"
+                              style={{ bottom: `${scale(max)}px` }}
+                            />
                           </div>
-                          <div className="text-xs mt-1 text-center" style={{ fontSize: '9px' }}>{dateObj.date}</div>
-                          <div className="text-xs text-gray-600" style={{ fontSize: '9px' }}>{treatmentStat.group}</div>
+                          <div className="text-xs mt-0.5 text-center" style={{ fontSize: '8px' }}>{dateObj.date}</div>
+                          <div className="text-xs text-blue-600 font-bold" style={{ fontSize: '8px' }}>({treatmentStat.group})</div>
                         </div>
                       );
                     })}
@@ -498,7 +499,7 @@ const Analysis = ({ config, gridLayout, assessmentDates, selectedAssessmentType 
 
           {/* Box Plot - Grouped by Date */}
           {chartType === 'box' && boxGrouping === 'date' && (
-            <div className="flex gap-4 items-end min-w-max pb-6">
+            <div className="flex gap-2 items-end min-w-max pb-4">
               {validAssessmentDates.map((dateObj, dateIdx) => {
                 const stats = calculateStats(dateObj);
                 if (!stats) return null;
@@ -506,7 +507,7 @@ const Analysis = ({ config, gridLayout, assessmentDates, selectedAssessmentType 
                 return (
                   <div key={dateIdx} className="flex flex-col items-center">
                     <div className="text-xs font-medium mb-1">{dateObj.date}</div>
-                    <div className="flex gap-1 items-end h-48">
+                    <div className="flex gap-0.5 items-end h-40">
                       {config.treatments.map((treatment, treatmentIdx) => {
                         const treatmentStat = stats.treatmentStats.find(ts => ts.treatment === treatmentIdx);
                         if (!treatmentStat) return null;
@@ -520,27 +521,14 @@ const Analysis = ({ config, gridLayout, assessmentDates, selectedAssessmentType 
                         const median = ss.median(sorted);
 
                         const range = scaleMax - scaleMin;
-                        const scale = (val) => ((val - scaleMin) / range) * 140;
-
-                        const treatmentColors = [
-                          'bg-blue-200 border-blue-400',
-                          'bg-purple-200 border-purple-400',
-                          'bg-pink-200 border-pink-400',
-                          'bg-orange-200 border-orange-400',
-                          'bg-teal-200 border-teal-400',
-                          'bg-green-200 border-green-400',
-                          'bg-yellow-200 border-yellow-400',
-                          'bg-red-200 border-red-400',
-                          'bg-cyan-200 border-cyan-400'
-                        ];
-                        const colorClass = treatmentColors[treatmentIdx % treatmentColors.length];
+                        const scale = (val) => ((val - scaleMin) / range) * 120;
 
                         return (
                           <div key={treatmentIdx} className="flex flex-col items-center">
-                            <div className="relative h-36 w-8 bg-gray-100 rounded border">
+                            <div className="relative h-32 w-6 bg-white border border-gray-300">
                               {/* Box (Q1 to Q3) */}
                               <div
-                                className={`absolute w-full ${colorClass} border-2`}
+                                className="absolute w-full bg-white border-2 border-gray-800"
                                 style={{
                                   bottom: `${scale(q1)}px`,
                                   height: `${Math.max(2, scale(q3) - scale(q1))}px`
@@ -548,28 +536,38 @@ const Analysis = ({ config, gridLayout, assessmentDates, selectedAssessmentType 
                               />
                               {/* Median line */}
                               <div
-                                className="absolute w-full h-1 bg-black"
+                                className="absolute w-full h-0.5 bg-gray-800"
                                 style={{ bottom: `${scale(median)}px` }}
                               />
                               {/* Whisker to min */}
                               <div
-                                className="absolute left-1/2 w-0.5 bg-black -translate-x-1/2"
+                                className="absolute left-1/2 w-0.5 bg-gray-800 -translate-x-1/2"
                                 style={{
                                   bottom: `${scale(min)}px`,
                                   height: `${scale(q1) - scale(min)}px`
                                 }}
                               />
+                              {/* Min cap */}
+                              <div
+                                className="absolute left-1/4 w-1/2 h-0.5 bg-gray-800"
+                                style={{ bottom: `${scale(min)}px` }}
+                              />
                               {/* Whisker to max */}
                               <div
-                                className="absolute left-1/2 w-0.5 bg-black -translate-x-1/2"
+                                className="absolute left-1/2 w-0.5 bg-gray-800 -translate-x-1/2"
                                 style={{
                                   bottom: `${scale(q3)}px`,
                                   height: `${scale(max) - scale(q3)}px`
                                 }}
                               />
+                              {/* Max cap */}
+                              <div
+                                className="absolute left-1/4 w-1/2 h-0.5 bg-gray-800"
+                                style={{ bottom: `${scale(max)}px` }}
+                              />
                             </div>
-                            <div className="text-xs mt-1 text-center" style={{ fontSize: '9px' }}>{treatment}</div>
-                            <div className="text-xs text-gray-600" style={{ fontSize: '9px' }}>{treatmentStat.group}</div>
+                            <div className="text-xs mt-0.5 text-center" style={{ fontSize: '8px' }}>{treatment}</div>
+                            <div className="text-xs text-blue-600 font-bold" style={{ fontSize: '8px' }}>({treatmentStat.group})</div>
                           </div>
                         );
                       })}
@@ -790,16 +788,16 @@ const Analysis = ({ config, gridLayout, assessmentDates, selectedAssessmentType 
           )}
           {chartType === 'box' && boxGrouping === 'treatment' && (
             <>
-              <p>Each treatment shows box plots for all assessment dates side by side</p>
-              <p>Different colors represent different assessment dates</p>
-              <p>Letters below indicate statistical groupings (LSD test)</p>
+              <p>Traditional box-and-whisker plots for each treatment across all assessment dates</p>
+              <p>Box shows Q1-Q3 (IQR), horizontal line is median, whiskers extend to min/max</p>
+              <p>Letters indicate statistical groupings (LSD test)</p>
             </>
           )}
           {chartType === 'box' && boxGrouping === 'date' && (
             <>
-              <p>Each assessment date shows box plots for all treatments side by side</p>
-              <p>Different colors represent different treatments</p>
-              <p>Letters below indicate statistical groupings (LSD test)</p>
+              <p>Traditional box-and-whisker plots for each assessment date across all treatments</p>
+              <p>Box shows Q1-Q3 (IQR), horizontal line is median, whiskers extend to min/max</p>
+              <p>Letters indicate statistical groupings (LSD test)</p>
             </>
           )}
           {chartType === 'bar' && barGrouping === 'treatment' && (
@@ -932,16 +930,16 @@ const Analysis = ({ config, gridLayout, assessmentDates, selectedAssessmentType 
           )}
           {chartType === 'box' && boxGrouping === 'treatment' && (
             <>
-              <p>Each treatment shows box plots for all assessment dates side by side</p>
-              <p>Different colors represent different assessment dates</p>
-              <p>Letters below indicate statistical groupings (LSD test)</p>
+              <p>Traditional box-and-whisker plots for each treatment across all assessment dates</p>
+              <p>Box shows Q1-Q3 (IQR), horizontal line is median, whiskers extend to min/max</p>
+              <p>Letters indicate statistical groupings (LSD test)</p>
             </>
           )}
           {chartType === 'box' && boxGrouping === 'date' && (
             <>
-              <p>Each assessment date shows box plots for all treatments side by side</p>
-              <p>Different colors represent different treatments</p>
-              <p>Letters below indicate statistical groupings (LSD test)</p>
+              <p>Traditional box-and-whisker plots for each assessment date across all treatments</p>
+              <p>Box shows Q1-Q3 (IQR), horizontal line is median, whiskers extend to min/max</p>
+              <p>Letters indicate statistical groupings (LSD test)</p>
             </>
           )}
           {chartType === 'bar' && barGrouping === 'treatment' && (
