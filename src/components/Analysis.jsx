@@ -440,7 +440,9 @@ const Analysis = ({ config, gridLayout, assessmentDates, selectedAssessmentType 
                       <div className="relative" style={{ height: chartHeight + 40, width: chartWidth }}>
                         <div className="absolute left-0 top-0 bottom-8 flex flex-col justify-between text-xs text-gray-600">
                           <span>{(scaleMax + padding).toFixed(1)}</span>
-                          <span>{((scaleMax + scaleMin) / 2).toFixed(1)}</span>
+                          <span>{(scaleMax + padding - 0.25 * (range + 2 * padding)).toFixed(1)}</span>
+                          <span>{(scaleMax + padding - 0.5 * (range + 2 * padding)).toFixed(1)}</span>
+                          <span>{(scaleMax + padding - 0.75 * (range + 2 * padding)).toFixed(1)}</span>
                           <span>{(scaleMin - padding).toFixed(1)}</span>
                         </div>
 
@@ -493,7 +495,9 @@ const Analysis = ({ config, gridLayout, assessmentDates, selectedAssessmentType 
                   <div className="relative" style={{ height: chartHeight + 50, width: chartWidth }}>
                     <div className="absolute left-0 top-0 bottom-10 flex flex-col justify-between text-xs text-gray-600">
                       <span>{(scaleMax + padding).toFixed(1)}</span>
-                      <span>{((scaleMax + scaleMin) / 2).toFixed(1)}</span>
+                      <span>{(scaleMax + padding - 0.25 * (range + 2 * padding)).toFixed(1)}</span>
+                      <span>{(scaleMax + padding - 0.5 * (range + 2 * padding)).toFixed(1)}</span>
+                      <span>{(scaleMax + padding - 0.75 * (range + 2 * padding)).toFixed(1)}</span>
                       <span>{(scaleMin - padding).toFixed(1)}</span>
                     </div>
 
@@ -794,10 +798,10 @@ const Analysis = ({ config, gridLayout, assessmentDates, selectedAssessmentType 
                           {/* Y-axis */}
                           <div className="flex flex-col justify-between text-xs text-gray-600 h-full pb-16">
                             <span>{scaleMax.toFixed(1)}</span>
-                            <span>{(scaleMax * 0.75).toFixed(1)}</span>
-                            <span>{(scaleMax * 0.5).toFixed(1)}</span>
-                            <span>{(scaleMax * 0.25).toFixed(1)}</span>
-                            <span>0</span>
+                            <span>{(scaleMax - 0.25 * (scaleMax - scaleMin)).toFixed(1)}</span>
+                            <span>{(scaleMax - 0.5 * (scaleMax - scaleMin)).toFixed(1)}</span>
+                            <span>{(scaleMax - 0.75 * (scaleMax - scaleMin)).toFixed(1)}</span>
+                            <span>{scaleMin.toFixed(1)}</span>
                           </div>
 
                           {/* Bar groups for each treatment */}
@@ -817,8 +821,8 @@ const Analysis = ({ config, gridLayout, assessmentDates, selectedAssessmentType 
                                     const treatmentStat = stats.treatmentStats.find(ts => ts.treatment === treatmentIdx);
                                     if (!treatmentStat) return <div key={dateIdx} style={{ width: barWidth + 'px' }} />;
 
-                                    const barHeight = (treatmentStat.mean / scaleMax) * (chartHeight - 45);
-                                    const errorBarHeight = (treatmentStat.stdError / scaleMax) * (chartHeight - 45);
+                                    const barHeight = ((treatmentStat.mean - scaleMin) / (scaleMax - scaleMin)) * (chartHeight - 45);
+                                    const errorBarHeight = (treatmentStat.stdError / (scaleMax - scaleMin)) * (chartHeight - 45);
 
                                     return (
                                       <div key={dateIdx} className="flex flex-col items-center" style={{ width: barWidth + 'px' }}>
@@ -885,10 +889,10 @@ const Analysis = ({ config, gridLayout, assessmentDates, selectedAssessmentType 
                           {/* Y-axis */}
                           <div className="flex flex-col justify-between text-xs text-gray-600 h-full pb-16">
                             <span>{scaleMax.toFixed(1)}</span>
-                            <span>{(scaleMax * 0.75).toFixed(1)}</span>
-                            <span>{(scaleMax * 0.5).toFixed(1)}</span>
-                            <span>{(scaleMax * 0.25).toFixed(1)}</span>
-                            <span>0</span>
+                            <span>{(scaleMax - 0.25 * (scaleMax - scaleMin)).toFixed(1)}</span>
+                            <span>{(scaleMax - 0.5 * (scaleMax - scaleMin)).toFixed(1)}</span>
+                            <span>{(scaleMax - 0.75 * (scaleMax - scaleMin)).toFixed(1)}</span>
+                            <span>{scaleMin.toFixed(1)}</span>
                           </div>
 
                           {/* Bar groups for each date */}
@@ -908,8 +912,8 @@ const Analysis = ({ config, gridLayout, assessmentDates, selectedAssessmentType 
                                     const treatmentStat = stats.treatmentStats.find(ts => ts.treatment === treatmentIdx);
                                     if (!treatmentStat) return <div key={treatmentIdx} style={{ width: barWidth + 'px' }} />;
 
-                                    const barHeight = (treatmentStat.mean / scaleMax) * (chartHeight - 45);
-                                    const errorBarHeight = (treatmentStat.stdError / scaleMax) * (chartHeight - 45);
+                                    const barHeight = ((treatmentStat.mean - scaleMin) / (scaleMax - scaleMin)) * (chartHeight - 45);
+                                    const errorBarHeight = (treatmentStat.stdError / (scaleMax - scaleMin)) * (chartHeight - 45);
 
                                     return (
                                       <div key={treatmentIdx} className="flex flex-col items-center" style={{ width: barWidth + 'px' }}>
