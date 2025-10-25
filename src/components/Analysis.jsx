@@ -425,11 +425,10 @@ const Analysis = ({ config, gridLayout, assessmentDates, selectedAssessmentType 
         )}
 
         <div className="overflow-x-auto">
-          {/* Line Chart */}
+          {/* Line Chart - Grouped by Treatment (Separate charts) */}
           {chartType === 'line' && lineGrouping === 'treatment' && (
-            <div className="min-w-max">
+            <div className="space-y-6">
               {(() => {
-                // Use only valid dates with data
                 const allStats = validAssessmentDates.map(d => calculateStats(d)).filter(s => s !== null);
                 if (allStats.length === 0) return <p className="text-gray-500">No data available</p>;
 
@@ -439,71 +438,61 @@ const Analysis = ({ config, gridLayout, assessmentDates, selectedAssessmentType 
                 const range = globalMax - globalMin;
                 const padding = range * 0.1;
 
-                const chartHeight = 220;
+                const chartHeight = 150;
                 const chartWidth = Math.max(500, validAssessmentDates.length * 80);
                 const scale = (val) => chartHeight - ((val - (globalMin - padding)) / (range + 2 * padding)) * chartHeight;
 
                 const colors = ['#3b82f6', '#8b5cf6', '#ec4899', '#f97316', '#14b8a6', '#84cc16', '#eab308', '#ef4444', '#06b6d4'];
 
-                return (
-                  <div className="relative" style={{ height: chartHeight + 50, width: chartWidth }}>
-                    <div className="absolute left-0 top-0 bottom-10 flex flex-col justify-between text-xs text-gray-600">
-                      <span>{(globalMax + padding).toFixed(1)}</span>
-                      <span>{((globalMax + globalMin) / 2).toFixed(1)}</span>
-                      <span>{(globalMin - padding).toFixed(1)}</span>
-                    </div>
+                return config.treatments.map((treatment, treatmentIdx) => {
+                  const points = validAssessmentDates.map((dateObj, dateIdx) => {
+                    const stats = calculateStats(dateObj);
+                    if (!stats) return null;
+                    const treatmentStat = stats.treatmentStats.find(ts => ts.treatment === treatmentIdx);
+                    if (!treatmentStat) return null;
+                    const x = (dateIdx / (validAssessmentDates.length - 1)) * (chartWidth - 40);
+                    const y = scale(treatmentStat.mean);
+                    return { x, y, mean: treatmentStat.mean, se: treatmentStat.stdError };
+                  }).filter(p => p !== null);
 
-                    <svg className="absolute left-10 top-0" width={chartWidth - 40} height={chartHeight}>
-                      {[0, 0.25, 0.5, 0.75, 1].map((fraction, i) => (
-                        <line key={i} x1="0" y1={chartHeight * fraction} x2={chartWidth - 40} y2={chartHeight * fraction} stroke="#e5e7eb" strokeWidth="1" />
-                      ))}
+                  if (points.length === 0) return null;
+                  const pathD = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ');
 
-                      {config.treatments.map((treatment, treatmentIdx) => {
-                        const points = validAssessmentDates.map((dateObj, dateIdx) => {
-                          const stats = calculateStats(dateObj);
-                          if (!stats) return null;
-                          const treatmentStat = stats.treatmentStats.find(ts => ts.treatment === treatmentIdx);
-                          if (!treatmentStat) return null;
-                          const x = (dateIdx / (validAssessmentDates.length - 1)) * (chartWidth - 40);
-                          const y = scale(treatmentStat.mean);
-                          return { x, y, mean: treatmentStat.mean, se: treatmentStat.stdError };
-                        }).filter(p => p !== null);
-
-                        if (points.length === 0) return null;
-                        const pathD = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ');
-
-                        return (
-                          <g key={treatmentIdx}>
-                            <path d={pathD} fill="none" stroke={colors[treatmentIdx % colors.length]} strokeWidth="2" />
-                            {points.map((p, i) => (
-                              <g key={i}>
-                                <line x1={p.x} y1={scale(p.mean - p.se)} x2={p.x} y2={scale(p.mean + p.se)} stroke={colors[treatmentIdx % colors.length]} strokeWidth="1" />
-                                <circle cx={p.x} cy={p.y} r="3" fill={colors[treatmentIdx % colors.length]} stroke="white" strokeWidth="1.5" />
-                              </g>
-                            ))}
-                          </g>
-                        );
-                      })}
-                    </svg>
-
-                    <div className="absolute left-10 bottom-0 right-0 flex justify-between text-xs text-gray-600">
-                      {validAssessmentDates.map((dateObj, idx) => (
-                        <div key={idx} className="text-center" style={{ width: '1px' }}>
-                          <div className="transform -rotate-45 origin-top-left whitespace-nowrap" style={{ fontSize: '10px' }}>{dateObj.date}</div>
+                  return (
+                    <div key={treatmentIdx} className="border rounded p-3 bg-gray-50">
+                      <h4 className="text-sm font-bold mb-2">{treatment}</h4>
+                      <div className="relative" style={{ height: chartHeight + 40, width: chartWidth }}>
+                        <div className="absolute left-0 top-0 bottom-8 flex flex-col justify-between text-xs text-gray-600">
+                          <span>{(globalMax + padding).toFixed(1)}</span>
+                          <span>{((globalMax + globalMin) / 2).toFixed(1)}</span>
+                          <span>{(globalMin - padding).toFixed(1)}</span>
                         </div>
-                      ))}
-                    </div>
 
-                    <div className="absolute top-0 right-0 bg-white border rounded p-1.5 text-xs">
-                      {config.treatments.map((treatment, idx) => (
-                        <div key={idx} className="flex items-center gap-1.5 mb-0.5" style={{ fontSize: '10px' }}>
-                          <div className="w-3 h-0.5" style={{ backgroundColor: colors[idx % colors.length] }} />
-                          <span>{treatment}</span>
+                        <svg className="absolute left-10 top-0" width={chartWidth - 40} height={chartHeight}>
+                          {[0, 0.25, 0.5, 0.75, 1].map((fraction, i) => (
+                            <line key={i} x1="0" y1={chartHeight * fraction} x2={chartWidth - 40} y2={chartHeight * fraction} stroke="#e5e7eb" strokeWidth="1" />
+                          ))}
+
+                          <path d={pathD} fill="none" stroke={colors[treatmentIdx % colors.length]} strokeWidth="2" />
+                          {points.map((p, i) => (
+                            <g key={i}>
+                              <line x1={p.x} y1={scale(p.mean - p.se)} x2={p.x} y2={scale(p.mean + p.se)} stroke={colors[treatmentIdx % colors.length]} strokeWidth="1" />
+                              <circle cx={p.x} cy={p.y} r="3" fill={colors[treatmentIdx % colors.length]} stroke="white" strokeWidth="1.5" />
+                            </g>
+                          ))}
+                        </svg>
+
+                        <div className="absolute left-10 bottom-0 right-0 flex justify-between text-xs text-gray-600">
+                          {validAssessmentDates.map((dateObj, idx) => (
+                            <div key={idx} className="text-center" style={{ width: '1px' }}>
+                              <div className="transform -rotate-45 origin-top-left whitespace-nowrap" style={{ fontSize: '10px' }}>{dateObj.date}</div>
+                            </div>
+                          ))}
                         </div>
-                      ))}
+                      </div>
                     </div>
-                  </div>
-                );
+                  );
+                });
               })()}
             </div>
           )}
@@ -961,8 +950,8 @@ const Analysis = ({ config, gridLayout, assessmentDates, selectedAssessmentType 
         <div className="mt-4 text-xs text-gray-600">
           {chartType === 'line' && lineGrouping === 'treatment' && (
             <>
-              <p>Lines show treatment means across all assessment dates with error bars (±SE)</p>
-              <p>Different colors represent different treatments</p>
+              <p>Each treatment shows its timeline across all assessment dates with error bars (±SE)</p>
+              <p>Separate charts allow easy comparison of individual treatment patterns over time</p>
             </>
           )}
           {chartType === 'line' && lineGrouping === 'date' && (
