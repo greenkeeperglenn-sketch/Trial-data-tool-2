@@ -11,6 +11,9 @@ const Analysis = ({ config, gridLayout, assessmentDates, selectedAssessmentType 
   const [scaleMode, setScaleMode] = useState('fixed'); // 'fixed', 'auto', 'custom'
   const [customMin, setCustomMin] = useState('');
   const [customMax, setCustomMax] = useState('');
+  const [selectedTreatments, setSelectedTreatments] = useState(
+    new Set(config.treatments.map((_, idx) => idx))
+  );
 
   // Calculate comprehensive statistics for a single date
   const calculateStats = (dateObj) => {
@@ -356,6 +359,46 @@ const Analysis = ({ config, gridLayout, assessmentDates, selectedAssessmentType 
           </div>
         </div>
 
+        {/* Treatment Filter */}
+        <div className="mb-4 p-3 bg-gray-50 rounded">
+          <div className="flex items-start gap-4 flex-wrap">
+            <span className="text-sm font-medium text-gray-700 pt-1">Show Treatments:</span>
+            <div className="flex flex-wrap gap-3">
+              {config.treatments.map((treatment, idx) => (
+                <label key={idx} className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={selectedTreatments.has(idx)}
+                    onChange={() => {
+                      const newSelected = new Set(selectedTreatments);
+                      if (newSelected.has(idx)) {
+                        newSelected.delete(idx);
+                      } else {
+                        newSelected.add(idx);
+                      }
+                      setSelectedTreatments(newSelected);
+                    }}
+                    className="w-4 h-4 text-blue-600 rounded"
+                  />
+                  <span className="text-sm">{treatment}</span>
+                </label>
+              ))}
+            </div>
+            <button
+              onClick={() => {
+                if (selectedTreatments.size === config.treatments.length) {
+                  setSelectedTreatments(new Set());
+                } else {
+                  setSelectedTreatments(new Set(config.treatments.map((_, idx) => idx)));
+                }
+              }}
+              className="text-xs px-2 py-1 bg-white border border-gray-300 rounded hover:bg-gray-100"
+            >
+              {selectedTreatments.size === config.treatments.length ? 'Deselect All' : 'Select All'}
+            </button>
+          </div>
+        </div>
+
         {/* Chart Area */}
         <div className="overflow-x-auto">
           {/* Line Chart - Grouped by Treatment (Separate charts) */}
@@ -510,160 +553,245 @@ const Analysis = ({ config, gridLayout, assessmentDates, selectedAssessmentType 
           {/* Box Plot - Grouped by Treatment */}
           {chartType === 'box' && boxGrouping === 'treatment' && (
             <div className="flex gap-2 items-end min-w-max pb-4">
-              {config.treatments.map((treatment, treatmentIdx) => (
-                <div key={treatmentIdx} className="flex flex-col items-center">
-                  <div className="text-xs font-medium mb-1">{treatment}</div>
-                  <div className="flex gap-0.5 items-end h-40">
-                    {validAssessmentDates.map((dateObj, dateIdx) => {
-                      const stats = calculateStats(dateObj);
-                      if (!stats) return null;
+              {(() => {
+                const treatmentColors = ['#3b82f6', '#8b5cf6', '#ec4899', '#f97316', '#14b8a6', '#84cc16', '#eab308', '#ef4444', '#06b6d4'];
 
-                      const treatmentStat = stats.treatmentStats.find(ts => ts.treatment === treatmentIdx);
-                      if (!treatmentStat) return null;
+                // Get the last date's stats to determine statistical groups
+                const lastDateStats = validAssessmentDates.length > 0
+                  ? calculateStats(validAssessmentDates[validAssessmentDates.length - 1])
+                  : null;
 
-                      const vals = treatmentStat.values;
-                      const min = Math.min(...vals);
-                      const max = Math.max(...vals);
-                      const sorted = [...vals].sort((a, b) => a - b);
-                      const q1 = ss.quantile(sorted, 0.25);
-                      const q3 = ss.quantile(sorted, 0.75);
-                      const median = ss.median(sorted);
+                return config.treatments.map((treatment, treatmentIdx) => {
+                  // Filter by selected treatments
+                  if (!selectedTreatments.has(treatmentIdx)) return null;
 
-                      const range = scaleMax - scaleMin;
-                      const scale = (val) => ((val - scaleMin) / range) * 120;
+                  const color = treatmentColors[treatmentIdx % treatmentColors.length];
 
-                      return (
-                        <div key={dateIdx} className="flex flex-col items-center">
-                          <div className="relative h-32 w-6 bg-white border border-gray-300">
-                            {/* Box (Q1 to Q3) */}
-                            <div
-                              className="absolute w-full bg-white border-2 border-gray-800"
-                              style={{
-                                bottom: `${scale(q1)}px`,
-                                height: `${Math.max(2, scale(q3) - scale(q1))}px`
-                              }}
-                            />
-                            {/* Median line */}
-                            <div
-                              className="absolute w-full h-0.5 bg-gray-800"
-                              style={{ bottom: `${scale(median)}px` }}
-                            />
-                            {/* Whisker to min */}
-                            <div
-                              className="absolute left-1/2 w-0.5 bg-gray-800 -translate-x-1/2"
-                              style={{
-                                bottom: `${scale(min)}px`,
-                                height: `${scale(q1) - scale(min)}px`
-                              }}
-                            />
-                            {/* Min cap */}
-                            <div
-                              className="absolute left-1/4 w-1/2 h-0.5 bg-gray-800"
-                              style={{ bottom: `${scale(min)}px` }}
-                            />
-                            {/* Whisker to max */}
-                            <div
-                              className="absolute left-1/2 w-0.5 bg-gray-800 -translate-x-1/2"
-                              style={{
-                                bottom: `${scale(q3)}px`,
-                                height: `${scale(max) - scale(q3)}px`
-                              }}
-                            />
-                            {/* Max cap */}
-                            <div
-                              className="absolute left-1/4 w-1/2 h-0.5 bg-gray-800"
-                              style={{ bottom: `${scale(max)}px` }}
-                            />
-                          </div>
-                          <div className="text-xs mt-0.5 text-center" style={{ fontSize: '8px' }}>{dateObj.date}</div>
-                          <div className="text-xs text-blue-600 font-bold" style={{ fontSize: '8px' }}>({treatmentStat.group})</div>
+                  // Determine if we need a separator after this treatment
+                  const currentGroup = lastDateStats?.treatmentStats.find(ts => ts.treatment === treatmentIdx)?.group;
+                  const nextTreatmentIdx = treatmentIdx + 1;
+                  const nextGroup = lastDateStats?.treatmentStats.find(ts => ts.treatment === nextTreatmentIdx)?.group;
+                  const needsSeparator = currentGroup && nextGroup && currentGroup !== nextGroup && selectedTreatments.has(nextTreatmentIdx);
+
+                  return (
+                    <React.Fragment key={treatmentIdx}>
+                      <div className="flex flex-col items-center">
+                        <div className="text-xs font-medium mb-1">{treatment}</div>
+                        <div className="flex gap-0.5 items-end h-40">
+                          {validAssessmentDates.map((dateObj, dateIdx) => {
+                            const stats = calculateStats(dateObj);
+                            if (!stats) return null;
+
+                            const treatmentStat = stats.treatmentStats.find(ts => ts.treatment === treatmentIdx);
+                            if (!treatmentStat) return null;
+
+                            const vals = treatmentStat.values;
+                            const min = Math.min(...vals);
+                            const max = Math.max(...vals);
+                            const sorted = [...vals].sort((a, b) => a - b);
+                            const q1 = ss.quantile(sorted, 0.25);
+                            const q3 = ss.quantile(sorted, 0.75);
+                            const median = ss.median(sorted);
+
+                            const range = scaleMax - scaleMin;
+                            const scale = (val) => ((val - scaleMin) / range) * 120;
+
+                            // Light version of color for box fill
+                            const colorWithOpacity = color + '40'; // Add opacity to hex
+
+                            return (
+                              <div key={dateIdx} className="flex flex-col items-center">
+                                <div className="relative h-32 w-6 bg-white border border-gray-300">
+                                  {/* Box (Q1 to Q3) */}
+                                  <div
+                                    className="absolute w-full border-2"
+                                    style={{
+                                      bottom: `${scale(q1)}px`,
+                                      height: `${Math.max(2, scale(q3) - scale(q1))}px`,
+                                      backgroundColor: colorWithOpacity,
+                                      borderColor: color
+                                    }}
+                                  />
+                                  {/* Median line */}
+                                  <div
+                                    className="absolute w-full h-0.5"
+                                    style={{
+                                      bottom: `${scale(median)}px`,
+                                      backgroundColor: color
+                                    }}
+                                  />
+                                  {/* Whisker to min */}
+                                  <div
+                                    className="absolute left-1/2 w-0.5 -translate-x-1/2"
+                                    style={{
+                                      bottom: `${scale(min)}px`,
+                                      height: `${scale(q1) - scale(min)}px`,
+                                      backgroundColor: color
+                                    }}
+                                  />
+                                  {/* Min cap */}
+                                  <div
+                                    className="absolute left-1/4 w-1/2 h-0.5"
+                                    style={{
+                                      bottom: `${scale(min)}px`,
+                                      backgroundColor: color
+                                    }}
+                                  />
+                                  {/* Whisker to max */}
+                                  <div
+                                    className="absolute left-1/2 w-0.5 -translate-x-1/2"
+                                    style={{
+                                      bottom: `${scale(q3)}px`,
+                                      height: `${scale(max) - scale(q3)}px`,
+                                      backgroundColor: color
+                                    }}
+                                  />
+                                  {/* Max cap */}
+                                  <div
+                                    className="absolute left-1/4 w-1/2 h-0.5"
+                                    style={{
+                                      bottom: `${scale(max)}px`,
+                                      backgroundColor: color
+                                    }}
+                                  />
+                                </div>
+                                <div className="text-xs mt-0.5 text-center" style={{ fontSize: '8px' }}>{dateObj.date}</div>
+                                <div className="text-xs font-bold" style={{ fontSize: '8px', color }}>({treatmentStat.group})</div>
+                              </div>
+                            );
+                          })}
                         </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              ))}
+                      </div>
+                      {/* Separator between statistical groups */}
+                      {needsSeparator && (
+                        <div className="flex items-end h-40 pb-3">
+                          <div className="w-px h-32 bg-gray-400" style={{ borderLeft: '2px dashed #9ca3af' }} />
+                        </div>
+                      )}
+                    </React.Fragment>
+                  );
+                });
+              })()}
             </div>
           )}
 
           {/* Box Plot - Grouped by Date */}
           {chartType === 'box' && boxGrouping === 'date' && (
             <div className="flex gap-2 items-end min-w-max pb-4">
-              {validAssessmentDates.map((dateObj, dateIdx) => {
-                const stats = calculateStats(dateObj);
-                if (!stats) return null;
+              {(() => {
+                const treatmentColors = ['#3b82f6', '#8b5cf6', '#ec4899', '#f97316', '#14b8a6', '#84cc16', '#eab308', '#ef4444', '#06b6d4'];
 
-                return (
-                  <div key={dateIdx} className="flex flex-col items-center">
-                    <div className="text-xs font-medium mb-1">{dateObj.date}</div>
-                    <div className="flex gap-0.5 items-end h-40">
-                      {config.treatments.map((treatment, treatmentIdx) => {
-                        const treatmentStat = stats.treatmentStats.find(ts => ts.treatment === treatmentIdx);
-                        if (!treatmentStat) return null;
+                return validAssessmentDates.map((dateObj, dateIdx) => {
+                  const stats = calculateStats(dateObj);
+                  if (!stats) return null;
 
-                        const vals = treatmentStat.values;
-                        const min = Math.min(...vals);
-                        const max = Math.max(...vals);
-                        const sorted = [...vals].sort((a, b) => a - b);
-                        const q1 = ss.quantile(sorted, 0.25);
-                        const q3 = ss.quantile(sorted, 0.75);
-                        const median = ss.median(sorted);
+                  return (
+                    <div key={dateIdx} className="flex flex-col items-center">
+                      <div className="text-xs font-medium mb-1">{dateObj.date}</div>
+                      <div className="flex gap-0.5 items-end h-40">
+                        {config.treatments.map((treatment, treatmentIdx) => {
+                          // Filter by selected treatments
+                          if (!selectedTreatments.has(treatmentIdx)) return null;
 
-                        const range = scaleMax - scaleMin;
-                        const scale = (val) => ((val - scaleMin) / range) * 120;
+                          const treatmentStat = stats.treatmentStats.find(ts => ts.treatment === treatmentIdx);
+                          if (!treatmentStat) return null;
 
-                        return (
-                          <div key={treatmentIdx} className="flex flex-col items-center">
-                            <div className="relative h-32 w-6 bg-white border border-gray-300">
-                              {/* Box (Q1 to Q3) */}
-                              <div
-                                className="absolute w-full bg-white border-2 border-gray-800"
-                                style={{
-                                  bottom: `${scale(q1)}px`,
-                                  height: `${Math.max(2, scale(q3) - scale(q1))}px`
-                                }}
-                              />
-                              {/* Median line */}
-                              <div
-                                className="absolute w-full h-0.5 bg-gray-800"
-                                style={{ bottom: `${scale(median)}px` }}
-                              />
-                              {/* Whisker to min */}
-                              <div
-                                className="absolute left-1/2 w-0.5 bg-gray-800 -translate-x-1/2"
-                                style={{
-                                  bottom: `${scale(min)}px`,
-                                  height: `${scale(q1) - scale(min)}px`
-                                }}
-                              />
-                              {/* Min cap */}
-                              <div
-                                className="absolute left-1/4 w-1/2 h-0.5 bg-gray-800"
-                                style={{ bottom: `${scale(min)}px` }}
-                              />
-                              {/* Whisker to max */}
-                              <div
-                                className="absolute left-1/2 w-0.5 bg-gray-800 -translate-x-1/2"
-                                style={{
-                                  bottom: `${scale(q3)}px`,
-                                  height: `${scale(max) - scale(q3)}px`
-                                }}
-                              />
-                              {/* Max cap */}
-                              <div
-                                className="absolute left-1/4 w-1/2 h-0.5 bg-gray-800"
-                                style={{ bottom: `${scale(max)}px` }}
-                              />
-                            </div>
-                            <div className="text-xs mt-0.5 text-center" style={{ fontSize: '8px' }}>{treatment}</div>
-                            <div className="text-xs text-blue-600 font-bold" style={{ fontSize: '8px' }}>({treatmentStat.group})</div>
-                          </div>
-                        );
-                      })}
+                          const color = treatmentColors[treatmentIdx % treatmentColors.length];
+                          const vals = treatmentStat.values;
+                          const min = Math.min(...vals);
+                          const max = Math.max(...vals);
+                          const sorted = [...vals].sort((a, b) => a - b);
+                          const q1 = ss.quantile(sorted, 0.25);
+                          const q3 = ss.quantile(sorted, 0.75);
+                          const median = ss.median(sorted);
+
+                          const range = scaleMax - scaleMin;
+                          const scale = (val) => ((val - scaleMin) / range) * 120;
+
+                          // Light version of color for box fill
+                          const colorWithOpacity = color + '40';
+
+                          // Determine if we need a separator after this treatment
+                          const currentGroup = treatmentStat.group;
+                          const nextTreatmentIdx = treatmentIdx + 1;
+                          const nextTreatmentStat = stats.treatmentStats.find(ts => ts.treatment === nextTreatmentIdx);
+                          const nextGroup = nextTreatmentStat?.group;
+                          const needsSeparator = currentGroup && nextGroup && currentGroup !== nextGroup && selectedTreatments.has(nextTreatmentIdx);
+
+                          return (
+                            <React.Fragment key={treatmentIdx}>
+                              <div className="flex flex-col items-center">
+                                <div className="relative h-32 w-6 bg-white border border-gray-300">
+                                  {/* Box (Q1 to Q3) */}
+                                  <div
+                                    className="absolute w-full border-2"
+                                    style={{
+                                      bottom: `${scale(q1)}px`,
+                                      height: `${Math.max(2, scale(q3) - scale(q1))}px`,
+                                      backgroundColor: colorWithOpacity,
+                                      borderColor: color
+                                    }}
+                                  />
+                                  {/* Median line */}
+                                  <div
+                                    className="absolute w-full h-0.5"
+                                    style={{
+                                      bottom: `${scale(median)}px`,
+                                      backgroundColor: color
+                                    }}
+                                  />
+                                  {/* Whisker to min */}
+                                  <div
+                                    className="absolute left-1/2 w-0.5 -translate-x-1/2"
+                                    style={{
+                                      bottom: `${scale(min)}px`,
+                                      height: `${scale(q1) - scale(min)}px`,
+                                      backgroundColor: color
+                                    }}
+                                  />
+                                  {/* Min cap */}
+                                  <div
+                                    className="absolute left-1/4 w-1/2 h-0.5"
+                                    style={{
+                                      bottom: `${scale(min)}px`,
+                                      backgroundColor: color
+                                    }}
+                                  />
+                                  {/* Whisker to max */}
+                                  <div
+                                    className="absolute left-1/2 w-0.5 -translate-x-1/2"
+                                    style={{
+                                      bottom: `${scale(q3)}px`,
+                                      height: `${scale(max) - scale(q3)}px`,
+                                      backgroundColor: color
+                                    }}
+                                  />
+                                  {/* Max cap */}
+                                  <div
+                                    className="absolute left-1/4 w-1/2 h-0.5"
+                                    style={{
+                                      bottom: `${scale(max)}px`,
+                                      backgroundColor: color
+                                    }}
+                                  />
+                                </div>
+                                <div className="text-xs mt-0.5 text-center" style={{ fontSize: '8px' }}>{treatment}</div>
+                                <div className="text-xs font-bold" style={{ fontSize: '8px', color }}>({treatmentStat.group})</div>
+                              </div>
+                              {/* Separator between statistical groups */}
+                              {needsSeparator && (
+                                <div className="flex items-end h-40 pb-3">
+                                  <div className="w-px h-32 bg-gray-400" style={{ borderLeft: '2px dashed #9ca3af' }} />
+                                </div>
+                              )}
+                            </React.Fragment>
+                          );
+                        })}
+                      </div>
                     </div>
-                  </div>
-                );
-              })}
+                  );
+                });
+              })()}
             </div>
           )}
 
