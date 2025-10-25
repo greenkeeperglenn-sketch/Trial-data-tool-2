@@ -418,6 +418,9 @@ const Analysis = ({ config, gridLayout, assessmentDates, selectedAssessmentType 
                 const colors = ['#3b82f6', '#8b5cf6', '#ec4899', '#f97316', '#14b8a6', '#84cc16', '#eab308', '#ef4444', '#06b6d4'];
 
                 return config.treatments.map((treatment, treatmentIdx) => {
+                  // Filter by selected treatments
+                  if (!selectedTreatments.has(treatmentIdx)) return null;
+
                   const points = validAssessmentDates.map((dateObj, dateIdx) => {
                     const stats = calculateStats(dateObj);
                     if (!stats) return null;
@@ -503,10 +506,17 @@ const Analysis = ({ config, gridLayout, assessmentDates, selectedAssessmentType 
                         const stats = calculateStats(dateObj);
                         if (!stats) return null;
 
-                        const points = config.treatments.map((treatment, treatmentIdx) => {
-                          const treatmentStat = stats.treatmentStats.find(ts => ts.treatment === treatmentIdx);
+                        // Filter treatments and recalculate x positions
+                        const filteredTreatments = config.treatments
+                          .map((treatment, idx) => ({ treatment, idx }))
+                          .filter(t => selectedTreatments.has(t.idx));
+
+                        const points = filteredTreatments.map((t, filteredIdx) => {
+                          const treatmentStat = stats.treatmentStats.find(ts => ts.treatment === t.idx);
                           if (!treatmentStat) return null;
-                          const x = (treatmentIdx / (config.treatments.length - 1)) * (chartWidth - 40);
+                          const x = filteredTreatments.length > 1
+                            ? (filteredIdx / (filteredTreatments.length - 1)) * (chartWidth - 40)
+                            : (chartWidth - 40) / 2;
                           const y = scale(treatmentStat.mean);
                           return { x, y, mean: treatmentStat.mean, se: treatmentStat.stdError };
                         }).filter(p => p !== null);
@@ -529,11 +539,13 @@ const Analysis = ({ config, gridLayout, assessmentDates, selectedAssessmentType 
                     </svg>
 
                     <div className="absolute left-10 bottom-0 right-0 flex justify-between text-xs text-gray-600">
-                      {config.treatments.map((treatment, idx) => (
-                        <div key={idx} className="text-center" style={{ width: '1px' }}>
-                          <div className="transform -rotate-45 origin-top-left whitespace-nowrap" style={{ fontSize: '10px' }}>{treatment}</div>
-                        </div>
-                      ))}
+                      {config.treatments
+                        .filter((treatment, idx) => selectedTreatments.has(idx))
+                        .map((treatment, idx) => (
+                          <div key={idx} className="text-center" style={{ width: '1px' }}>
+                            <div className="transform -rotate-45 origin-top-left whitespace-nowrap" style={{ fontSize: '10px' }}>{treatment}</div>
+                          </div>
+                        ))}
                     </div>
 
                     <div className="absolute top-0 right-0 bg-white border rounded p-1.5 text-xs">
@@ -556,26 +568,14 @@ const Analysis = ({ config, gridLayout, assessmentDates, selectedAssessmentType 
               {(() => {
                 const treatmentColors = ['#3b82f6', '#8b5cf6', '#ec4899', '#f97316', '#14b8a6', '#84cc16', '#eab308', '#ef4444', '#06b6d4'];
 
-                // Get the last date's stats to determine statistical groups
-                const lastDateStats = validAssessmentDates.length > 0
-                  ? calculateStats(validAssessmentDates[validAssessmentDates.length - 1])
-                  : null;
-
                 return config.treatments.map((treatment, treatmentIdx) => {
                   // Filter by selected treatments
                   if (!selectedTreatments.has(treatmentIdx)) return null;
 
                   const color = treatmentColors[treatmentIdx % treatmentColors.length];
 
-                  // Determine if we need a separator after this treatment
-                  const currentGroup = lastDateStats?.treatmentStats.find(ts => ts.treatment === treatmentIdx)?.group;
-                  const nextTreatmentIdx = treatmentIdx + 1;
-                  const nextGroup = lastDateStats?.treatmentStats.find(ts => ts.treatment === nextTreatmentIdx)?.group;
-                  const needsSeparator = currentGroup && nextGroup && currentGroup !== nextGroup && selectedTreatments.has(nextTreatmentIdx);
-
                   return (
-                    <React.Fragment key={treatmentIdx}>
-                      <div className="flex flex-col items-center">
+                    <div key={treatmentIdx} className="flex flex-col items-center">
                         <div className="text-xs font-medium mb-1">{treatment}</div>
                         <div className="flex gap-0.5 items-end h-40">
                           {validAssessmentDates.map((dateObj, dateIdx) => {
@@ -662,13 +662,6 @@ const Analysis = ({ config, gridLayout, assessmentDates, selectedAssessmentType 
                           })}
                         </div>
                       </div>
-                      {/* Separator between statistical groups */}
-                      {needsSeparator && (
-                        <div className="flex items-end h-40 pb-3">
-                          <div className="w-px h-32 bg-gray-400" style={{ borderLeft: '2px dashed #9ca3af' }} />
-                        </div>
-                      )}
-                    </React.Fragment>
                   );
                 });
               })()}
@@ -711,16 +704,8 @@ const Analysis = ({ config, gridLayout, assessmentDates, selectedAssessmentType 
                           // Light version of color for box fill
                           const colorWithOpacity = color + '40';
 
-                          // Determine if we need a separator after this treatment
-                          const currentGroup = treatmentStat.group;
-                          const nextTreatmentIdx = treatmentIdx + 1;
-                          const nextTreatmentStat = stats.treatmentStats.find(ts => ts.treatment === nextTreatmentIdx);
-                          const nextGroup = nextTreatmentStat?.group;
-                          const needsSeparator = currentGroup && nextGroup && currentGroup !== nextGroup && selectedTreatments.has(nextTreatmentIdx);
-
                           return (
-                            <React.Fragment key={treatmentIdx}>
-                              <div className="flex flex-col items-center">
+                            <div key={treatmentIdx} className="flex flex-col items-center">
                                 <div className="relative h-32 w-6 bg-white border border-gray-300">
                                   {/* Box (Q1 to Q3) */}
                                   <div
@@ -778,13 +763,6 @@ const Analysis = ({ config, gridLayout, assessmentDates, selectedAssessmentType 
                                 <div className="text-xs mt-0.5 text-center" style={{ fontSize: '8px' }}>{treatment}</div>
                                 <div className="text-xs font-bold" style={{ fontSize: '8px', color }}>({treatmentStat.group})</div>
                               </div>
-                              {/* Separator between statistical groups */}
-                              {needsSeparator && (
-                                <div className="flex items-end h-40 pb-3">
-                                  <div className="w-px h-32 bg-gray-400" style={{ borderLeft: '2px dashed #9ca3af' }} />
-                                </div>
-                              )}
-                            </React.Fragment>
                           );
                         })}
                       </div>
@@ -824,6 +802,9 @@ const Analysis = ({ config, gridLayout, assessmentDates, selectedAssessmentType 
 
                           {/* Bar groups for each treatment */}
                           {config.treatments.map((treatment, treatmentIdx) => {
+                            // Filter by selected treatments
+                            if (!selectedTreatments.has(treatmentIdx)) return null;
+
                             const groupWidth = validAssessmentDates.length * (barWidth + 3);
 
                             return (
@@ -912,13 +893,16 @@ const Analysis = ({ config, gridLayout, assessmentDates, selectedAssessmentType 
 
                           {/* Bar groups for each date */}
                           {validAssessmentDates.map((dateObj, dateIdx) => {
-                            const groupWidth = config.treatments.length * (barWidth + 3);
+                            const groupWidth = selectedTreatments.size * (barWidth + 3);
                             const stats = calculateStats(dateObj);
 
                             return (
                               <div key={dateIdx} className="flex flex-col items-center" style={{ width: groupWidth + 'px' }}>
                                 <div className="flex gap-0.5 items-end h-full pb-3">
                                   {config.treatments.map((treatment, treatmentIdx) => {
+                                    // Filter by selected treatments
+                                    if (!selectedTreatments.has(treatmentIdx)) return null;
+
                                     if (!stats) return <div key={treatmentIdx} style={{ width: barWidth + 'px' }} />;
 
                                     const treatmentStat = stats.treatmentStats.find(ts => ts.treatment === treatmentIdx);
@@ -970,15 +954,20 @@ const Analysis = ({ config, gridLayout, assessmentDates, selectedAssessmentType 
 
                         {/* Legend */}
                         <div className="flex flex-wrap gap-2 mt-3 justify-center text-xs">
-                          {config.treatments.map((treatment, idx) => (
-                            <div key={idx} className="flex items-center gap-2">
-                              <div
-                                className="w-4 h-4 rounded"
-                                style={{ backgroundColor: treatmentColors[idx % treatmentColors.length] }}
-                              />
-                              <span>{treatment}</span>
-                            </div>
-                          ))}
+                          {config.treatments
+                            .filter((treatment, idx) => selectedTreatments.has(idx))
+                            .map((treatment, idx) => {
+                              const originalIdx = config.treatments.indexOf(treatment);
+                              return (
+                                <div key={idx} className="flex items-center gap-2">
+                                  <div
+                                    className="w-4 h-4 rounded"
+                                    style={{ backgroundColor: treatmentColors[originalIdx % treatmentColors.length] }}
+                                  />
+                                  <span>{treatment}</span>
+                                </div>
+                              );
+                            })}
                         </div>
                       </div>
                     )}
