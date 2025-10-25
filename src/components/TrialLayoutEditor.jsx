@@ -438,7 +438,7 @@ const TrialLayoutEditor = ({
                         />
                       </button>
                     ) : (
-                      <div className="text-white font-bold text-center" style={{ fontSize: 'min(1.5rem, 6vw)' }}>
+                      <div className="text-black font-bold text-center" style={{ fontSize: 'min(1.5rem, 6vw)' }}>
                         {String.fromCharCode(65 + plot.treatment)}
                       </div>
                     )}
@@ -480,8 +480,8 @@ const TrialLayoutEditor = ({
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
             {config.treatments.map((treatment, idx) => (
               <div key={idx} className="flex items-center gap-2">
-                <div 
-                  className="w-8 h-8 rounded flex items-center justify-center text-white font-bold shadow"
+                <div
+                  className="w-8 h-8 rounded flex items-center justify-center text-black font-bold shadow"
                   style={{ backgroundColor: treatmentColors[idx] }}
                 >
                   {String.fromCharCode(65 + idx)}
