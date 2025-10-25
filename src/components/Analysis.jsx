@@ -8,6 +8,9 @@ const Analysis = ({ config, gridLayout, assessmentDates, selectedAssessmentType 
   const [barGrouping, setBarGrouping] = useState('treatment'); // 'treatment' or 'date'
   const [boxGrouping, setBoxGrouping] = useState('treatment'); // 'treatment' or 'date'
   const [lineGrouping, setLineGrouping] = useState('treatment'); // 'treatment' or 'date'
+  const [scaleMode, setScaleMode] = useState('fixed'); // 'fixed', 'auto', 'custom'
+  const [customMin, setCustomMin] = useState('');
+  const [customMax, setCustomMax] = useState('');
 
   // Calculate comprehensive statistics for a single date
   const calculateStats = (dateObj) => {
@@ -134,8 +137,27 @@ const Analysis = ({ config, gridLayout, assessmentDates, selectedAssessmentType 
 
   // Get assessment type configuration for min/max scale
   const assessment = config.assessmentTypes.find(a => a.name === selectedAssessmentType);
-  const scaleMin = assessment?.min || 0;
-  const scaleMax = assessment?.max || 10;
+  const fixedMin = assessment?.min || 0;
+  const fixedMax = assessment?.max || 10;
+
+  // Calculate auto-fit scale from actual data
+  const allStats = validAssessmentDates.map(d => calculateStats(d)).filter(s => s !== null);
+  const allDataValues = allStats.flatMap(s => s.treatmentStats.flatMap(ts => ts.values));
+  const autoMin = allDataValues.length > 0 ? Math.min(...allDataValues) : fixedMin;
+  const autoMax = allDataValues.length > 0 ? Math.max(...allDataValues) : fixedMax;
+
+  // Determine scale based on mode
+  let scaleMin, scaleMax;
+  if (scaleMode === 'auto') {
+    scaleMin = autoMin;
+    scaleMax = autoMax;
+  } else if (scaleMode === 'custom') {
+    scaleMin = customMin !== '' ? parseFloat(customMin) : fixedMin;
+    scaleMax = customMax !== '' ? parseFloat(customMax) : fixedMax;
+  } else {
+    scaleMin = fixedMin;
+    scaleMax = fixedMax;
+  }
 
   return (
     <div className="space-y-6">
@@ -266,6 +288,73 @@ const Analysis = ({ config, gridLayout, assessmentDates, selectedAssessmentType 
             </div>
           </div>
         )}
+
+        {/* Scale Controls */}
+        <div className="mb-4 p-3 bg-gray-50 rounded">
+          <div className="flex items-center gap-4 flex-wrap">
+            <span className="text-sm font-medium text-gray-700">Y-Axis Scale:</span>
+
+            <div className="flex gap-2">
+              <button
+                onClick={() => setScaleMode('fixed')}
+                className={`px-3 py-1 rounded text-sm transition-colors ${
+                  scaleMode === 'fixed'
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-100'
+                }`}
+              >
+                Fixed ({fixedMin}-{fixedMax})
+              </button>
+              <button
+                onClick={() => setScaleMode('auto')}
+                className={`px-3 py-1 rounded text-sm transition-colors ${
+                  scaleMode === 'auto'
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-100'
+                }`}
+              >
+                Auto-Fit ({autoMin.toFixed(1)}-{autoMax.toFixed(1)})
+              </button>
+              <button
+                onClick={() => setScaleMode('custom')}
+                className={`px-3 py-1 rounded text-sm transition-colors ${
+                  scaleMode === 'custom'
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-100'
+                }`}
+              >
+                Custom
+              </button>
+            </div>
+
+            {scaleMode === 'custom' && (
+              <div className="flex items-center gap-2">
+                <label className="text-sm text-gray-600">Min:</label>
+                <input
+                  type="number"
+                  step="0.1"
+                  value={customMin}
+                  onChange={(e) => setCustomMin(e.target.value)}
+                  placeholder={fixedMin.toString()}
+                  className="w-20 px-2 py-1 border border-gray-300 rounded text-sm"
+                />
+                <label className="text-sm text-gray-600">Max:</label>
+                <input
+                  type="number"
+                  step="0.1"
+                  value={customMax}
+                  onChange={(e) => setCustomMax(e.target.value)}
+                  placeholder={fixedMax.toString()}
+                  className="w-20 px-2 py-1 border border-gray-300 rounded text-sm"
+                />
+              </div>
+            )}
+
+            <span className="text-xs text-gray-500">
+              Current: {scaleMin.toFixed(1)} to {scaleMax.toFixed(1)}
+            </span>
+          </div>
+        </div>
 
         {/* Chart Area */}
         <div className="overflow-x-auto">
