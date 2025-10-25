@@ -6,7 +6,9 @@ import { LineChart, BarChart3, Box } from 'lucide-react';
 const Analysis = ({ config, gridLayout, assessmentDates, selectedAssessmentType }) => {
   const [chartType, setChartType] = useState('box'); // 'line', 'box', 'bar'
   const [barGrouping, setBarGrouping] = useState('treatment'); // 'treatment' or 'date'
-  
+  const [boxGrouping, setBoxGrouping] = useState('treatment'); // 'treatment' or 'date'
+  const [lineGrouping, setLineGrouping] = useState('treatment'); // 'treatment' or 'date'
+
   // Calculate comprehensive statistics for a single date
   const calculateStats = (dateObj) => {
     const assessmentData = dateObj.assessments[selectedAssessmentType];
@@ -123,6 +125,12 @@ const Analysis = ({ config, gridLayout, assessmentDates, selectedAssessmentType 
       lsd
     };
   };
+
+  // Filter out blank dates (dates with no data)
+  const validAssessmentDates = assessmentDates.filter(dateObj => {
+    const stats = calculateStats(dateObj);
+    return stats !== null;
+  });
 
   return (
     <div className="space-y-6">
@@ -331,9 +339,9 @@ const Analysis = ({ config, gridLayout, assessmentDates, selectedAssessmentType 
           </div>
         </div>
 
-        {/* Bar Chart Grouping Toggle */}
+        {/* Chart Grouping Toggles */}
         {chartType === 'bar' && (
-          <div className="mb-4 flex items-center gap-3">
+          <div className="mb-3 flex items-center gap-3">
             <span className="text-sm font-medium text-gray-700">Group by:</span>
             <div className="flex gap-1 bg-gray-100 p-1 rounded">
               <button
@@ -360,13 +368,69 @@ const Analysis = ({ config, gridLayout, assessmentDates, selectedAssessmentType 
           </div>
         )}
 
+        {chartType === 'box' && (
+          <div className="mb-3 flex items-center gap-3">
+            <span className="text-sm font-medium text-gray-700">Group by:</span>
+            <div className="flex gap-1 bg-gray-100 p-1 rounded">
+              <button
+                onClick={() => setBoxGrouping('treatment')}
+                className={`px-3 py-1 rounded text-sm transition-colors ${
+                  boxGrouping === 'treatment'
+                    ? 'bg-white shadow text-gray-900 font-medium'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                Treatment
+              </button>
+              <button
+                onClick={() => setBoxGrouping('date')}
+                className={`px-3 py-1 rounded text-sm transition-colors ${
+                  boxGrouping === 'date'
+                    ? 'bg-white shadow text-gray-900 font-medium'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                Date
+              </button>
+            </div>
+          </div>
+        )}
+
+        {chartType === 'line' && (
+          <div className="mb-3 flex items-center gap-3">
+            <span className="text-sm font-medium text-gray-700">Group by:</span>
+            <div className="flex gap-1 bg-gray-100 p-1 rounded">
+              <button
+                onClick={() => setLineGrouping('treatment')}
+                className={`px-3 py-1 rounded text-sm transition-colors ${
+                  lineGrouping === 'treatment'
+                    ? 'bg-white shadow text-gray-900 font-medium'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                Treatment
+              </button>
+              <button
+                onClick={() => setLineGrouping('date')}
+                className={`px-3 py-1 rounded text-sm transition-colors ${
+                  lineGrouping === 'date'
+                    ? 'bg-white shadow text-gray-900 font-medium'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                Date
+              </button>
+            </div>
+          </div>
+        )}
+
         <div className="overflow-x-auto">
           {/* Line Chart */}
           {chartType === 'line' && (
             <div className="min-w-max">
               {(() => {
-                // Calculate data for all treatments across dates
-                const allStats = assessmentDates.map(d => calculateStats(d)).filter(s => s !== null);
+                // Use only valid dates with data
+                const allStats = validAssessmentDates.map(d => calculateStats(d)).filter(s => s !== null);
                 if (allStats.length === 0) return <p className="text-gray-500">No data available</p>;
 
                 const allValues = allStats.flatMap(s => s.treatmentStats.flatMap(ts => ts.values));
@@ -375,30 +439,30 @@ const Analysis = ({ config, gridLayout, assessmentDates, selectedAssessmentType 
                 const range = globalMax - globalMin;
                 const padding = range * 0.1;
 
-                const chartHeight = 300;
-                const chartWidth = Math.max(600, assessmentDates.length * 100);
+                const chartHeight = 220; // Reduced from 300
+                const chartWidth = Math.max(500, validAssessmentDates.length * 80); // Reduced spacing
                 const scale = (val) => chartHeight - ((val - (globalMin - padding)) / (range + 2 * padding)) * chartHeight;
 
                 const colors = ['#3b82f6', '#8b5cf6', '#ec4899', '#f97316', '#14b8a6', '#84cc16', '#eab308', '#ef4444', '#06b6d4'];
 
                 return (
-                  <div className="relative" style={{ height: chartHeight + 60, width: chartWidth }}>
+                  <div className="relative" style={{ height: chartHeight + 50, width: chartWidth }}> {/* Reduced bottom padding */}
                     {/* Y-axis labels */}
-                    <div className="absolute left-0 top-0 bottom-12 flex flex-col justify-between text-xs text-gray-600">
+                    <div className="absolute left-0 top-0 bottom-10 flex flex-col justify-between text-xs text-gray-600">
                       <span>{(globalMax + padding).toFixed(1)}</span>
                       <span>{((globalMax + globalMin) / 2).toFixed(1)}</span>
                       <span>{(globalMin - padding).toFixed(1)}</span>
                     </div>
 
                     {/* Chart area */}
-                    <svg className="absolute left-12 top-0" width={chartWidth - 48} height={chartHeight}>
+                    <svg className="absolute left-10 top-0" width={chartWidth - 40} height={chartHeight}> {/* Reduced left margin */}
                       {/* Grid lines */}
                       {[0, 0.25, 0.5, 0.75, 1].map((fraction, i) => (
                         <line
                           key={i}
                           x1="0"
                           y1={chartHeight * fraction}
-                          x2={chartWidth - 48}
+                          x2={chartWidth - 40}
                           y2={chartHeight * fraction}
                           stroke="#e5e7eb"
                           strokeWidth="1"
@@ -407,13 +471,13 @@ const Analysis = ({ config, gridLayout, assessmentDates, selectedAssessmentType 
 
                       {/* Lines for each treatment */}
                       {config.treatments.map((treatment, treatmentIdx) => {
-                        const points = assessmentDates.map((dateObj, dateIdx) => {
+                        const points = validAssessmentDates.map((dateObj, dateIdx) => {
                           const stats = calculateStats(dateObj);
                           if (!stats) return null;
                           const treatmentStat = stats.treatmentStats.find(ts => ts.treatment === treatmentIdx);
                           if (!treatmentStat) return null;
 
-                          const x = (dateIdx / (assessmentDates.length - 1)) * (chartWidth - 48);
+                          const x = (dateIdx / (validAssessmentDates.length - 1)) * (chartWidth - 40);
                           const y = scale(treatmentStat.mean);
                           return { x, y, mean: treatmentStat.mean, se: treatmentStat.stdError };
                         }).filter(p => p !== null);
@@ -447,10 +511,10 @@ const Analysis = ({ config, gridLayout, assessmentDates, selectedAssessmentType 
                                 <circle
                                   cx={p.x}
                                   cy={p.y}
-                                  r="4"
+                                  r="3"
                                   fill={colors[treatmentIdx % colors.length]}
                                   stroke="white"
-                                  strokeWidth="2"
+                                  strokeWidth="1.5"
                                 />
                               </g>
                             ))}
@@ -460,10 +524,10 @@ const Analysis = ({ config, gridLayout, assessmentDates, selectedAssessmentType 
                     </svg>
 
                     {/* X-axis labels */}
-                    <div className="absolute left-12 bottom-0 right-0 flex justify-between text-xs text-gray-600">
-                      {assessmentDates.map((dateObj, idx) => (
+                    <div className="absolute left-10 bottom-0 right-0 flex justify-between text-xs text-gray-600">
+                      {validAssessmentDates.map((dateObj, idx) => (
                         <div key={idx} className="text-center" style={{ width: '1px' }}>
-                          <div className="transform -rotate-45 origin-top-left whitespace-nowrap">
+                          <div className="transform -rotate-45 origin-top-left whitespace-nowrap" style={{ fontSize: '10px' }}>
                             {dateObj.date}
                           </div>
                         </div>
@@ -471,11 +535,11 @@ const Analysis = ({ config, gridLayout, assessmentDates, selectedAssessmentType 
                     </div>
 
                     {/* Legend */}
-                    <div className="absolute top-0 right-0 bg-white border rounded p-2 text-xs">
+                    <div className="absolute top-0 right-0 bg-white border rounded p-1.5 text-xs">
                       {config.treatments.map((treatment, idx) => (
-                        <div key={idx} className="flex items-center gap-2 mb-1">
+                        <div key={idx} className="flex items-center gap-1.5 mb-0.5" style={{ fontSize: '10px' }}>
                           <div
-                            className="w-4 h-0.5"
+                            className="w-3 h-0.5"
                             style={{ backgroundColor: colors[idx % colors.length] }}
                           />
                           <span>{treatment}</span>
