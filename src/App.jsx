@@ -5,11 +5,14 @@ import TrialLibrary from './components/TrialLibrary';
 import TrialSetup from './components/TrialSetup';
 import TrialLayoutEditor from './components/TrialLayoutEditor';
 import DataEntry from './components/DataEntry';
+import ExcelImport from './components/ExcelImport';
+import { parseExcelFile } from './utils/excelParser';
 
 const App = () => {
   // Navigation state
   const [step, setStep] = useState('library'); // 'library', 'setup', 'layoutBuilder', 'entry'
   const [currentTrialId, setCurrentTrialId] = useState(null);
+  const [showExcelImport, setShowExcelImport] = useState(false);
 
   // Data state
   const [trials, setTrials] = useState({});
@@ -37,6 +40,62 @@ const App = () => {
     if (savedTrials) {
       setTrials(JSON.parse(savedTrials));
     }
+  }, []);
+
+  // Load demo trial automatically on first load
+  useEffect(() => {
+    const loadDemoTrial = async () => {
+      // Check if demo trial already exists
+      const savedTrials = localStorage.getItem('trials');
+      const existingTrials = savedTrials ? JSON.parse(savedTrials) : {};
+
+      if (existingTrials['demo-stri']) {
+        console.log('[App] Demo trial already exists');
+        return;
+      }
+
+      try {
+        console.log('[App] Loading demo trial...');
+        const response = await fetch('/demo-trial.xlsx');
+        const blob = await response.blob();
+        const file = new File([blob], 'STRI DS Curative Assessment sheet.xlsx', {
+          type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        });
+
+        const parsedData = await parseExcelFile(file);
+
+        // Create demo trial with fixed ID
+        const demoTrial = {
+          id: 'demo-stri',
+          name: '🌟 DEMO: ' + parsedData.name,
+          config: {
+            trialName: '🌟 DEMO: ' + parsedData.name,
+            numBlocks: parsedData.config.blocks,
+            numTreatments: parsedData.config.treatments,
+            treatments: parsedData.config.treatmentNames,
+            assessmentTypes: parsedData.config.assessmentTypes
+          },
+          gridLayout: parsedData.gridLayout,
+          orientation: 0,
+          layoutLocked: true,
+          assessmentDates: parsedData.assessmentDates,
+          photos: parsedData.photos || {},
+          notes: parsedData.notes || {},
+          lastModified: new Date().toISOString(),
+          created: new Date().toISOString(),
+          metadata: parsedData.metadata,
+          isDemo: true // Mark as demo trial
+        };
+
+        console.log('[App] Demo trial loaded successfully');
+        setTrials(prev => ({ ...prev, 'demo-stri': demoTrial }));
+      } catch (error) {
+        console.error('[App] Error loading demo trial:', error);
+        // Don't show alert - just fail silently
+      }
+    };
+
+    loadDemoTrial();
   }, []);
 
   // Save trials to localStorage (database-ready structure)
@@ -115,6 +174,12 @@ const App = () => {
 
   // Delete trial
   const deleteTrial = (trialId) => {
+    // Prevent deleting demo trial
+    if (trialId === 'demo-stri') {
+      alert('Cannot delete the demo trial! It will be restored on next page load.');
+      return;
+    }
+
     if (confirm('Delete this trial? This cannot be undone.')) {
       setTrials(prev => {
         const newTrials = { ...prev };
@@ -143,7 +208,7 @@ const App = () => {
   const importTrialJSON = (e) => {
     const file = e.target.files[0];
     if (!file) return;
-    
+
     const reader = new FileReader();
     reader.onload = (event) => {
       try {
@@ -160,16 +225,64 @@ const App = () => {
     reader.readAsText(file);
   };
 
+  // Import trial from Excel
+  const importTrialFromExcel = (parsedData) => {
+    try {
+      console.log('[App] Importing trial data:', parsedData);
+
+      // The parser already returns data in the correct format
+      const trialData = {
+        id: parsedData.id,
+        name: parsedData.name,
+        config: {
+          trialName: parsedData.name,
+          numBlocks: parsedData.config.blocks,
+          numTreatments: parsedData.config.treatments,
+          treatments: parsedData.config.treatmentNames,
+          assessmentTypes: parsedData.config.assessmentTypes
+        },
+        gridLayout: parsedData.gridLayout,
+        orientation: 0,
+        layoutLocked: true, // Lock layout since it came from Excel
+        assessmentDates: parsedData.assessmentDates,
+        photos: parsedData.photos || {},
+        notes: parsedData.notes || {},
+        lastModified: new Date().toISOString(),
+        created: new Date().toISOString(),
+        metadata: parsedData.metadata
+      };
+
+      console.log('[App] Trial data prepared:', trialData);
+      setTrials(prev => ({ ...prev, [trialData.id]: trialData }));
+      console.log('[App] Trial saved to state');
+      setShowExcelImport(false);
+      console.log('[App] Import complete!');
+      alert(`Trial "${parsedData.name}" imported successfully with ${parsedData.assessmentDates.length} assessment dates!`);
+    } catch (err) {
+      console.error('[App] Import error:', err);
+      alert('Error importing trial from Excel: ' + err.message);
+    }
+  };
+
   // Router - render appropriate component based on step
   if (step === 'library') {
     return (
-      <TrialLibrary
-        trials={trials}
-        onCreateNew={createNewTrial}
-        onLoadTrial={loadTrial}
-        onDeleteTrial={deleteTrial}
-        onImportTrial={importTrialJSON}
-      />
+      <>
+        <TrialLibrary
+          trials={trials}
+          onCreateNew={createNewTrial}
+          onLoadTrial={loadTrial}
+          onDeleteTrial={deleteTrial}
+          onImportTrial={importTrialJSON}
+          onImportExcel={() => setShowExcelImport(true)}
+        />
+        {showExcelImport && (
+          <ExcelImport
+            onImport={importTrialFromExcel}
+            onCancel={() => setShowExcelImport(false)}
+          />
+        )}
+      </>
     );
   }
 

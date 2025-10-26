@@ -13,6 +13,26 @@ const DataEntryField = ({
   const [showTreatments, setShowTreatments] = useState(false);
   const [reverseColorScale, setReverseColorScale] = useState(false);
 
+  // Validate gridLayout
+  if (!gridLayout || !Array.isArray(gridLayout) || gridLayout.length === 0) {
+    return (
+      <div className="p-4 bg-red-50 border border-red-200 rounded">
+        <p className="text-red-800">Error: Invalid grid layout. Please check the trial data.</p>
+      </div>
+    );
+  }
+
+  // Filter out any undefined blocks
+  const validGridLayout = gridLayout.filter(block => block && Array.isArray(block));
+
+  if (validGridLayout.length === 0) {
+    return (
+      <div className="p-4 bg-red-50 border border-red-200 rounded">
+        <p className="text-red-800">Error: No valid blocks found in grid layout.</p>
+      </div>
+    );
+  }
+
   const assessment = config.assessmentTypes.find(a => a.name === selectedAssessmentType);
 
   // Get color based on value
@@ -41,10 +61,10 @@ const DataEntryField = ({
     else if (normalized < 0.4) return 'bg-green-200 border-green-400';
     else if (normalized < 0.5) return 'bg-green-300 border-green-500';
     else if (normalized < 0.6) return 'bg-green-400 border-green-600';
-    else if (normalized < 0.7) return 'bg-green-500 border-green-700 text-white';
-    else if (normalized < 0.8) return 'bg-green-600 border-green-800 text-white';
-    else if (normalized < 0.9) return 'bg-green-700 border-green-900 text-white';
-    else return 'bg-green-800 border-green-950 text-white';
+    else if (normalized < 0.7) return 'bg-green-500 border-green-700 text-black';
+    else if (normalized < 0.8) return 'bg-green-600 border-green-800 text-black';
+    else if (normalized < 0.9) return 'bg-green-700 border-green-900 text-black';
+    else return 'bg-green-800 border-green-950 text-black';
   };
 
   // Generate test data
@@ -55,7 +75,7 @@ const DataEntryField = ({
     const range = assessment.max - assessment.min;
     const midPoint = assessment.min + (range * 0.6);
     
-    gridLayout.flat().filter(p => !p.isBlank).forEach(plot => {
+    validGridLayout.flat().filter(p => !p.isBlank).forEach(plot => {
       let value;
       if (plot.treatment === bestTreatment) {
         value = midPoint + (range * 0.15) + (Math.random() * range * 0.15);
@@ -120,7 +140,7 @@ const DataEntryField = ({
       {/* Field Grid */}
       <div className="overflow-x-auto mb-4">
         <div className="space-y-2">
-          {gridLayout.map((row, rowIdx) => (
+          {validGridLayout.map((row, rowIdx) => (
             <div key={rowIdx} className="grid gap-1" style={{ gridTemplateColumns: `repeat(${row.length}, minmax(0, 1fr))` }}>
               {row.map((plot, colIdx) => {
                 if (plot.isBlank) {
