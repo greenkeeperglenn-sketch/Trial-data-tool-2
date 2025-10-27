@@ -8,7 +8,8 @@ const DataEntryField = ({
   selectedAssessmentType,
   photos,
   onUpdateData,
-  onPhotosChange
+  onPhotosChange,
+  orientation = 0
 }) => {
   const [showTreatments, setShowTreatments] = useState(false);
   const [reverseColorScale, setReverseColorScale] = useState(false);
@@ -179,7 +180,48 @@ const DataEntryField = ({
       </div>
 
       {/* Field Grid */}
-      <div className="overflow-x-auto mb-4">
+      <div className="overflow-x-auto mb-4 relative">
+        {/* Compass Overlay */}
+        <div className="absolute top-2 right-2 z-10 flex flex-col items-center gap-1">
+          <div className="text-[10px] font-bold text-gray-700 bg-white/90 px-2 py-0.5 rounded shadow-sm">
+            ORIENTATION
+          </div>
+          <div className="relative w-16 h-16 bg-gradient-to-br from-blue-50 to-blue-100 rounded-full shadow-lg border-2 border-blue-300 bg-white/95">
+            <div
+              className="absolute inset-0 flex items-center justify-center"
+              style={{ transform: `rotate(${orientation}deg)` }}
+            >
+              {/* North Arrow */}
+              <div className="absolute top-0.5 left-1/2 -translate-x-1/2">
+                <div className="w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-b-[12px] border-b-red-600"></div>
+                <div className="text-[10px] font-bold text-red-600 text-center">N</div>
+              </div>
+
+              {/* South */}
+              <div className="absolute bottom-0.5 left-1/2 -translate-x-1/2">
+                <div className="text-[10px] font-semibold text-gray-600">S</div>
+                <div className="w-0 h-0 border-l-[4px] border-l-transparent border-r-[4px] border-r-transparent border-t-[8px] border-t-gray-600"></div>
+              </div>
+
+              {/* East */}
+              <div className="absolute right-0.5 top-1/2 -translate-y-1/2">
+                <div className="text-[10px] font-semibold text-gray-600">E</div>
+              </div>
+
+              {/* West */}
+              <div className="absolute left-0.5 top-1/2 -translate-y-1/2">
+                <div className="text-[10px] font-semibold text-gray-600">W</div>
+              </div>
+
+              {/* Center Dot */}
+              <div className="w-1.5 h-1.5 bg-gray-800 rounded-full"></div>
+            </div>
+          </div>
+          <div className="text-[10px] font-mono text-gray-700 bg-white/90 px-2 py-0.5 rounded shadow-sm">
+            {orientation}°
+          </div>
+        </div>
+
         <div className="space-y-2">
           {validGridLayout.map((row, rowIdx) => (
             <div key={rowIdx} className="grid gap-1" style={{ gridTemplateColumns: `repeat(${row.length}, minmax(0, 1fr))` }}>

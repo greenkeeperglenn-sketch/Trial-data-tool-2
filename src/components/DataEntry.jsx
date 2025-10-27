@@ -276,6 +276,7 @@ const DataEntry = ({
               currentDateObj={currentDateObj}
               selectedAssessmentType={selectedAssessmentType}
               photos={photos}
+              orientation={orientation}
               onUpdateData={updateData}
               onPhotosChange={onPhotosChange}
             />
