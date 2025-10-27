@@ -103,12 +103,53 @@ const DataEntryField = ({
     reader.readAsDataURL(file);
   };
 
+  // Calculate statistics
+  const calculateStats = () => {
+    const allValues = Object.values(currentDateObj.assessments[selectedAssessmentType])
+      .filter(v => v.entered && v.value !== '')
+      .map(v => parseFloat(v.value));
+
+    if (allValues.length === 0) return null;
+
+    const sum = allValues.reduce((acc, val) => acc + val, 0);
+    const average = sum / allValues.length;
+    const min = Math.min(...allValues);
+    const max = Math.max(...allValues);
+
+    return { average, min, max, count: allValues.length };
+  };
+
+  const stats = calculateStats();
+
   return (
     <div className="bg-white p-4 rounded-lg shadow">
       <h3 className="text-lg font-bold mb-4">
         {currentDateObj.date} - {selectedAssessmentType}
       </h3>
-      
+
+      {/* Statistics Summary */}
+      {stats && (
+        <div className="mb-4 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border border-blue-200">
+          <div className="flex items-center justify-center gap-8 flex-wrap">
+            <div className="text-center">
+              <div className="text-xs font-medium text-gray-600 mb-1">MINIMUM</div>
+              <div className="text-2xl font-bold text-blue-600">{stats.min.toFixed(1)}</div>
+            </div>
+            <div className="text-center">
+              <div className="text-xs font-medium text-gray-600 mb-1">AVERAGE</div>
+              <div className="text-4xl font-bold text-indigo-700">{stats.average.toFixed(1)}</div>
+            </div>
+            <div className="text-center">
+              <div className="text-xs font-medium text-gray-600 mb-1">MAXIMUM</div>
+              <div className="text-2xl font-bold text-blue-600">{stats.max.toFixed(1)}</div>
+            </div>
+          </div>
+          <div className="text-center mt-2 text-xs text-gray-600">
+            Based on {stats.count} plot{stats.count !== 1 ? 's' : ''}
+          </div>
+        </div>
+      )}
+
       {/* Controls */}
       <div className="mb-4 flex gap-2 flex-wrap">
         <button
