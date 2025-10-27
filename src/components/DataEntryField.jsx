@@ -151,8 +151,8 @@ const DataEntryField = ({
         </div>
       )}
 
-      {/* Controls */}
-      <div className="mb-4 flex gap-2 flex-wrap">
+      {/* Controls and Compass */}
+      <div className="mb-4 flex gap-2 flex-wrap items-start">
         <button
           onMouseDown={() => setShowTreatments(true)}
           onMouseUp={() => setShowTreatments(false)}
@@ -163,30 +163,27 @@ const DataEntryField = ({
         >
           <Eye size={20} className="inline mr-2" /> Hold to Show Treatments
         </button>
-        
-        <button 
-          onClick={generateTestData} 
+
+        <button
+          onClick={generateTestData}
           className="px-4 py-3 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition"
         >
           <Plus size={20} className="inline mr-2" /> Fill Test Data
         </button>
-        
-        <button 
+
+        <button
           onClick={() => setReverseColorScale(!reverseColorScale)}
           className="px-4 py-3 bg-gray-600 text-white rounded-lg hover:bg-gray-700 flex items-center gap-2 transition"
         >
           <RotateCw size={20} /> {reverseColorScale ? 'Dark = High' : 'Dark = Low'}
         </button>
-      </div>
 
-      {/* Field Grid */}
-      <div className="overflow-x-auto mb-4 relative">
-        {/* Compass Overlay */}
-        <div className="absolute top-2 right-2 z-10 flex flex-col items-center gap-1">
-          <div className="text-[10px] font-bold text-gray-700 bg-white/90 px-2 py-0.5 rounded shadow-sm">
+        {/* Compass */}
+        <div className="flex flex-col items-center gap-1 ml-auto">
+          <div className="text-[10px] font-bold text-gray-700 bg-gray-100 px-2 py-0.5 rounded">
             ORIENTATION
           </div>
-          <div className="relative w-16 h-16 bg-gradient-to-br from-blue-50 to-blue-100 rounded-full shadow-lg border-2 border-blue-300 bg-white/95">
+          <div className="relative w-16 h-16 bg-gradient-to-br from-blue-50 to-blue-100 rounded-full shadow-lg border-2 border-blue-300">
             <div
               className="absolute inset-0 flex items-center justify-center"
               style={{ transform: `rotate(${orientation}deg)` }}
@@ -217,11 +214,14 @@ const DataEntryField = ({
               <div className="w-1.5 h-1.5 bg-gray-800 rounded-full"></div>
             </div>
           </div>
-          <div className="text-[10px] font-mono text-gray-700 bg-white/90 px-2 py-0.5 rounded shadow-sm">
+          <div className="text-[10px] font-mono text-gray-700 bg-gray-100 px-2 py-0.5 rounded">
             {orientation}°
           </div>
         </div>
+      </div>
 
+      {/* Field Grid */}
+      <div className="overflow-x-auto mb-4">
         <div className="space-y-2">
           {validGridLayout.map((row, rowIdx) => (
             <div key={rowIdx} className="grid gap-1" style={{ gridTemplateColumns: `repeat(${row.length}, minmax(0, 1fr))` }}>
