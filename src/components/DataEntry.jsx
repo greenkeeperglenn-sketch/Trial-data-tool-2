@@ -74,6 +74,35 @@ const DataEntry = ({
     );
   };
 
+  // Bulk update plot data (for imagery analyzer)
+  const bulkUpdateData = (date, assessmentType, updates) => {
+    onAssessmentDatesChange(
+      assessmentDates.map(d => {
+        if (d.date !== date) {
+          return d;
+        }
+
+        const existingAssessment = d.assessments[assessmentType];
+        if (!existingAssessment) {
+          return d;
+        }
+
+        const updatedAssessment = { ...existingAssessment };
+        Object.entries(updates).forEach(([plotId, value]) => {
+          updatedAssessment[plotId] = { value, entered: value !== '' };
+        });
+
+        return {
+          ...d,
+          assessments: {
+            ...d.assessments,
+            [assessmentType]: updatedAssessment
+          }
+        };
+      })
+    );
+  };
+
   // Export CSV data
   const exportToCSV = () => {
     if (!selectedAssessmentType) return;
@@ -324,13 +353,14 @@ const DataEntry = ({
             />
           )}
 
-          {viewMode === 'imagery' && (
+          {viewMode === 'imagery' && currentDateObj && (
             <ImageryAnalyzer
               gridLayout={gridLayout}
               config={config}
               currentDateObj={currentDateObj}
               selectedAssessmentType={selectedAssessmentType}
               onSelectAssessmentType={setSelectedAssessmentType}
+              onBulkUpdateData={bulkUpdateData}
             />
           )}
         </>
