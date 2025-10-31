@@ -365,14 +365,22 @@ const DataEntry = ({
 
       {/* Imagery Analyzer - Always available, even without assessment dates */}
       {viewMode === 'imagery' && (
-        <ImageryAnalyzer
-          gridLayout={gridLayout}
-          config={config}
-          currentDateObj={currentDateObj}
-          selectedAssessmentType={selectedAssessmentType}
-          onSelectAssessmentType={setSelectedAssessmentType}
-          onBulkUpdateData={bulkUpdateData}
-        />
+        <div style={{
+          backgroundColor: 'red',
+          color: 'white',
+          padding: '50px',
+          fontSize: '48px',
+          fontWeight: 'bold',
+          textAlign: 'center',
+          border: '10px solid yellow',
+          margin: '20px'
+        }}>
+          🎉 IT WORKS! 🎉
+          <br />
+          Imagery view is loading!
+          <br />
+          viewMode = {viewMode}
+        </div>
       )}
     </div>
   );
