@@ -228,69 +228,77 @@ const DataEntry = ({
         onAddDate={handleAddDate}
       />
 
-      {assessmentDates.length > 0 && (
-        <>
-          {/* View Mode Navigation */}
-          <div className="bg-white p-4 rounded-lg shadow mb-4">
-            <div className="flex gap-2 flex-wrap">
-              {/* Input Dropdown */}
-              <div className="relative">
-                <button 
-                  onClick={() => setShowInputDropdown(!showInputDropdown)}
-                  className={`flex items-center gap-2 px-4 py-2 rounded transition ${
-                    ['field', 'table', 'notes'].includes(viewMode) 
-                      ? 'bg-blue-600 text-white' 
-                      : 'bg-gray-200'
-                  }`}
-                >
-                  Input ▼
-                </button>
-                
-                {showInputDropdown && (
-                  <div className="absolute top-full left-0 mt-1 bg-white shadow-lg rounded border z-10">
-                    <button 
-                      onClick={() => { setViewMode('field'); setShowInputDropdown(false); }}
-                      className="block w-full text-left px-4 py-2 hover:bg-gray-100 whitespace-nowrap"
-                    >
-                      <Grid size={16} className="inline mr-2" /> Field Map
-                    </button>
-                    <button 
-                      onClick={() => { setViewMode('table'); setShowInputDropdown(false); }}
-                      className="block w-full text-left px-4 py-2 hover:bg-gray-100 whitespace-nowrap"
-                    >
-                      <List size={16} className="inline mr-2" /> Table View
-                    </button>
-                    <button 
-                      onClick={() => { setViewMode('notes'); setShowInputDropdown(false); }}
-                      className="block w-full text-left px-4 py-2 hover:bg-gray-100 whitespace-nowrap"
-                    >
-                      <FileText size={16} className="inline mr-2" /> Notes
-                    </button>
-                  </div>
-                )}
-              </div>
-              
-              {/* Analysis Tab */}
+      {/* View Mode Navigation - Always visible */}
+      <div className="bg-white p-4 rounded-lg shadow mb-4">
+        <div className="flex gap-2 flex-wrap">
+          {/* Input Dropdown - Only show if we have assessment dates */}
+          {assessmentDates.length > 0 && (
+            <div className="relative">
               <button
-                onClick={() => setViewMode('analysis')}
+                onClick={() => setShowInputDropdown(!showInputDropdown)}
                 className={`flex items-center gap-2 px-4 py-2 rounded transition ${
-                  viewMode === 'analysis' ? 'bg-blue-600 text-white' : 'bg-gray-200'
+                  ['field', 'table', 'notes'].includes(viewMode)
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-gray-200'
                 }`}
               >
-                <BarChart3 size={18} /> Analysis
+                Input ▼
               </button>
 
-              {/* Imagery Tab */}
-              <button
-                onClick={() => setViewMode('imagery')}
-                className={`flex items-center gap-2 px-4 py-2 rounded transition ${
-                  viewMode === 'imagery' ? 'bg-blue-600 text-white' : 'bg-gray-200'
-                }`}
-              >
-                <Camera size={18} /> Imagery
-              </button>
+              {showInputDropdown && (
+                <div className="absolute top-full left-0 mt-1 bg-white shadow-lg rounded border z-10">
+                  <button
+                    onClick={() => { setViewMode('field'); setShowInputDropdown(false); }}
+                    className="block w-full text-left px-4 py-2 hover:bg-gray-100 whitespace-nowrap"
+                  >
+                    <Grid size={16} className="inline mr-2" /> Field Map
+                  </button>
+                  <button
+                    onClick={() => { setViewMode('table'); setShowInputDropdown(false); }}
+                    className="block w-full text-left px-4 py-2 hover:bg-gray-100 whitespace-nowrap"
+                  >
+                    <List size={16} className="inline mr-2" /> Table View
+                  </button>
+                  <button
+                    onClick={() => { setViewMode('notes'); setShowInputDropdown(false); }}
+                    className="block w-full text-left px-4 py-2 hover:bg-gray-100 whitespace-nowrap"
+                  >
+                    <FileText size={16} className="inline mr-2" /> Notes
+                  </button>
+                </div>
+              )}
             </div>
-          </div>
+          )}
+
+          {/* Analysis Tab - Only show if we have assessment dates */}
+          {assessmentDates.length > 0 && (
+            <button
+              onClick={() => setViewMode('analysis')}
+              className={`flex items-center gap-2 px-4 py-2 rounded transition ${
+                viewMode === 'analysis' ? 'bg-blue-600 text-white' : 'bg-gray-200'
+              }`}
+            >
+              <BarChart3 size={18} /> Analysis
+            </button>
+          )}
+
+          {/* Imagery Tab - Always available */}
+          <button
+            onClick={() => {
+              console.log('[DataEntry] Imagery button clicked!');
+              setViewMode('imagery');
+            }}
+            className={`flex items-center gap-2 px-4 py-2 rounded transition ${
+              viewMode === 'imagery' ? 'bg-blue-600 text-white' : 'bg-gray-200'
+            }`}
+          >
+            <Camera size={18} /> Imagery
+          </button>
+        </div>
+      </div>
+
+      {assessmentDates.length > 0 && (
+        <>
 
           {/* Assessment Type Selector */}
           <div className="bg-white p-4 rounded-lg shadow mb-4">
@@ -352,18 +360,19 @@ const DataEntry = ({
               selectedAssessmentType={selectedAssessmentType}
             />
           )}
-
-          {viewMode === 'imagery' && (
-            <ImageryAnalyzer
-              gridLayout={gridLayout}
-              config={config}
-              currentDateObj={currentDateObj}
-              selectedAssessmentType={selectedAssessmentType}
-              onSelectAssessmentType={setSelectedAssessmentType}
-              onBulkUpdateData={bulkUpdateData}
-            />
-          )}
         </>
+      )}
+
+      {/* Imagery Analyzer - Always available, even without assessment dates */}
+      {viewMode === 'imagery' && (
+        <ImageryAnalyzer
+          gridLayout={gridLayout}
+          config={config}
+          currentDateObj={currentDateObj}
+          selectedAssessmentType={selectedAssessmentType}
+          onSelectAssessmentType={setSelectedAssessmentType}
+          onBulkUpdateData={bulkUpdateData}
+        />
       )}
     </div>
   );
