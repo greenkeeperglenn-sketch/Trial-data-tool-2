@@ -353,7 +353,7 @@ const DataEntry = ({
             />
           )}
 
-          {viewMode === 'imagery' && currentDateObj && (
+          {viewMode === 'imagery' && (
             <ImageryAnalyzer
               gridLayout={gridLayout}
               config={config}
