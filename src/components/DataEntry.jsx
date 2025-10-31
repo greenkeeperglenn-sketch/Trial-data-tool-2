@@ -171,6 +171,19 @@ const DataEntry = ({
 
   return (
     <div className="p-4 max-w-7xl mx-auto">
+      {/* TEST MESSAGE - If you see this, deployment is working */}
+      <div style={{
+        backgroundColor: 'purple',
+        color: 'yellow',
+        padding: '20px',
+        fontSize: '24px',
+        fontWeight: 'bold',
+        textAlign: 'center',
+        border: '5px solid orange',
+        marginBottom: '20px'
+      }}>
+        🚀 DEPLOYMENT TEST - Commit 3aadd31 is LIVE! 🚀
+      </div>
       {/* Header */}
       <div className="mb-4 flex justify-between items-center flex-wrap gap-2">
         <div>
