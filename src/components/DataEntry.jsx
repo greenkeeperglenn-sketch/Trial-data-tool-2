@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { Download, Unlock, Grid, List, FileText, BarChart3 } from 'lucide-react';
+import { Download, Unlock, Grid, List, FileText, BarChart3, Camera } from 'lucide-react';
 import DateNavigation from './DateNavigation';
 import DataEntryField from './DataEntryField';
 import DataEntryTable from './DataEntryTable';
 import DataEntryNotes from './DataEntryNotes';
 import Analysis from './Analysis';
+import ImageryAnalyzer from './ImageryAnalyzer';
 
 const DataEntry = ({
   config,
@@ -33,7 +34,7 @@ const DataEntry = ({
   // Add new assessment date
   const handleAddDate = (dateStr) => {
     const newDate = { date: dateStr, assessments: {} };
-    
+
     // Initialize all assessment types for all plots
     config.assessmentTypes.forEach(type => {
       newDate.assessments[type.name] = {};
@@ -52,25 +53,37 @@ const DataEntry = ({
     }
   };
 
-  // Update plot data
-  const updateData = (date, assessmentType, plotId, value) => {
+  const bulkUpdateData = (date, assessmentType, updates) => {
     onAssessmentDatesChange(
       assessmentDates.map(d => {
-        if (d.date === date) {
-          return {
-            ...d,
-            assessments: {
-              ...d.assessments,
-              [assessmentType]: {
-                ...d.assessments[assessmentType],
-                [plotId]: { value, entered: value !== '' }
-              }
-            }
-          };
+        if (d.date !== date) {
+          return d;
         }
-        return d;
+
+        const existingAssessment = d.assessments[assessmentType];
+        if (!existingAssessment) {
+          return d;
+        }
+
+        const updatedAssessment = { ...existingAssessment };
+        Object.entries(updates).forEach(([plotId, value]) => {
+          updatedAssessment[plotId] = { value, entered: value !== '' };
+        });
+
+        return {
+          ...d,
+          assessments: {
+            ...d.assessments,
+            [assessmentType]: updatedAssessment
+          }
+        };
       })
     );
+  };
+
+  // Update plot data
+  const updateData = (date, assessmentType, plotId, value) => {
+    bulkUpdateData(date, assessmentType, { [plotId]: value });
   };
 
   // Export CSV data
@@ -205,7 +218,7 @@ const DataEntry = ({
             <div className="flex gap-2 flex-wrap">
               {/* Input Dropdown */}
               <div className="relative">
-                <button 
+                <button
                   onClick={() => setShowInputDropdown(!showInputDropdown)}
                   className={`flex items-center gap-2 px-4 py-2 rounded transition ${
                     ['field', 'table', 'notes'].includes(viewMode) 
@@ -239,15 +252,25 @@ const DataEntry = ({
                   </div>
                 )}
               </div>
-              
+
               {/* Analysis Tab */}
-              <button 
+              <button
                 onClick={() => setViewMode('analysis')}
                 className={`flex items-center gap-2 px-4 py-2 rounded transition ${
                   viewMode === 'analysis' ? 'bg-blue-600 text-white' : 'bg-gray-200'
                 }`}
               >
                 <BarChart3 size={18} /> Analysis
+              </button>
+
+              {/* Imagery Tab */}
+              <button
+                onClick={() => setViewMode('imagery')}
+                className={`flex items-center gap-2 px-4 py-2 rounded transition ${
+                  viewMode === 'imagery' ? 'bg-blue-600 text-white' : 'bg-gray-200'
+                }`}
+              >
+                <Camera size={18} /> Imagery
               </button>
             </div>
           </div>
@@ -311,6 +334,17 @@ const DataEntry = ({
               gridLayout={gridLayout}
               assessmentDates={assessmentDates}
               selectedAssessmentType={selectedAssessmentType}
+            />
+          )}
+
+          {viewMode === 'imagery' && (
+            <ImageryAnalyzer
+              gridLayout={gridLayout}
+              config={config}
+              currentDateObj={currentDateObj}
+              selectedAssessmentType={selectedAssessmentType}
+              onSelectAssessmentType={setSelectedAssessmentType}
+              onBulkUpdateData={bulkUpdateData}
             />
           )}
         </>
