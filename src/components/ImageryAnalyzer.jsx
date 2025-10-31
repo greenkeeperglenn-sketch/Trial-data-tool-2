@@ -149,6 +149,7 @@ const ImageryAnalyzer = ({
   onSelectAssessmentType,
   onBulkUpdateData
 }) => {
+  console.log('[ImageryAnalyzer] Component rendered!', { gridLayout, config, currentDateObj, selectedAssessmentType });
   const [imageSrc, setImageSrc] = useState(null);
   const [originalImage, setOriginalImage] = useState(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -604,12 +605,12 @@ const ImageryAnalyzer = ({
   };
 
   return (
-    <div className="space-y-4">
-      <div className="bg-white rounded-lg shadow p-6">
+    <div className="space-y-4" style={{ minHeight: '400px', backgroundColor: '#f0f0f0', padding: '20px' }}>
+      <div className="bg-white rounded-lg shadow p-6" style={{ border: '2px solid red' }}>
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-4">
           <div>
-            <h2 className="text-xl font-semibold">Turf Trial Imagery Analyzer</h2>
-            <p className="text-sm text-gray-600">
+            <h2 className="text-xl font-semibold" style={{ color: 'red', fontSize: '24px' }}>Turf Trial Imagery Analyzer</h2>
+            <p className="text-sm text-gray-600" style={{ color: 'blue' }}>
               Upload a drone image, align the plot grid, and automatically calculate green coverage for each plot.
             </p>
           </div>
