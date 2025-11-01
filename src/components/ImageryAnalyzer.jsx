@@ -281,19 +281,90 @@ const ImageryAnalyzer = ({
     setDraggingCorner(null);
   };
 
+  // Apply perspective transformation to extract plot as square
+  const extractPlotWithPerspective = (sourceCanvas, plotCorners, targetSize) => {
+    // plotCorners: {tl, tr, br, bl} with x, y coordinates
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = targetSize;
+    tempCanvas.height = targetSize;
+    const tempCtx = tempCanvas.getContext('2d');
+
+    // White background
+    tempCtx.fillStyle = 'white';
+    tempCtx.fillRect(0, 0, targetSize, targetSize);
+
+    // Source quad points (perspective distorted)
+    const src = [
+      plotCorners.tl.x, plotCorners.tl.y,
+      plotCorners.tr.x, plotCorners.tr.y,
+      plotCorners.br.x, plotCorners.br.y,
+      plotCorners.bl.x, plotCorners.bl.y
+    ];
+
+    // Destination square points (corrected)
+    const dst = [
+      0, 0,
+      targetSize, 0,
+      targetSize, targetSize,
+      0, targetSize
+    ];
+
+    // Sample the image using perspective mapping
+    const imageData = tempCtx.createImageData(targetSize, targetSize);
+    const srcCtx = sourceCanvas.getContext('2d');
+    const srcImageData = srcCtx.getImageData(0, 0, sourceCanvas.width, sourceCanvas.height);
+
+    // Compute perspective transform and sample pixels
+    for (let y = 0; y < targetSize; y++) {
+      for (let x = 0; x < targetSize; x++) {
+        // Map destination (x, y) to source using bilinear interpolation
+        const u = x / targetSize;
+        const v = y / targetSize;
+
+        // Bilinear interpolation in perspective space
+        const srcX =
+          plotCorners.tl.x * (1-u) * (1-v) +
+          plotCorners.tr.x * u * (1-v) +
+          plotCorners.br.x * u * v +
+          plotCorners.bl.x * (1-u) * v;
+
+        const srcY =
+          plotCorners.tl.y * (1-u) * (1-v) +
+          plotCorners.tr.y * u * (1-v) +
+          plotCorners.br.y * u * v +
+          plotCorners.bl.y * (1-u) * v;
+
+        // Sample source pixel (with bounds checking)
+        const sx = Math.floor(srcX);
+        const sy = Math.floor(srcY);
+
+        if (sx >= 0 && sx < sourceCanvas.width && sy >= 0 && sy < sourceCanvas.height) {
+          const srcIdx = (sy * sourceCanvas.width + sx) * 4;
+          const dstIdx = (y * targetSize + x) * 4;
+
+          imageData.data[dstIdx] = srcImageData.data[srcIdx];       // R
+          imageData.data[dstIdx + 1] = srcImageData.data[srcIdx + 1]; // G
+          imageData.data[dstIdx + 2] = srcImageData.data[srcIdx + 2]; // B
+          imageData.data[dstIdx + 3] = 255; // A
+        }
+      }
+    }
+
+    tempCtx.putImageData(imageData, 0, 0);
+    return tempCanvas;
+  };
+
   // Commit grid and extract plot images
   const commitGrid = () => {
     if (!imageRef.current || !canvasRef.current || !fileDate) return;
 
     const canvas = canvasRef.current;
-    const ctx = canvas.getContext('2d');
-    const img = imageRef.current;
     const [tl, tr, br, bl] = corners;
 
     const extractedPlots = [];
     const plotImages = {};
 
-    // Extract each plot as an image
+    // Extract each plot as an image with perspective correction
     for (let row = 0; row < rows; row++) {
       for (let col = 0; col < cols; col++) {
         // Calculate plot position using perspective transformation
@@ -302,7 +373,7 @@ const ImageryAnalyzer = ({
         const colL = col / cols;
         const colR = (col + 1) / cols;
 
-        // Get corners of this plot
+        // Get corners of this plot cell in the grid
         const topLeftX = tl.x + (tr.x - tl.x) * colL;
         const topLeftY = tl.y + (tr.y - tl.y) * colL;
         const topRightX = tl.x + (tr.x - tl.x) * colR;
@@ -313,57 +384,37 @@ const ImageryAnalyzer = ({
         const bottomRightX = bl.x + (br.x - bl.x) * colR;
         const bottomRightY = bl.y + (br.y - bl.y) * colR;
 
-        // Interpolate for this specific plot row
-        const plotTLX = topLeftX + (bottomLeftX - topLeftX) * rowT;
-        const plotTLY = topLeftY + (bottomLeftY - topLeftY) * rowT;
-        const plotTRX = topRightX + (bottomRightX - topRightX) * rowT;
-        const plotTRY = topRightY + (bottomRightY - topRightY) * rowT;
-        const plotBLX = topLeftX + (bottomLeftX - topLeftX) * rowB;
-        const plotBLY = topLeftY + (bottomLeftY - topLeftY) * rowB;
-        const plotBRX = topRightX + (bottomRightX - topRightX) * rowB;
-        const plotBRY = topRightY + (bottomRightY - topRightY) * rowB;
-
-        // Get bounding box
-        const minX = Math.min(plotTLX, plotTRX, plotBRX, plotBLX);
-        const maxX = Math.max(plotTLX, plotTRX, plotBRX, plotBLX);
-        const minY = Math.min(plotTLY, plotTRY, plotBRY, plotBLY);
-        const maxY = Math.max(plotTLY, plotTRY, plotBRY, plotBLY);
-
-        const plotWidth = maxX - minX;
-        const plotHeight = maxY - minY;
+        // Interpolate for this specific plot row to get the 4 corners
+        const plotCorners = {
+          tl: {
+            x: topLeftX + (bottomLeftX - topLeftX) * rowT,
+            y: topLeftY + (bottomLeftY - topLeftY) * rowT
+          },
+          tr: {
+            x: topRightX + (bottomRightX - topRightX) * rowT,
+            y: topRightY + (bottomRightY - topRightY) * rowT
+          },
+          br: {
+            x: topRightX + (bottomRightX - topRightX) * rowB,
+            y: topRightY + (bottomRightY - topRightY) * rowB
+          },
+          bl: {
+            x: topLeftX + (bottomLeftX - topLeftX) * rowB,
+            y: topLeftY + (bottomLeftY - topLeftY) * rowB
+          }
+        };
 
         // Get plot ID from gridLayout
         const layoutPlot = gridLayout[row]?.[col];
         const plotId = layoutPlot?.id || `${row + 1}-${col + 1}`;
 
         if (!layoutPlot?.isBlank) {
-          // Create a temporary canvas for this plot
-          const tempCanvas = document.createElement('canvas');
-          const targetSize = 400; // Square size for extracted plots
-          tempCanvas.width = targetSize;
-          tempCanvas.height = targetSize;
-          const tempCtx = tempCanvas.getContext('2d');
-
-          // Draw white background
-          tempCtx.fillStyle = 'white';
-          tempCtx.fillRect(0, 0, targetSize, targetSize);
-
-          // Calculate scaling to fit in square while maintaining aspect ratio
-          const scale = Math.min(targetSize / plotWidth, targetSize / plotHeight);
-          const scaledWidth = plotWidth * scale;
-          const scaledHeight = plotHeight * scale;
-          const offsetX = (targetSize - scaledWidth) / 2;
-          const offsetY = (targetSize - scaledHeight) / 2;
-
-          // Draw the plot image centered and scaled
-          tempCtx.drawImage(
-            canvas,
-            minX, minY, plotWidth, plotHeight,
-            offsetX, offsetY, scaledWidth, scaledHeight
-          );
+          // Extract plot with perspective transformation to square
+          const targetSize = 400;
+          const transformedCanvas = extractPlotWithPerspective(canvas, plotCorners, targetSize);
 
           // Convert to base64
-          const plotImageData = tempCanvas.toDataURL('image/jpeg', 0.85);
+          const plotImageData = transformedCanvas.toDataURL('image/jpeg', 0.85);
 
           // Store with key format: date_plotId
           const photoKey = `${fileDate}_${plotId}`;
