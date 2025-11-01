@@ -107,34 +107,73 @@ const ImageryAnalyzer = ({
       ctx.stroke();
     }
 
-    // Draw corner markers (LARGER)
-    corners.forEach(corner => {
-      // Outer circle (glow effect)
-      ctx.fillStyle = 'rgba(255, 0, 0, 0.3)';
-      ctx.beginPath();
-      ctx.arc(corner.x, corner.y, 30, 0, 2 * Math.PI);
-      ctx.fill();
+    // Draw corner markers (EXTRA LARGE with visual feedback)
+    corners.forEach((corner, idx) => {
+      const isActive = draggingCorner === idx;
 
-      // Inner circle (main marker)
-      ctx.fillStyle = 'rgba(255, 0, 0, 0.9)';
-      ctx.beginPath();
-      ctx.arc(corner.x, corner.y, 20, 0, 2 * Math.PI);
-      ctx.fill();
+      if (isActive) {
+        // ACTIVE STATE - Pulsing yellow square
+        ctx.save();
+        ctx.translate(corner.x, corner.y);
+        ctx.rotate(Math.PI / 4); // Rotate 45 degrees
 
-      // White center
-      ctx.fillStyle = 'white';
-      ctx.beginPath();
-      ctx.arc(corner.x, corner.y, 8, 0, 2 * Math.PI);
-      ctx.fill();
+        // Outer glow
+        ctx.fillStyle = 'rgba(255, 255, 0, 0.5)';
+        ctx.fillRect(-50, -50, 100, 100);
 
-      // Label
-      ctx.fillStyle = 'white';
-      ctx.font = 'bold 16px Arial';
-      ctx.textAlign = 'center';
-      ctx.strokeStyle = 'rgba(0, 0, 0, 0.7)';
-      ctx.lineWidth = 3;
-      ctx.strokeText(corner.label, corner.x, corner.y + 45);
-      ctx.fillText(corner.label, corner.x, corner.y + 45);
+        // Main square
+        ctx.fillStyle = 'rgba(255, 200, 0, 0.95)';
+        ctx.fillRect(-35, -35, 70, 70);
+
+        // Center
+        ctx.fillStyle = 'white';
+        ctx.fillRect(-12, -12, 24, 24);
+
+        ctx.restore();
+
+        // Label
+        ctx.fillStyle = 'yellow';
+        ctx.font = 'bold 20px Arial';
+        ctx.textAlign = 'center';
+        ctx.strokeStyle = 'rgba(0, 0, 0, 0.9)';
+        ctx.lineWidth = 4;
+        ctx.strokeText(corner.label + ' ⬅️', corner.x, corner.y + 60);
+        ctx.fillText(corner.label + ' ⬅️', corner.x, corner.y + 60);
+      } else {
+        // NORMAL STATE - Large red circles
+        // Outer circle (glow effect) - BIGGER
+        ctx.fillStyle = 'rgba(255, 0, 0, 0.3)';
+        ctx.beginPath();
+        ctx.arc(corner.x, corner.y, 50, 0, 2 * Math.PI);
+        ctx.fill();
+
+        // Middle circle
+        ctx.fillStyle = 'rgba(255, 0, 0, 0.6)';
+        ctx.beginPath();
+        ctx.arc(corner.x, corner.y, 35, 0, 2 * Math.PI);
+        ctx.fill();
+
+        // Inner circle (main marker) - BIGGER
+        ctx.fillStyle = 'rgba(255, 0, 0, 0.9)';
+        ctx.beginPath();
+        ctx.arc(corner.x, corner.y, 25, 0, 2 * Math.PI);
+        ctx.fill();
+
+        // White center - BIGGER
+        ctx.fillStyle = 'white';
+        ctx.beginPath();
+        ctx.arc(corner.x, corner.y, 12, 0, 2 * Math.PI);
+        ctx.fill();
+
+        // Label - BIGGER
+        ctx.fillStyle = 'white';
+        ctx.font = 'bold 20px Arial';
+        ctx.textAlign = 'center';
+        ctx.strokeStyle = 'rgba(0, 0, 0, 0.7)';
+        ctx.lineWidth = 4;
+        ctx.strokeText(corner.label, corner.x, corner.y + 55);
+        ctx.fillText(corner.label, corner.x, corner.y + 55);
+      }
     });
   };
 
@@ -146,10 +185,10 @@ const ImageryAnalyzer = ({
     const x = (e.clientX - rect.left) * scaleX;
     const y = (e.clientY - rect.top) * scaleY;
 
-    // Check if clicking near a corner (larger hit area)
+    // Check if clicking near a corner (even larger hit area for touch)
     const clickedCorner = corners.findIndex(corner => {
       const distance = Math.sqrt(Math.pow(corner.x - x, 2) + Math.pow(corner.y - y, 2));
-      return distance < 40; // Increased from 20 to 40
+      return distance < 60; // Increased to 60px for better touch support
     });
 
     if (clickedCorner >= 0) {
@@ -175,6 +214,52 @@ const ImageryAnalyzer = ({
   };
 
   const handleMouseUp = () => {
+    setDraggingCorner(null);
+  };
+
+  // Touch event handlers for iPad/mobile
+  const handleTouchStart = (e) => {
+    e.preventDefault();
+    const canvas = canvasRef.current;
+    const rect = canvas.getBoundingClientRect();
+    const touch = e.touches[0];
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    const x = (touch.clientX - rect.left) * scaleX;
+    const y = (touch.clientY - rect.top) * scaleY;
+
+    // Check if touching near a corner
+    const clickedCorner = corners.findIndex(corner => {
+      const distance = Math.sqrt(Math.pow(corner.x - x, 2) + Math.pow(corner.y - y, 2));
+      return distance < 60;
+    });
+
+    if (clickedCorner >= 0) {
+      setDraggingCorner(clickedCorner);
+    }
+  };
+
+  const handleTouchMove = (e) => {
+    e.preventDefault();
+    if (draggingCorner === null) return;
+
+    const canvas = canvasRef.current;
+    const rect = canvas.getBoundingClientRect();
+    const touch = e.touches[0];
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    const x = (touch.clientX - rect.left) * scaleX;
+    const y = (touch.clientY - rect.top) * scaleY;
+
+    setCorners(prev => {
+      const newCorners = [...prev];
+      newCorners[draggingCorner] = { ...newCorners[draggingCorner], x, y };
+      return newCorners;
+    });
+  };
+
+  const handleTouchEnd = (e) => {
+    e.preventDefault();
     setDraggingCorner(null);
   };
 
@@ -252,10 +337,14 @@ const ImageryAnalyzer = ({
             <canvas
               ref={canvasRef}
               className="w-full border rounded cursor-crosshair"
+              style={{ touchAction: 'none' }}
               onMouseDown={handleMouseDown}
               onMouseMove={handleMouseMove}
               onMouseUp={handleMouseUp}
               onMouseLeave={handleMouseUp}
+              onTouchStart={handleTouchStart}
+              onTouchMove={handleTouchMove}
+              onTouchEnd={handleTouchEnd}
             />
           </div>
         )}
