@@ -52,26 +52,55 @@ const ImageryAnalyzer = ({
     reader.onload = (event) => {
       const img = new Image();
       img.onload = () => {
-        imageRef.current = img;
-        setImageSrc(event.target.result);
+        // Downsample large images to prevent crashes
+        const MAX_WIDTH = 2000;
+        const MAX_HEIGHT = 2000;
 
-        // Initialize corners based on image size
-        const w = img.width;
-        const h = img.height;
-        setCorners([
-          { x: w * 0.1, y: h * 0.1, label: 'TL' },
-          { x: w * 0.9, y: h * 0.1, label: 'TR' },
-          { x: w * 0.9, y: h * 0.9, label: 'BR' },
-          { x: w * 0.1, y: h * 0.9, label: 'BL' }
-        ]);
+        let width = img.width;
+        let height = img.height;
 
-        // Reset committed state
-        setCommitted(false);
-        setPlots([]);
+        if (width > MAX_WIDTH || height > MAX_HEIGHT) {
+          const scale = Math.min(MAX_WIDTH / width, MAX_HEIGHT / height);
+          width = Math.floor(width * scale);
+          height = Math.floor(height * scale);
+
+          // Create downsampled version
+          const tempCanvas = document.createElement('canvas');
+          tempCanvas.width = width;
+          tempCanvas.height = height;
+          const tempCtx = tempCanvas.getContext('2d');
+          tempCtx.drawImage(img, 0, 0, width, height);
+
+          // Create new image from downsampled canvas
+          const downsampledImg = new Image();
+          downsampledImg.onload = () => {
+            imageRef.current = downsampledImg;
+            setImageSrc(tempCanvas.toDataURL('image/jpeg', 0.9));
+            initializeCorners(downsampledImg.width, downsampledImg.height);
+          };
+          downsampledImg.src = tempCanvas.toDataURL('image/jpeg', 0.9);
+        } else {
+          imageRef.current = img;
+          setImageSrc(event.target.result);
+          initializeCorners(width, height);
+        }
       };
       img.src = event.target.result;
     };
     reader.readAsDataURL(file);
+  };
+
+  const initializeCorners = (w, h) => {
+    setCorners([
+      { x: w * 0.1, y: h * 0.1, label: 'TL' },
+      { x: w * 0.9, y: h * 0.1, label: 'TR' },
+      { x: w * 0.9, y: h * 0.9, label: 'BR' },
+      { x: w * 0.1, y: h * 0.9, label: 'BL' }
+    ]);
+
+    // Reset committed state
+    setCommitted(false);
+    setPlots([]);
   };
 
   useEffect(() => {
@@ -285,7 +314,7 @@ const ImageryAnalyzer = ({
     setDraggingCorner(null);
   };
 
-  // Optimized perspective transformation - uses downsampling for speed
+  // Fast perspective transformation using larger step size
   const extractPlotWithPerspective = (sourceCanvas, plotCorners, targetSize) => {
     const tempCanvas = document.createElement('canvas');
     tempCanvas.width = targetSize;
@@ -301,8 +330,8 @@ const ImageryAnalyzer = ({
       const srcImageData = srcCtx.getImageData(0, 0, sourceCanvas.width, sourceCanvas.height);
       const dstImageData = tempCtx.createImageData(targetSize, targetSize);
 
-      // Use step size of 2 for 4x speedup (browser will smooth it)
-      const step = 1;
+      // Use step size of 2 for much faster processing
+      const step = 2;
 
       for (let y = 0; y < targetSize; y += step) {
         for (let x = 0; x < targetSize; x += step) {
@@ -355,24 +384,25 @@ const ImageryAnalyzer = ({
   const commitGrid = async () => {
     if (!imageRef.current || !canvasRef.current || !fileDate) return;
 
-    setProcessing(true);
-    setProgress(0);
+    try {
+      setProcessing(true);
+      setProgress(0);
 
-    const canvas = canvasRef.current;
-    const [tl, tr, br, bl] = corners;
+      const canvas = canvasRef.current;
+      const [tl, tr, br, bl] = corners;
 
-    const extractedPlots = [];
-    const plotImages = {};
+      const extractedPlots = [];
+      const plotImages = {};
 
-    // Count total non-blank plots
-    let totalPlots = 0;
-    gridLayout.forEach(row => {
-      row.forEach(plot => {
-        if (!plot.isBlank) totalPlots++;
+      // Count total non-blank plots
+      let totalPlots = 0;
+      gridLayout.forEach(row => {
+        row.forEach(plot => {
+          if (!plot.isBlank) totalPlots++;
+        });
       });
-    });
 
-    let processedPlots = 0;
+      let processedPlots = 0;
 
     // Extract each plot as an image with perspective correction
     for (let row = 0; row < rows; row++) {
@@ -420,11 +450,11 @@ const ImageryAnalyzer = ({
 
         if (!layoutPlot?.isBlank) {
           // Extract plot with perspective transformation
-          const targetSize = 400;
+          const targetSize = 300; // Reduced from 400 for faster processing
           const transformedCanvas = extractPlotWithPerspective(canvas, plotCorners, targetSize);
 
           // Convert to base64
-          const plotImageData = transformedCanvas.toDataURL('image/jpeg', 0.85);
+          const plotImageData = transformedCanvas.toDataURL('image/jpeg', 0.80);
 
           // Store with key format: date_plotId
           const photoKey = `${fileDate}_${plotId}`;
@@ -442,23 +472,26 @@ const ImageryAnalyzer = ({
           processedPlots++;
           setProgress(Math.round((processedPlots / totalPlots) * 100));
 
-          // Yield to browser every few plots to prevent freezing
-          if (processedPlots % 5 === 0) {
-            await new Promise(resolve => setTimeout(resolve, 0));
-          }
+          // Yield to browser after EVERY plot to prevent freezing
+          await new Promise(resolve => setTimeout(resolve, 0));
         }
       }
     }
 
-    setPlots(extractedPlots);
-    setCommitted(true);
-    setProcessing(false);
+      setPlots(extractedPlots);
+      setCommitted(true);
+      setProcessing(false);
 
-    // Create assessment date if it doesn't exist
-    createAssessmentDateIfNeeded(fileDate);
+      // Create assessment date if it doesn't exist
+      createAssessmentDateIfNeeded(fileDate);
 
-    // Immediately apply images to the field map
-    applyImagesToFieldMap(plotImages);
+      // Immediately apply images to the field map
+      applyImagesToFieldMap(plotImages);
+    } catch (error) {
+      console.error('Error processing images:', error);
+      setProcessing(false);
+      alert('Error processing images. The image may be too large. Try a smaller image or contact support.');
+    }
   };
 
   // Create assessment date entry if it doesn't exist
@@ -596,11 +629,14 @@ const ImageryAnalyzer = ({
               onTouchEnd={handleTouchEnd}
             />
 
-            {/* File Date Info */}
-            {fileDate && (
+            {/* File Date and Image Info */}
+            {fileDate && imageRef.current && (
               <div className="bg-purple-50 border border-purple-200 text-purple-800 p-3 rounded">
                 <p className="font-medium">Image File Date: {fileDate}</p>
-                <p className="text-sm">Detected from file properties</p>
+                <p className="text-sm">Image Size: {imageRef.current.width} × {imageRef.current.height}px</p>
+                {(imageRef.current.width > 2000 || imageRef.current.height > 2000) && (
+                  <p className="text-xs mt-1">⚠️ Image was downsampled for performance</p>
+                )}
               </div>
             )}
 
