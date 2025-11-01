@@ -5,7 +5,7 @@ import DataEntryField from './DataEntryField';
 import DataEntryTable from './DataEntryTable';
 import DataEntryNotes from './DataEntryNotes';
 import Analysis from './Analysis';
-import ImageryAnalyzer from './ImageryAnalyzer';
+// import ImageryAnalyzer from './ImageryAnalyzer'; // TEMPORARILY DISABLED TO TEST
 
 const DataEntry = ({
   config,
@@ -362,35 +362,14 @@ const DataEntry = ({
 
       {/* Imagery Analyzer - Always available, even without assessment dates */}
       {viewMode === 'imagery' && (
-        <div style={{ border: '3px solid green', padding: '20px', minHeight: '200px' }}>
-          <h1 style={{ color: 'green', fontSize: '32px' }}>IMAGERY SECTION RENDERING</h1>
-          <p>gridLayout: {gridLayout ? 'exists' : 'missing'}</p>
-          <p>config: {config ? 'exists' : 'missing'}</p>
-          <p>ImageryAnalyzer component loading below...</p>
-          <div style={{ border: '2px dashed red', padding: '10px', marginTop: '20px' }}>
-            {(() => {
-              try {
-                return (
-                  <ImageryAnalyzer
-                    gridLayout={gridLayout}
-                    config={config}
-                    currentDateObj={currentDateObj}
-                    selectedAssessmentType={selectedAssessmentType}
-                    onSelectAssessmentType={setSelectedAssessmentType}
-                    onBulkUpdateData={bulkUpdateData}
-                  />
-                );
-              } catch (error) {
-                return (
-                  <div style={{ backgroundColor: 'red', color: 'white', padding: '20px' }}>
-                    <h2>ERROR CAUGHT:</h2>
-                    <pre>{error.toString()}</pre>
-                    <pre>{error.stack}</pre>
-                  </div>
-                );
-              }
-            })()}
-          </div>
+        <div style={{ border: '5px solid orange', padding: '50px', minHeight: '400px', backgroundColor: '#ffffcc' }}>
+          <h1 style={{ color: 'red', fontSize: '48px', textAlign: 'center' }}>🔧 IMAGERY TEST - IMPORT DISABLED 🔧</h1>
+          <p style={{ fontSize: '24px', textAlign: 'center' }}>If you see this, the page works WITHOUT ImageryAnalyzer</p>
+          <p style={{ fontSize: '20px', textAlign: 'center' }}>gridLayout: {gridLayout ? 'exists' : 'missing'}</p>
+          <p style={{ fontSize: '20px', textAlign: 'center' }}>config: {config ? 'exists' : 'missing'}</p>
+          <p style={{ fontSize: '20px', textAlign: 'center', marginTop: '30px', color: 'blue' }}>
+            This means the ImageryAnalyzer.jsx file has a critical error preventing it from loading.
+          </p>
         </div>
       )}
     </div>
