@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 
 const ImageryAnalyzer = ({
   gridLayout,
@@ -9,16 +9,152 @@ const ImageryAnalyzer = ({
   onBulkUpdateData
 }) => {
   const [imageSrc, setImageSrc] = useState(null);
+  const [rows, setRows] = useState(gridLayout?.length || 4);
+  const [cols, setCols] = useState(gridLayout?.[0]?.length || 4);
+  const [corners, setCorners] = useState([
+    { x: 50, y: 50, label: 'TL' },
+    { x: 750, y: 50, label: 'TR' },
+    { x: 750, y: 550, label: 'BR' },
+    { x: 50, y: 550, label: 'BL' }
+  ]);
+  const [draggingCorner, setDraggingCorner] = useState(null);
+
   const fileInputRef = useRef(null);
+  const canvasRef = useRef(null);
+  const imageRef = useRef(null);
 
   const handleFileUpload = (file) => {
     if (!file) return;
 
     const reader = new FileReader();
     reader.onload = (event) => {
-      setImageSrc(event.target.result);
+      const img = new Image();
+      img.onload = () => {
+        imageRef.current = img;
+        setImageSrc(event.target.result);
+
+        // Initialize corners based on image size
+        const w = img.width;
+        const h = img.height;
+        setCorners([
+          { x: w * 0.1, y: h * 0.1, label: 'TL' },
+          { x: w * 0.9, y: h * 0.1, label: 'TR' },
+          { x: w * 0.9, y: h * 0.9, label: 'BR' },
+          { x: w * 0.1, y: h * 0.9, label: 'BL' }
+        ]);
+      };
+      img.src = event.target.result;
     };
     reader.readAsDataURL(file);
+  };
+
+  useEffect(() => {
+    if (!imageSrc || !canvasRef.current || !imageRef.current) return;
+
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext('2d');
+    const img = imageRef.current;
+
+    // Set canvas size to match image
+    canvas.width = img.width;
+    canvas.height = img.height;
+
+    // Draw image
+    ctx.drawImage(img, 0, 0);
+
+    // Draw grid
+    drawGrid(ctx);
+  }, [imageSrc, corners, rows, cols]);
+
+  const drawGrid = (ctx) => {
+    if (corners.length < 4) return;
+
+    const [tl, tr, br, bl] = corners;
+
+    // Draw grid lines
+    ctx.strokeStyle = 'rgba(0, 255, 0, 0.8)';
+    ctx.lineWidth = 2;
+
+    // Draw vertical lines
+    for (let i = 0; i <= cols; i++) {
+      const t = i / cols;
+      const topX = tl.x + (tr.x - tl.x) * t;
+      const topY = tl.y + (tr.y - tl.y) * t;
+      const bottomX = bl.x + (br.x - bl.x) * t;
+      const bottomY = bl.y + (br.y - bl.y) * t;
+
+      ctx.beginPath();
+      ctx.moveTo(topX, topY);
+      ctx.lineTo(bottomX, bottomY);
+      ctx.stroke();
+    }
+
+    // Draw horizontal lines
+    for (let i = 0; i <= rows; i++) {
+      const t = i / rows;
+      const leftX = tl.x + (bl.x - tl.x) * t;
+      const leftY = tl.y + (bl.y - tl.y) * t;
+      const rightX = tr.x + (br.x - tr.x) * t;
+      const rightY = tr.y + (br.y - tr.y) * t;
+
+      ctx.beginPath();
+      ctx.moveTo(leftX, leftY);
+      ctx.lineTo(rightX, rightY);
+      ctx.stroke();
+    }
+
+    // Draw corner markers
+    corners.forEach(corner => {
+      ctx.fillStyle = 'rgba(255, 0, 0, 0.7)';
+      ctx.beginPath();
+      ctx.arc(corner.x, corner.y, 10, 0, 2 * Math.PI);
+      ctx.fill();
+
+      ctx.fillStyle = 'white';
+      ctx.font = '12px Arial';
+      ctx.textAlign = 'center';
+      ctx.fillText(corner.label, corner.x, corner.y + 25);
+    });
+  };
+
+  const handleMouseDown = (e) => {
+    const canvas = canvasRef.current;
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    const x = (e.clientX - rect.left) * scaleX;
+    const y = (e.clientY - rect.top) * scaleY;
+
+    // Check if clicking near a corner
+    const clickedCorner = corners.findIndex(corner => {
+      const distance = Math.sqrt(Math.pow(corner.x - x, 2) + Math.pow(corner.y - y, 2));
+      return distance < 20;
+    });
+
+    if (clickedCorner >= 0) {
+      setDraggingCorner(clickedCorner);
+    }
+  };
+
+  const handleMouseMove = (e) => {
+    if (draggingCorner === null) return;
+
+    const canvas = canvasRef.current;
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    const x = (e.clientX - rect.left) * scaleX;
+    const y = (e.clientY - rect.top) * scaleY;
+
+    setCorners(prev => {
+      const newCorners = [...prev];
+      newCorners[draggingCorner] = { ...newCorners[draggingCorner], x, y };
+      return newCorners;
+    });
+  };
+
+  const handleMouseUp = () => {
+    setDraggingCorner(null);
   };
 
   return (
@@ -27,7 +163,7 @@ const ImageryAnalyzer = ({
         <div className="mb-4">
           <h2 className="text-xl font-semibold">Turf Trial Imagery Analyzer</h2>
           <p className="text-sm text-gray-600">
-            Upload a drone image to analyze plot coverage.
+            Upload a drone image and manually align the plot grid.
           </p>
         </div>
 
@@ -47,26 +183,52 @@ const ImageryAnalyzer = ({
           />
         </div>
 
-        <div className="border-2 border-dashed rounded-lg p-8 text-center border-gray-300 bg-gray-50">
-          <p className="text-lg font-medium">Drag & drop or click to upload a drone image</p>
-          <p className="text-sm text-gray-500 mt-2">JPEG or PNG files are supported</p>
-        </div>
+        {!imageSrc && (
+          <div className="border-2 border-dashed rounded-lg p-8 text-center border-gray-300 bg-gray-50">
+            <p className="text-lg font-medium">Drag & drop or click to upload a drone image</p>
+            <p className="text-sm text-gray-500 mt-2">JPEG or PNG files are supported</p>
+          </div>
+        )}
 
         {imageSrc && (
-          <div className="mt-6">
-            <h3 className="text-lg font-semibold mb-4">Uploaded Image</h3>
-            <img
-              src={imageSrc}
-              alt="Uploaded drone imagery"
-              className="w-full max-h-96 object-contain border rounded"
-            />
-            <div className="mt-4 p-4 bg-blue-50 text-blue-700 rounded">
-              <p className="font-medium">Image uploaded successfully!</p>
-              <p className="text-sm mt-2">
-                Full imagery analysis with plot detection and green coverage calculation
-                requires additional configuration. This simplified version displays your uploaded image.
-              </p>
+          <div className="mt-6 space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <label className="flex flex-col gap-2 text-sm">
+                Rows
+                <input
+                  type="number"
+                  min={1}
+                  value={rows}
+                  onChange={(e) => setRows(Number(e.target.value) || 1)}
+                  className="border rounded px-3 py-2"
+                />
+              </label>
+
+              <label className="flex flex-col gap-2 text-sm">
+                Columns
+                <input
+                  type="number"
+                  min={1}
+                  value={cols}
+                  onChange={(e) => setCols(Number(e.target.value) || 1)}
+                  className="border rounded px-3 py-2"
+                />
+              </label>
             </div>
+
+            <div className="bg-blue-50 text-blue-700 p-3 rounded text-sm">
+              <p className="font-medium">Grid Alignment:</p>
+              <p>Drag the red corner markers (TL, TR, BR, BL) to align the grid with your plots.</p>
+            </div>
+
+            <canvas
+              ref={canvasRef}
+              className="w-full border rounded cursor-crosshair"
+              onMouseDown={handleMouseDown}
+              onMouseMove={handleMouseMove}
+              onMouseUp={handleMouseUp}
+              onMouseLeave={handleMouseUp}
+            />
           </div>
         )}
 
@@ -75,8 +237,9 @@ const ImageryAnalyzer = ({
             <h3 className="font-semibold mb-2">How to use:</h3>
             <ol className="list-decimal list-inside text-sm text-gray-700 space-y-1">
               <li>Upload an aerial/drone image of your trial plots</li>
-              <li>The system will display your image for review</li>
-              <li>Advanced features like plot detection and analysis coming soon</li>
+              <li>Adjust the number of rows and columns to match your trial layout</li>
+              <li>Drag the corner markers to align the grid with your plots</li>
+              <li>The green grid will overlay your plots for visual verification</li>
             </ol>
           </div>
         )}
