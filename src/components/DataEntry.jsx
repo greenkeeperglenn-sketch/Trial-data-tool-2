@@ -362,14 +362,36 @@ const DataEntry = ({
 
       {/* Imagery Analyzer - Always available, even without assessment dates */}
       {viewMode === 'imagery' && (
-        <ImageryAnalyzer
-          gridLayout={gridLayout}
-          config={config}
-          currentDateObj={currentDateObj}
-          selectedAssessmentType={selectedAssessmentType}
-          onSelectAssessmentType={setSelectedAssessmentType}
-          onBulkUpdateData={bulkUpdateData}
-        />
+        <div style={{ border: '3px solid green', padding: '20px', minHeight: '200px' }}>
+          <h1 style={{ color: 'green', fontSize: '32px' }}>IMAGERY SECTION RENDERING</h1>
+          <p>gridLayout: {gridLayout ? 'exists' : 'missing'}</p>
+          <p>config: {config ? 'exists' : 'missing'}</p>
+          <p>ImageryAnalyzer component loading below...</p>
+          <div style={{ border: '2px dashed red', padding: '10px', marginTop: '20px' }}>
+            {(() => {
+              try {
+                return (
+                  <ImageryAnalyzer
+                    gridLayout={gridLayout}
+                    config={config}
+                    currentDateObj={currentDateObj}
+                    selectedAssessmentType={selectedAssessmentType}
+                    onSelectAssessmentType={setSelectedAssessmentType}
+                    onBulkUpdateData={bulkUpdateData}
+                  />
+                );
+              } catch (error) {
+                return (
+                  <div style={{ backgroundColor: 'red', color: 'white', padding: '20px' }}>
+                    <h2>ERROR CAUGHT:</h2>
+                    <pre>{error.toString()}</pre>
+                    <pre>{error.stack}</pre>
+                  </div>
+                );
+              }
+            })()}
+          </div>
+        </div>
       )}
     </div>
   );
