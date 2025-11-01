@@ -171,19 +171,6 @@ const DataEntry = ({
 
   return (
     <div className="p-4 max-w-7xl mx-auto">
-      {/* TEST MESSAGE - If you see this, deployment is working */}
-      <div style={{
-        backgroundColor: 'purple',
-        color: 'yellow',
-        padding: '20px',
-        fontSize: '24px',
-        fontWeight: 'bold',
-        textAlign: 'center',
-        border: '5px solid orange',
-        marginBottom: '20px'
-      }}>
-        🚀 DEPLOYMENT TEST - Commit 3aadd31 is LIVE! 🚀
-      </div>
       {/* Header */}
       <div className="mb-4 flex justify-between items-center flex-wrap gap-2">
         <div>
@@ -297,10 +284,7 @@ const DataEntry = ({
 
           {/* Imagery Tab - Always available */}
           <button
-            onClick={() => {
-              console.log('[DataEntry] Imagery button clicked!');
-              setViewMode('imagery');
-            }}
+            onClick={() => setViewMode('imagery')}
             className={`flex items-center gap-2 px-4 py-2 rounded transition ${
               viewMode === 'imagery' ? 'bg-blue-600 text-white' : 'bg-gray-200'
             }`}
@@ -378,26 +362,17 @@ const DataEntry = ({
 
       {/* Imagery Analyzer - Always available, even without assessment dates */}
       {viewMode === 'imagery' && (
-        <div style={{
-          backgroundColor: 'red',
-          color: 'white',
-          padding: '50px',
-          fontSize: '48px',
-          fontWeight: 'bold',
-          textAlign: 'center',
-          border: '10px solid yellow',
-          margin: '20px'
-        }}>
-          🎉 IT WORKS! 🎉
-          <br />
-          Imagery view is loading!
-          <br />
-          viewMode = {viewMode}
-        </div>
+        <ImageryAnalyzer
+          gridLayout={gridLayout}
+          config={config}
+          currentDateObj={currentDateObj}
+          selectedAssessmentType={selectedAssessmentType}
+          onSelectAssessmentType={setSelectedAssessmentType}
+          onBulkUpdateData={bulkUpdateData}
+        />
       )}
     </div>
   );
 };
 
 export default DataEntry;
-// Force rebuild at Sat Nov  1 22:43:50 UTC 2025
