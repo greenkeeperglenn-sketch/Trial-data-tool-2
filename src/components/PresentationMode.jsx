@@ -1,6 +1,131 @@
 import React, { useState } from 'react';
-import { ChevronLeft, ChevronRight, Calendar, Image as ImageIcon, FileText } from 'lucide-react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine } from 'recharts';
+import { ChevronLeft, ChevronRight, Calendar, Image as ImageIcon, FileText, TrendingUp } from 'lucide-react';
+
+// Simple SVG Line Chart Component
+const SimpleLineChart = ({ data, assessmentType, currentDate, min, max, color }) => {
+  const width = 800;
+  const height = 300;
+  const padding = 60;
+  const chartWidth = width - padding * 2;
+  const chartHeight = height - padding * 2;
+
+  if (!data || data.length === 0) return null;
+
+  // Find min/max values for scaling
+  const values = data.map(d => parseFloat(d.value)).filter(v => !isNaN(v));
+  if (values.length === 0) return null;
+
+  const dataMin = min;
+  const dataMax = max;
+  const range = dataMax - dataMin;
+
+  // Scale functions
+  const scaleX = (index) => padding + (index / (data.length - 1)) * chartWidth;
+  const scaleY = (value) => {
+    if (isNaN(value)) return null;
+    return height - padding - ((value - dataMin) / range) * chartHeight;
+  };
+
+  // Create path
+  const points = data.map((d, i) => {
+    const y = scaleY(parseFloat(d.value));
+    if (y === null) return null;
+    return { x: scaleX(i), y, date: d.date };
+  }).filter(p => p !== null);
+
+  const pathData = points.map((p, i) => {
+    return `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`;
+  }).join(' ');
+
+  // Find current date index
+  const currentDateIndex = data.findIndex(d => d.date === currentDate);
+
+  return (
+    <svg width="100%" height={height} viewBox={`0 0 ${width} ${height}`} className="text-gray-300">
+      {/* Grid lines */}
+      {[0, 0.25, 0.5, 0.75, 1].map(pct => {
+        const y = height - padding - pct * chartHeight;
+        const value = (dataMin + pct * range).toFixed(1);
+        return (
+          <g key={pct}>
+            <line
+              x1={padding}
+              y1={y}
+              x2={width - padding}
+              y2={y}
+              stroke="#374151"
+              strokeDasharray="3 3"
+            />
+            <text x={padding - 10} y={y + 5} fontSize="12" fill="#9ca3af" textAnchor="end">
+              {value}
+            </text>
+          </g>
+        );
+      })}
+
+      {/* X-axis labels */}
+      {data.map((d, i) => {
+        const x = scaleX(i);
+        return (
+          <text
+            key={i}
+            x={x}
+            y={height - padding + 20}
+            fontSize="11"
+            fill="#9ca3af"
+            textAnchor="middle"
+          >
+            {d.date}
+          </text>
+        );
+      })}
+
+      {/* Current date marker */}
+      {currentDateIndex >= 0 && (
+        <g>
+          <line
+            x1={scaleX(currentDateIndex)}
+            y1={padding}
+            x2={scaleX(currentDateIndex)}
+            y2={height - padding}
+            stroke="#a855f7"
+            strokeWidth="3"
+          />
+          <text
+            x={scaleX(currentDateIndex)}
+            y={padding - 10}
+            fontSize="14"
+            fontWeight="bold"
+            fill="#a855f7"
+            textAnchor="middle"
+          >
+            Current
+          </text>
+        </g>
+      )}
+
+      {/* Line path */}
+      <path
+        d={pathData}
+        fill="none"
+        stroke={color}
+        strokeWidth="3"
+      />
+
+      {/* Data points */}
+      {points.map((p, i) => (
+        <circle
+          key={i}
+          cx={p.x}
+          cy={p.y}
+          r="6"
+          fill={color}
+          className="hover:r-8 transition-all cursor-pointer"
+        />
+      ))}
+    </svg>
+  );
+};
 
 const PresentationMode = ({
   config,
@@ -65,31 +190,23 @@ const PresentationMode = ({
 
   const currentNotes = getCurrentNotes();
 
-  // Prepare chart data for all assessment types
-  const prepareChartData = () => {
-    const data = sortedDates.map(dateObj => {
-      const dataPoint = { date: dateObj.date };
+  // Prepare chart data for a specific assessment type
+  const prepareChartDataForType = (typeName) => {
+    return sortedDates.map(dateObj => {
+      const assessment = dateObj.assessments[typeName];
+      if (assessment) {
+        const values = Object.values(assessment)
+          .filter(v => v.entered && v.value !== '')
+          .map(v => parseFloat(v.value));
 
-      config.assessmentTypes.forEach(type => {
-        const assessment = dateObj.assessments[type.name];
-        if (assessment) {
-          const values = Object.values(assessment)
-            .filter(v => v.entered && v.value !== '')
-            .map(v => parseFloat(v.value));
-
-          if (values.length > 0) {
-            const avg = values.reduce((sum, val) => sum + val, 0) / values.length;
-            dataPoint[type.name] = avg.toFixed(1);
-          }
+        if (values.length > 0) {
+          const avg = values.reduce((sum, val) => sum + val, 0) / values.length;
+          return { date: dateObj.date, value: avg.toFixed(1) };
         }
-      });
-
-      return dataPoint;
-    });
-    return data;
+      }
+      return { date: dateObj.date, value: null };
+    }).filter(d => d.value !== null);
   };
-
-  const chartData = prepareChartData();
 
   const nextSlide = () => {
     if (currentSlide < sortedDates.length - 1) {
@@ -229,61 +346,32 @@ const PresentationMode = ({
 
         {/* Graphs Section - One per Assessment Type */}
         <div className="bg-gray-800 rounded-xl p-6 shadow-2xl">
-          <h3 className="text-2xl font-bold mb-6">Assessment Trends</h3>
+          <h3 className="text-2xl font-bold mb-6 flex items-center gap-2">
+            <TrendingUp size={24} className="text-orange-400" />
+            Assessment Trends
+          </h3>
 
           <div className="space-y-8">
-            {config.assessmentTypes.map((type, idx) => (
-              <div key={type.name} className="bg-gray-700 rounded-lg p-4">
-                <h4 className="text-xl font-semibold mb-4 text-center">{type.name}</h4>
-                <ResponsiveContainer width="100%" height={300}>
-                  <LineChart data={chartData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                    <XAxis
-                      dataKey="date"
-                      stroke="#9ca3af"
-                      tick={{ fill: '#9ca3af' }}
-                    />
-                    <YAxis
-                      domain={[type.min, type.max]}
-                      stroke="#9ca3af"
-                      tick={{ fill: '#9ca3af' }}
-                    />
-                    <Tooltip
-                      contentStyle={{
-                        backgroundColor: '#1f2937',
-                        border: '1px solid #374151',
-                        borderRadius: '8px',
-                        color: '#fff'
-                      }}
-                    />
-                    <Legend wrapperStyle={{ color: '#fff' }} />
+            {config.assessmentTypes.map((type, idx) => {
+              const chartData = prepareChartDataForType(type.name);
+              if (chartData.length === 0) return null;
 
-                    {/* Timeline marker for current date */}
-                    <ReferenceLine
-                      x={currentDate?.date}
-                      stroke="#a855f7"
-                      strokeWidth={3}
-                      label={{
-                        value: 'Current',
-                        fill: '#a855f7',
-                        fontSize: 14,
-                        fontWeight: 'bold',
-                        position: 'top'
-                      }}
+              return (
+                <div key={type.name} className="bg-gray-700 rounded-lg p-6">
+                  <h4 className="text-xl font-semibold mb-4 text-center text-gray-200">{type.name}</h4>
+                  <div className="flex justify-center">
+                    <SimpleLineChart
+                      data={chartData}
+                      assessmentType={type.name}
+                      currentDate={currentDate?.date}
+                      min={type.min}
+                      max={type.max}
+                      color={colors[idx % colors.length]}
                     />
-
-                    <Line
-                      type="monotone"
-                      dataKey={type.name}
-                      stroke={colors[idx % colors.length]}
-                      strokeWidth={3}
-                      dot={{ fill: colors[idx % colors.length], r: 6 }}
-                      activeDot={{ r: 8 }}
-                    />
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
-            ))}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
 
