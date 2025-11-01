@@ -5,7 +5,7 @@ import DataEntryField from './DataEntryField';
 import DataEntryTable from './DataEntryTable';
 import DataEntryNotes from './DataEntryNotes';
 import Analysis from './Analysis';
-// import ImageryAnalyzer from './ImageryAnalyzer'; // TEMPORARILY DISABLED TO TEST
+import ImageryAnalyzer from './ImageryAnalyzer';
 
 const DataEntry = ({
   config,
@@ -362,15 +362,14 @@ const DataEntry = ({
 
       {/* Imagery Analyzer - Always available, even without assessment dates */}
       {viewMode === 'imagery' && (
-        <div style={{ border: '5px solid orange', padding: '50px', minHeight: '400px', backgroundColor: '#ffffcc' }}>
-          <h1 style={{ color: 'red', fontSize: '48px', textAlign: 'center' }}>🔧 IMAGERY TEST - IMPORT DISABLED 🔧</h1>
-          <p style={{ fontSize: '24px', textAlign: 'center' }}>If you see this, the page works WITHOUT ImageryAnalyzer</p>
-          <p style={{ fontSize: '20px', textAlign: 'center' }}>gridLayout: {gridLayout ? 'exists' : 'missing'}</p>
-          <p style={{ fontSize: '20px', textAlign: 'center' }}>config: {config ? 'exists' : 'missing'}</p>
-          <p style={{ fontSize: '20px', textAlign: 'center', marginTop: '30px', color: 'blue' }}>
-            This means the ImageryAnalyzer.jsx file has a critical error preventing it from loading.
-          </p>
-        </div>
+        <ImageryAnalyzer
+          gridLayout={gridLayout}
+          config={config}
+          currentDateObj={currentDateObj}
+          selectedAssessmentType={selectedAssessmentType}
+          onSelectAssessmentType={setSelectedAssessmentType}
+          onBulkUpdateData={bulkUpdateData}
+        />
       )}
     </div>
   );
