@@ -365,11 +365,13 @@ const DataEntry = ({
         <ImageryAnalyzer
           gridLayout={gridLayout}
           config={config}
+          assessmentDates={assessmentDates}
           currentDateObj={currentDateObj}
           selectedAssessmentType={selectedAssessmentType}
           onSelectAssessmentType={setSelectedAssessmentType}
           onBulkUpdateData={bulkUpdateData}
           onPhotosChange={onPhotosChange}
+          onAssessmentDatesChange={onAssessmentDatesChange}
         />
       )}
     </div>

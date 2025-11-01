@@ -3,11 +3,13 @@ import React, { useState, useRef, useEffect } from 'react';
 const ImageryAnalyzer = ({
   gridLayout,
   config,
+  assessmentDates,
   currentDateObj,
   selectedAssessmentType,
   onSelectAssessmentType,
   onBulkUpdateData,
-  onPhotosChange
+  onPhotosChange,
+  onAssessmentDatesChange
 }) => {
   // Auto-detect grid dimensions from trial setup
   const trialRows = gridLayout?.length || 4;
@@ -281,9 +283,8 @@ const ImageryAnalyzer = ({
     setDraggingCorner(null);
   };
 
-  // Apply perspective transformation to extract plot as square
-  const extractPlotWithPerspective = (sourceCanvas, plotCorners, targetSize) => {
-    // plotCorners: {tl, tr, br, bl} with x, y coordinates
+  // Simplified extraction using bounding box - much faster, prevents crashes
+  const extractPlotSimplified = (sourceCanvas, plotCorners, targetSize) => {
     const tempCanvas = document.createElement('canvas');
     tempCanvas.width = targetSize;
     tempCanvas.height = targetSize;
@@ -293,64 +294,35 @@ const ImageryAnalyzer = ({
     tempCtx.fillStyle = 'white';
     tempCtx.fillRect(0, 0, targetSize, targetSize);
 
-    // Source quad points (perspective distorted)
-    const src = [
-      plotCorners.tl.x, plotCorners.tl.y,
-      plotCorners.tr.x, plotCorners.tr.y,
-      plotCorners.br.x, plotCorners.br.y,
-      plotCorners.bl.x, plotCorners.bl.y
-    ];
+    try {
+      // Get bounding box of the plot
+      const minX = Math.min(plotCorners.tl.x, plotCorners.tr.x, plotCorners.br.x, plotCorners.bl.x);
+      const maxX = Math.max(plotCorners.tl.x, plotCorners.tr.x, plotCorners.br.x, plotCorners.bl.x);
+      const minY = Math.min(plotCorners.tl.y, plotCorners.tr.y, plotCorners.br.y, plotCorners.bl.y);
+      const maxY = Math.max(plotCorners.tl.y, plotCorners.tr.y, plotCorners.br.y, plotCorners.bl.y);
 
-    // Destination square points (corrected)
-    const dst = [
-      0, 0,
-      targetSize, 0,
-      targetSize, targetSize,
-      0, targetSize
-    ];
+      const width = maxX - minX;
+      const height = maxY - minY;
 
-    // Sample the image using perspective mapping
-    const imageData = tempCtx.createImageData(targetSize, targetSize);
-    const srcCtx = sourceCanvas.getContext('2d');
-    const srcImageData = srcCtx.getImageData(0, 0, sourceCanvas.width, sourceCanvas.height);
+      if (width > 0 && height > 0) {
+        // Calculate scaling to fit in square
+        const scale = Math.min(targetSize / width, targetSize / height);
+        const scaledWidth = width * scale;
+        const scaledHeight = height * scale;
+        const offsetX = (targetSize - scaledWidth) / 2;
+        const offsetY = (targetSize - scaledHeight) / 2;
 
-    // Compute perspective transform and sample pixels
-    for (let y = 0; y < targetSize; y++) {
-      for (let x = 0; x < targetSize; x++) {
-        // Map destination (x, y) to source using bilinear interpolation
-        const u = x / targetSize;
-        const v = y / targetSize;
-
-        // Bilinear interpolation in perspective space
-        const srcX =
-          plotCorners.tl.x * (1-u) * (1-v) +
-          plotCorners.tr.x * u * (1-v) +
-          plotCorners.br.x * u * v +
-          plotCorners.bl.x * (1-u) * v;
-
-        const srcY =
-          plotCorners.tl.y * (1-u) * (1-v) +
-          plotCorners.tr.y * u * (1-v) +
-          plotCorners.br.y * u * v +
-          plotCorners.bl.y * (1-u) * v;
-
-        // Sample source pixel (with bounds checking)
-        const sx = Math.floor(srcX);
-        const sy = Math.floor(srcY);
-
-        if (sx >= 0 && sx < sourceCanvas.width && sy >= 0 && sy < sourceCanvas.height) {
-          const srcIdx = (sy * sourceCanvas.width + sx) * 4;
-          const dstIdx = (y * targetSize + x) * 4;
-
-          imageData.data[dstIdx] = srcImageData.data[srcIdx];       // R
-          imageData.data[dstIdx + 1] = srcImageData.data[srcIdx + 1]; // G
-          imageData.data[dstIdx + 2] = srcImageData.data[srcIdx + 2]; // B
-          imageData.data[dstIdx + 3] = 255; // A
-        }
+        // Draw the plot region centered and scaled
+        tempCtx.drawImage(
+          sourceCanvas,
+          minX, minY, width, height,
+          offsetX, offsetY, scaledWidth, scaledHeight
+        );
       }
+    } catch (error) {
+      console.error('Error extracting plot:', error);
     }
 
-    tempCtx.putImageData(imageData, 0, 0);
     return tempCanvas;
   };
 
@@ -409,9 +381,9 @@ const ImageryAnalyzer = ({
         const plotId = layoutPlot?.id || `${row + 1}-${col + 1}`;
 
         if (!layoutPlot?.isBlank) {
-          // Extract plot with perspective transformation to square
+          // Extract plot using simplified method - faster and more stable
           const targetSize = 400;
-          const transformedCanvas = extractPlotWithPerspective(canvas, plotCorners, targetSize);
+          const transformedCanvas = extractPlotSimplified(canvas, plotCorners, targetSize);
 
           // Convert to base64
           const plotImageData = transformedCanvas.toDataURL('image/jpeg', 0.85);
@@ -434,8 +406,43 @@ const ImageryAnalyzer = ({
     setPlots(extractedPlots);
     setCommitted(true);
 
+    // Create assessment date if it doesn't exist
+    createAssessmentDateIfNeeded(fileDate);
+
     // Immediately apply images to the field map
     applyImagesToFieldMap(plotImages);
+  };
+
+  // Create assessment date entry if it doesn't exist
+  const createAssessmentDateIfNeeded = (dateStr) => {
+    if (!onAssessmentDatesChange || !config) return;
+
+    // Check if date already exists
+    const dateExists = assessmentDates?.some(d => d.date === dateStr);
+
+    if (!dateExists) {
+      // Create new date entry with empty assessments
+      const newDate = {
+        date: dateStr,
+        assessments: {}
+      };
+
+      // Initialize each assessment type
+      config.assessmentTypes.forEach(type => {
+        const assessmentData = {};
+        gridLayout.forEach(row => {
+          row.forEach(plot => {
+            if (!plot.isBlank) {
+              assessmentData[plot.id] = { value: '', entered: false };
+            }
+          });
+        });
+        newDate.assessments[type.name] = assessmentData;
+      });
+
+      // Add to assessment dates
+      onAssessmentDatesChange([...(assessmentDates || []), newDate]);
+    }
   };
 
   // Apply extracted plot images to field map
