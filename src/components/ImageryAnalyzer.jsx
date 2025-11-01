@@ -8,9 +8,13 @@ const ImageryAnalyzer = ({
   onSelectAssessmentType,
   onBulkUpdateData
 }) => {
+  // Auto-detect grid dimensions from trial setup
+  const trialRows = gridLayout?.length || 4;
+  const trialCols = gridLayout?.[0]?.length || 4;
+
   const [imageSrc, setImageSrc] = useState(null);
-  const [rows, setRows] = useState(gridLayout?.length || 4);
-  const [cols, setCols] = useState(gridLayout?.[0]?.length || 4);
+  const [rows, setRows] = useState(trialRows);
+  const [cols, setCols] = useState(trialCols);
   const [corners, setCorners] = useState([
     { x: 50, y: 50, label: 'TL' },
     { x: 750, y: 50, label: 'TR' },
@@ -103,17 +107,34 @@ const ImageryAnalyzer = ({
       ctx.stroke();
     }
 
-    // Draw corner markers
+    // Draw corner markers (LARGER)
     corners.forEach(corner => {
-      ctx.fillStyle = 'rgba(255, 0, 0, 0.7)';
+      // Outer circle (glow effect)
+      ctx.fillStyle = 'rgba(255, 0, 0, 0.3)';
       ctx.beginPath();
-      ctx.arc(corner.x, corner.y, 10, 0, 2 * Math.PI);
+      ctx.arc(corner.x, corner.y, 30, 0, 2 * Math.PI);
       ctx.fill();
 
+      // Inner circle (main marker)
+      ctx.fillStyle = 'rgba(255, 0, 0, 0.9)';
+      ctx.beginPath();
+      ctx.arc(corner.x, corner.y, 20, 0, 2 * Math.PI);
+      ctx.fill();
+
+      // White center
       ctx.fillStyle = 'white';
-      ctx.font = '12px Arial';
+      ctx.beginPath();
+      ctx.arc(corner.x, corner.y, 8, 0, 2 * Math.PI);
+      ctx.fill();
+
+      // Label
+      ctx.fillStyle = 'white';
+      ctx.font = 'bold 16px Arial';
       ctx.textAlign = 'center';
-      ctx.fillText(corner.label, corner.x, corner.y + 25);
+      ctx.strokeStyle = 'rgba(0, 0, 0, 0.7)';
+      ctx.lineWidth = 3;
+      ctx.strokeText(corner.label, corner.x, corner.y + 45);
+      ctx.fillText(corner.label, corner.x, corner.y + 45);
     });
   };
 
@@ -125,10 +146,10 @@ const ImageryAnalyzer = ({
     const x = (e.clientX - rect.left) * scaleX;
     const y = (e.clientY - rect.top) * scaleY;
 
-    // Check if clicking near a corner
+    // Check if clicking near a corner (larger hit area)
     const clickedCorner = corners.findIndex(corner => {
       const distance = Math.sqrt(Math.pow(corner.x - x, 2) + Math.pow(corner.y - y, 2));
-      return distance < 20;
+      return distance < 40; // Increased from 20 to 40
     });
 
     if (clickedCorner >= 0) {
@@ -192,6 +213,11 @@ const ImageryAnalyzer = ({
 
         {imageSrc && (
           <div className="mt-6 space-y-4">
+            <div className="bg-green-50 border border-green-200 text-green-800 p-3 rounded">
+              <p className="font-medium">Grid Detected from Trial Setup:</p>
+              <p className="text-sm">{rows} rows × {cols} columns (from your trial configuration)</p>
+            </div>
+
             <div className="grid grid-cols-2 gap-4">
               <label className="flex flex-col gap-2 text-sm">
                 Rows
@@ -200,7 +226,8 @@ const ImageryAnalyzer = ({
                   min={1}
                   value={rows}
                   onChange={(e) => setRows(Number(e.target.value) || 1)}
-                  className="border rounded px-3 py-2"
+                  className="border rounded px-3 py-2 bg-gray-50"
+                  title="Auto-detected from trial setup. Override if needed."
                 />
               </label>
 
@@ -211,7 +238,8 @@ const ImageryAnalyzer = ({
                   min={1}
                   value={cols}
                   onChange={(e) => setCols(Number(e.target.value) || 1)}
-                  className="border rounded px-3 py-2"
+                  className="border rounded px-3 py-2 bg-gray-50"
+                  title="Auto-detected from trial setup. Override if needed."
                 />
               </label>
             </div>
