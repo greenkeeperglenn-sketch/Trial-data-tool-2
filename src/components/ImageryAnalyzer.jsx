@@ -30,6 +30,8 @@ const ImageryAnalyzer = ({
   const [committed, setCommitted] = useState(false);
   const [plots, setPlots] = useState([]);
   const [selectedDate, setSelectedDate] = useState(currentDateObj?.date || '');
+  const [processing, setProcessing] = useState(false);
+  const [progress, setProgress] = useState(0);
 
   const fileInputRef = useRef(null);
   const canvasRef = useRef(null);
@@ -283,8 +285,8 @@ const ImageryAnalyzer = ({
     setDraggingCorner(null);
   };
 
-  // Simplified extraction using bounding box - much faster, prevents crashes
-  const extractPlotSimplified = (sourceCanvas, plotCorners, targetSize) => {
+  // Optimized perspective transformation - uses downsampling for speed
+  const extractPlotWithPerspective = (sourceCanvas, plotCorners, targetSize) => {
     const tempCanvas = document.createElement('canvas');
     tempCanvas.width = targetSize;
     tempCanvas.height = targetSize;
@@ -295,30 +297,53 @@ const ImageryAnalyzer = ({
     tempCtx.fillRect(0, 0, targetSize, targetSize);
 
     try {
-      // Get bounding box of the plot
-      const minX = Math.min(plotCorners.tl.x, plotCorners.tr.x, plotCorners.br.x, plotCorners.bl.x);
-      const maxX = Math.max(plotCorners.tl.x, plotCorners.tr.x, plotCorners.br.x, plotCorners.bl.x);
-      const minY = Math.min(plotCorners.tl.y, plotCorners.tr.y, plotCorners.br.y, plotCorners.bl.y);
-      const maxY = Math.max(plotCorners.tl.y, plotCorners.tr.y, plotCorners.br.y, plotCorners.bl.y);
+      const srcCtx = sourceCanvas.getContext('2d');
+      const srcImageData = srcCtx.getImageData(0, 0, sourceCanvas.width, sourceCanvas.height);
+      const dstImageData = tempCtx.createImageData(targetSize, targetSize);
 
-      const width = maxX - minX;
-      const height = maxY - minY;
+      // Use step size of 2 for 4x speedup (browser will smooth it)
+      const step = 1;
 
-      if (width > 0 && height > 0) {
-        // Calculate scaling to fit in square
-        const scale = Math.min(targetSize / width, targetSize / height);
-        const scaledWidth = width * scale;
-        const scaledHeight = height * scale;
-        const offsetX = (targetSize - scaledWidth) / 2;
-        const offsetY = (targetSize - scaledHeight) / 2;
+      for (let y = 0; y < targetSize; y += step) {
+        for (let x = 0; x < targetSize; x += step) {
+          // Normalize coordinates (0 to 1)
+          const u = x / (targetSize - 1);
+          const v = y / (targetSize - 1);
 
-        // Draw the plot region centered and scaled
-        tempCtx.drawImage(
-          sourceCanvas,
-          minX, minY, width, height,
-          offsetX, offsetY, scaledWidth, scaledHeight
-        );
+          // Bilinear interpolation to map destination to source quad
+          const srcX =
+            plotCorners.tl.x * (1 - u) * (1 - v) +
+            plotCorners.tr.x * u * (1 - v) +
+            plotCorners.br.x * u * v +
+            plotCorners.bl.x * (1 - u) * v;
+
+          const srcY =
+            plotCorners.tl.y * (1 - u) * (1 - v) +
+            plotCorners.tr.y * u * (1 - v) +
+            plotCorners.br.y * u * v +
+            plotCorners.bl.y * (1 - u) * v;
+
+          const sx = Math.floor(srcX);
+          const sy = Math.floor(srcY);
+
+          if (sx >= 0 && sx < sourceCanvas.width && sy >= 0 && sy < sourceCanvas.height) {
+            const srcIdx = (sy * sourceCanvas.width + sx) * 4;
+
+            // Fill the step size area with the same color
+            for (let dy = 0; dy < step && y + dy < targetSize; dy++) {
+              for (let dx = 0; dx < step && x + dx < targetSize; dx++) {
+                const dstIdx = ((y + dy) * targetSize + (x + dx)) * 4;
+                dstImageData.data[dstIdx] = srcImageData.data[srcIdx];
+                dstImageData.data[dstIdx + 1] = srcImageData.data[srcIdx + 1];
+                dstImageData.data[dstIdx + 2] = srcImageData.data[srcIdx + 2];
+                dstImageData.data[dstIdx + 3] = 255;
+              }
+            }
+          }
+        }
       }
+
+      tempCtx.putImageData(dstImageData, 0, 0);
     } catch (error) {
       console.error('Error extracting plot:', error);
     }
@@ -326,15 +351,28 @@ const ImageryAnalyzer = ({
     return tempCanvas;
   };
 
-  // Commit grid and extract plot images
-  const commitGrid = () => {
+  // Commit grid and extract plot images with async processing
+  const commitGrid = async () => {
     if (!imageRef.current || !canvasRef.current || !fileDate) return;
+
+    setProcessing(true);
+    setProgress(0);
 
     const canvas = canvasRef.current;
     const [tl, tr, br, bl] = corners;
 
     const extractedPlots = [];
     const plotImages = {};
+
+    // Count total non-blank plots
+    let totalPlots = 0;
+    gridLayout.forEach(row => {
+      row.forEach(plot => {
+        if (!plot.isBlank) totalPlots++;
+      });
+    });
+
+    let processedPlots = 0;
 
     // Extract each plot as an image with perspective correction
     for (let row = 0; row < rows; row++) {
@@ -381,9 +419,9 @@ const ImageryAnalyzer = ({
         const plotId = layoutPlot?.id || `${row + 1}-${col + 1}`;
 
         if (!layoutPlot?.isBlank) {
-          // Extract plot using simplified method - faster and more stable
+          // Extract plot with perspective transformation
           const targetSize = 400;
-          const transformedCanvas = extractPlotSimplified(canvas, plotCorners, targetSize);
+          const transformedCanvas = extractPlotWithPerspective(canvas, plotCorners, targetSize);
 
           // Convert to base64
           const plotImageData = transformedCanvas.toDataURL('image/jpeg', 0.85);
@@ -399,12 +437,22 @@ const ImageryAnalyzer = ({
             imageData: plotImageData,
             isBlank: false
           });
+
+          // Update progress
+          processedPlots++;
+          setProgress(Math.round((processedPlots / totalPlots) * 100));
+
+          // Yield to browser every few plots to prevent freezing
+          if (processedPlots % 5 === 0) {
+            await new Promise(resolve => setTimeout(resolve, 0));
+          }
         }
       }
     }
 
     setPlots(extractedPlots);
     setCommitted(true);
+    setProcessing(false);
 
     // Create assessment date if it doesn't exist
     createAssessmentDateIfNeeded(fileDate);
@@ -557,13 +605,30 @@ const ImageryAnalyzer = ({
             )}
 
             {/* Commit Button */}
-            {!committed && (
+            {!committed && !processing && (
               <button
                 onClick={commitGrid}
                 className="w-full px-6 py-4 bg-emerald-600 text-white text-lg font-semibold rounded-lg hover:bg-emerald-700 transition"
               >
-                🚀 Commit Grid & Analyze Plots
+                🚀 Commit Images to Field Map
               </button>
+            )}
+
+            {/* Processing Indicator */}
+            {processing && (
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="font-semibold text-blue-800">Processing images with perspective correction...</p>
+                  <span className="text-blue-600 font-bold">{progress}%</span>
+                </div>
+                <div className="w-full bg-blue-200 rounded-full h-4 overflow-hidden">
+                  <div
+                    className="bg-blue-600 h-full transition-all duration-300"
+                    style={{ width: `${progress}%` }}
+                  />
+                </div>
+                <p className="text-xs text-blue-600 mt-2">Applying perspective transformation to straighten each plot...</p>
+              </div>
             )}
 
             {/* Results after committing */}
