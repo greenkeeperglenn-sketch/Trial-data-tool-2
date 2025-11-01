@@ -13,6 +13,8 @@ const ImageryAnalyzer = ({
   const trialCols = gridLayout?.[0]?.length || 4;
 
   const [imageSrc, setImageSrc] = useState(null);
+  const [uploadedFile, setUploadedFile] = useState(null);
+  const [fileDate, setFileDate] = useState(null);
   const [rows, setRows] = useState(trialRows);
   const [cols, setCols] = useState(trialCols);
   const [corners, setCorners] = useState([
@@ -22,6 +24,9 @@ const ImageryAnalyzer = ({
     { x: 50, y: 550, label: 'BL' }
   ]);
   const [draggingCorner, setDraggingCorner] = useState(null);
+  const [committed, setCommitted] = useState(false);
+  const [plots, setPlots] = useState([]);
+  const [selectedDate, setSelectedDate] = useState(currentDateObj?.date || '');
 
   const fileInputRef = useRef(null);
   const canvasRef = useRef(null);
@@ -29,6 +34,14 @@ const ImageryAnalyzer = ({
 
   const handleFileUpload = (file) => {
     if (!file) return;
+
+    // Store the file and extract date from metadata
+    setUploadedFile(file);
+
+    // Try to get date from file modified date
+    const modifiedDate = new Date(file.lastModified);
+    const dateStr = modifiedDate.toISOString().split('T')[0]; // YYYY-MM-DD
+    setFileDate(dateStr);
 
     const reader = new FileReader();
     reader.onload = (event) => {
@@ -46,6 +59,10 @@ const ImageryAnalyzer = ({
           { x: w * 0.9, y: h * 0.9, label: 'BR' },
           { x: w * 0.1, y: h * 0.9, label: 'BL' }
         ]);
+
+        // Reset committed state
+        setCommitted(false);
+        setPlots([]);
       };
       img.src = event.target.result;
     };
@@ -263,6 +280,131 @@ const ImageryAnalyzer = ({
     setDraggingCorner(null);
   };
 
+  // Calculate green coverage for a canvas context
+  const calculateGreenCoverage = (ctx, x, y, width, height) => {
+    const imageData = ctx.getImageData(x, y, width, height);
+    const data = imageData.data;
+    let totalPixels = 0;
+    let greenPixels = 0;
+
+    for (let i = 0; i < data.length; i += 4) {
+      const r = data[i];
+      const g = data[i + 1];
+      const b = data[i + 2];
+
+      totalPixels++;
+
+      // Simple green detection: green is higher than red and blue
+      if (g > r && g > b && g > 50) {
+        greenPixels++;
+      }
+    }
+
+    return totalPixels === 0 ? 0 : (greenPixels / totalPixels) * 100;
+  };
+
+  // Commit grid and analyze plots
+  const commitGrid = () => {
+    if (!imageRef.current || !canvasRef.current) return;
+
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext('2d');
+    const img = imageRef.current;
+    const [tl, tr, br, bl] = corners;
+
+    const extractedPlots = [];
+
+    // Extract each plot
+    for (let row = 0; row < rows; row++) {
+      for (let col = 0; col < cols; col++) {
+        // Calculate plot position using perspective transformation
+        const rowT = row / rows;
+        const rowB = (row + 1) / rows;
+        const colL = col / cols;
+        const colR = (col + 1) / cols;
+
+        // Get corners of this plot
+        const topLeftX = tl.x + (tr.x - tl.x) * colL;
+        const topLeftY = tl.y + (tr.y - tl.y) * colL;
+        const topRightX = tl.x + (tr.x - tl.x) * colR;
+        const topRightY = tl.y + (tr.y - tl.y) * colR;
+
+        const bottomLeftX = bl.x + (br.x - bl.x) * colL;
+        const bottomLeftY = bl.y + (br.y - bl.y) * colL;
+        const bottomRightX = bl.x + (br.x - bl.x) * colR;
+        const bottomRightY = bl.y + (br.y - bl.y) * colR;
+
+        // Interpolate for this specific plot row
+        const plotTLX = topLeftX + (bottomLeftX - topLeftX) * rowT;
+        const plotTLY = topLeftY + (bottomLeftY - topLeftY) * rowT;
+        const plotTRX = topRightX + (bottomRightX - topRightX) * rowT;
+        const plotTRY = topRightY + (bottomRightY - topRightY) * rowT;
+        const plotBLX = topLeftX + (bottomLeftX - topLeftX) * rowB;
+        const plotBLY = topLeftY + (bottomLeftY - topLeftY) * rowB;
+        const plotBRX = topRightX + (bottomRightX - topRightX) * rowB;
+        const plotBRY = topRightY + (bottomRightY - topRightY) * rowB;
+
+        // Get bounding box for simplified extraction
+        const minX = Math.min(plotTLX, plotTRX, plotBRX, plotBLX);
+        const maxX = Math.max(plotTLX, plotTRX, plotBRX, plotBLX);
+        const minY = Math.min(plotTLY, plotTRY, plotBRY, plotBLY);
+        const maxY = Math.max(plotTLY, plotTRY, plotBRY, plotBLY);
+
+        const plotWidth = maxX - minX;
+        const plotHeight = maxY - minY;
+
+        // Calculate green coverage for this plot
+        const greenCoverage = calculateGreenCoverage(ctx, minX, minY, plotWidth, plotHeight);
+
+        // Get plot ID from gridLayout
+        const layoutPlot = gridLayout[row]?.[col];
+        const plotId = layoutPlot?.id || `${row + 1}-${col + 1}`;
+
+        extractedPlots.push({
+          id: plotId,
+          row: row + 1,
+          col: col + 1,
+          greenCoverage: greenCoverage,
+          isBlank: layoutPlot?.isBlank || false
+        });
+      }
+    }
+
+    setPlots(extractedPlots);
+    setCommitted(true);
+  };
+
+  // Apply green coverage values to trial data
+  const applyToTrial = () => {
+    if (!currentDateObj || !selectedDate || plots.length === 0) {
+      alert('Please ensure you have an assessment date selected and plots committed.');
+      return;
+    }
+
+    if (!selectedAssessmentType) {
+      alert('Please select an assessment type to apply the data to.');
+      return;
+    }
+
+    const updates = {};
+    let appliedCount = 0;
+
+    plots.forEach(plot => {
+      if (!plot.isBlank) {
+        updates[plot.id] = plot.greenCoverage.toFixed(1);
+        appliedCount++;
+      }
+    });
+
+    if (Object.keys(updates).length === 0) {
+      alert('No plots to update.');
+      return;
+    }
+
+    onBulkUpdateData(selectedDate, selectedAssessmentType, updates);
+    alert(`Applied green coverage values to ${appliedCount} plots for ${selectedAssessmentType} on ${selectedDate}.`);
+  };
+
   return (
     <div className="space-y-4">
       <div className="bg-white rounded-lg shadow p-6">
@@ -346,6 +488,99 @@ const ImageryAnalyzer = ({
               onTouchMove={handleTouchMove}
               onTouchEnd={handleTouchEnd}
             />
+
+            {/* File Date Info */}
+            {fileDate && (
+              <div className="bg-purple-50 border border-purple-200 text-purple-800 p-3 rounded">
+                <p className="font-medium">Image File Date: {fileDate}</p>
+                <p className="text-sm">Detected from file properties</p>
+              </div>
+            )}
+
+            {/* Commit Button */}
+            {!committed && (
+              <button
+                onClick={commitGrid}
+                className="w-full px-6 py-4 bg-emerald-600 text-white text-lg font-semibold rounded-lg hover:bg-emerald-700 transition"
+              >
+                🚀 Commit Grid & Analyze Plots
+              </button>
+            )}
+
+            {/* Results after committing */}
+            {committed && plots.length > 0 && (
+              <div className="space-y-4 mt-6">
+                <div className="bg-green-50 border border-green-200 text-green-800 p-4 rounded">
+                  <p className="font-bold text-lg">✅ Analysis Complete!</p>
+                  <p className="text-sm">Extracted {plots.filter(p => !p.isBlank).length} plots</p>
+                </div>
+
+                {/* Date Selector */}
+                <div className="bg-white border rounded-lg p-4">
+                  <label className="block text-sm font-medium mb-2">
+                    Select Assessment Date to Apply Data
+                  </label>
+                  <select
+                    value={selectedDate}
+                    onChange={(e) => setSelectedDate(e.target.value)}
+                    className="w-full p-3 border rounded-lg text-lg"
+                  >
+                    <option value="">-- Select Date --</option>
+                    {currentDateObj && <option value={currentDateObj.date}>{currentDateObj.date} (Current)</option>}
+                  </select>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Image date: {fileDate || 'Unknown'}
+                  </p>
+                </div>
+
+                {/* Assessment Type Selector */}
+                {selectedAssessmentType && (
+                  <div className="bg-white border rounded-lg p-4">
+                    <p className="text-sm font-medium mb-2">Apply to Assessment Type:</p>
+                    <p className="text-lg font-bold text-blue-600">{selectedAssessmentType}</p>
+                    <p className="text-xs text-gray-500 mt-1">Green coverage % will be applied</p>
+                  </div>
+                )}
+
+                {/* Plot Results Summary */}
+                <div className="bg-white border rounded-lg p-4 max-h-64 overflow-y-auto">
+                  <h3 className="font-semibold mb-3">Plot Results ({plots.length} plots)</h3>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 text-sm">
+                    {plots.filter(p => !p.isBlank).slice(0, 20).map(plot => (
+                      <div key={plot.id} className="bg-gray-50 p-2 rounded border">
+                        <div className="font-medium">{plot.id}</div>
+                        <div className="text-green-600 font-bold">{plot.greenCoverage.toFixed(1)}%</div>
+                      </div>
+                    ))}
+                  </div>
+                  {plots.filter(p => !p.isBlank).length > 20 && (
+                    <p className="text-xs text-gray-500 mt-2">
+                      Showing first 20 of {plots.filter(p => !p.isBlank).length} plots...
+                    </p>
+                  )}
+                </div>
+
+                {/* Apply Button */}
+                <button
+                  onClick={applyToTrial}
+                  disabled={!selectedDate || !selectedAssessmentType}
+                  className="w-full px-6 py-4 bg-blue-600 text-white text-lg font-semibold rounded-lg hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  📊 Apply Green Coverage to Trial Data
+                </button>
+
+                {/* Reset Button */}
+                <button
+                  onClick={() => {
+                    setCommitted(false);
+                    setPlots([]);
+                  }}
+                  className="w-full px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition"
+                >
+                  ↺ Reset & Adjust Grid
+                </button>
+              </div>
+            )}
           </div>
         )}
 
