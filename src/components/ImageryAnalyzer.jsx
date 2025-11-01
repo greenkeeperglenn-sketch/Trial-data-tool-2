@@ -6,7 +6,8 @@ const ImageryAnalyzer = ({
   currentDateObj,
   selectedAssessmentType,
   onSelectAssessmentType,
-  onBulkUpdateData
+  onBulkUpdateData,
+  onPhotosChange
 }) => {
   // Auto-detect grid dimensions from trial setup
   const trialRows = gridLayout?.length || 4;
@@ -280,32 +281,9 @@ const ImageryAnalyzer = ({
     setDraggingCorner(null);
   };
 
-  // Calculate green coverage for a canvas context
-  const calculateGreenCoverage = (ctx, x, y, width, height) => {
-    const imageData = ctx.getImageData(x, y, width, height);
-    const data = imageData.data;
-    let totalPixels = 0;
-    let greenPixels = 0;
-
-    for (let i = 0; i < data.length; i += 4) {
-      const r = data[i];
-      const g = data[i + 1];
-      const b = data[i + 2];
-
-      totalPixels++;
-
-      // Simple green detection: green is higher than red and blue
-      if (g > r && g > b && g > 50) {
-        greenPixels++;
-      }
-    }
-
-    return totalPixels === 0 ? 0 : (greenPixels / totalPixels) * 100;
-  };
-
-  // Commit grid and analyze plots
+  // Commit grid and extract plot images
   const commitGrid = () => {
-    if (!imageRef.current || !canvasRef.current) return;
+    if (!imageRef.current || !canvasRef.current || !fileDate) return;
 
     const canvas = canvasRef.current;
     const ctx = canvas.getContext('2d');
@@ -313,8 +291,9 @@ const ImageryAnalyzer = ({
     const [tl, tr, br, bl] = corners;
 
     const extractedPlots = [];
+    const plotImages = {};
 
-    // Extract each plot
+    // Extract each plot as an image
     for (let row = 0; row < rows; row++) {
       for (let col = 0; col < cols; col++) {
         // Calculate plot position using perspective transformation
@@ -344,7 +323,7 @@ const ImageryAnalyzer = ({
         const plotBRX = topRightX + (bottomRightX - topRightX) * rowB;
         const plotBRY = topRightY + (bottomRightY - topRightY) * rowB;
 
-        // Get bounding box for simplified extraction
+        // Get bounding box
         const minX = Math.min(plotTLX, plotTRX, plotBRX, plotBLX);
         const maxX = Math.max(plotTLX, plotTRX, plotBRX, plotBLX);
         const minY = Math.min(plotTLY, plotTRY, plotBRY, plotBLY);
@@ -353,56 +332,78 @@ const ImageryAnalyzer = ({
         const plotWidth = maxX - minX;
         const plotHeight = maxY - minY;
 
-        // Calculate green coverage for this plot
-        const greenCoverage = calculateGreenCoverage(ctx, minX, minY, plotWidth, plotHeight);
-
         // Get plot ID from gridLayout
         const layoutPlot = gridLayout[row]?.[col];
         const plotId = layoutPlot?.id || `${row + 1}-${col + 1}`;
 
-        extractedPlots.push({
-          id: plotId,
-          row: row + 1,
-          col: col + 1,
-          greenCoverage: greenCoverage,
-          isBlank: layoutPlot?.isBlank || false
-        });
+        if (!layoutPlot?.isBlank) {
+          // Create a temporary canvas for this plot
+          const tempCanvas = document.createElement('canvas');
+          const targetSize = 400; // Square size for extracted plots
+          tempCanvas.width = targetSize;
+          tempCanvas.height = targetSize;
+          const tempCtx = tempCanvas.getContext('2d');
+
+          // Draw white background
+          tempCtx.fillStyle = 'white';
+          tempCtx.fillRect(0, 0, targetSize, targetSize);
+
+          // Calculate scaling to fit in square while maintaining aspect ratio
+          const scale = Math.min(targetSize / plotWidth, targetSize / plotHeight);
+          const scaledWidth = plotWidth * scale;
+          const scaledHeight = plotHeight * scale;
+          const offsetX = (targetSize - scaledWidth) / 2;
+          const offsetY = (targetSize - scaledHeight) / 2;
+
+          // Draw the plot image centered and scaled
+          tempCtx.drawImage(
+            canvas,
+            minX, minY, plotWidth, plotHeight,
+            offsetX, offsetY, scaledWidth, scaledHeight
+          );
+
+          // Convert to base64
+          const plotImageData = tempCanvas.toDataURL('image/jpeg', 0.85);
+
+          // Store with key format: date_plotId
+          const photoKey = `${fileDate}_${plotId}`;
+          plotImages[photoKey] = plotImageData;
+
+          extractedPlots.push({
+            id: plotId,
+            row: row + 1,
+            col: col + 1,
+            imageData: plotImageData,
+            isBlank: false
+          });
+        }
       }
     }
 
     setPlots(extractedPlots);
     setCommitted(true);
+
+    // Immediately apply images to the field map
+    applyImagesToFieldMap(plotImages);
   };
 
-  // Apply green coverage values to trial data
-  const applyToTrial = () => {
-    if (!currentDateObj || !selectedDate || plots.length === 0) {
-      alert('Please ensure you have an assessment date selected and plots committed.');
+  // Apply extracted plot images to field map
+  const applyImagesToFieldMap = (plotImages) => {
+    if (!onPhotosChange || Object.keys(plotImages).length === 0) {
       return;
     }
 
-    if (!selectedAssessmentType) {
-      alert('Please select an assessment type to apply the data to.');
-      return;
-    }
+    // Call onPhotosChange - it expects a function that takes current state
+    onPhotosChange(currentPhotos => {
+      const updatedPhotos = { ...currentPhotos };
 
-    const updates = {};
-    let appliedCount = 0;
+      Object.entries(plotImages).forEach(([key, imageData]) => {
+        // Each key is "date_plotId", store as array with single image
+        updatedPhotos[key] = [imageData];
+      });
 
-    plots.forEach(plot => {
-      if (!plot.isBlank) {
-        updates[plot.id] = plot.greenCoverage.toFixed(1);
-        appliedCount++;
-      }
+      return updatedPhotos;
     });
-
-    if (Object.keys(updates).length === 0) {
-      alert('No plots to update.');
-      return;
-    }
-
-    onBulkUpdateData(selectedDate, selectedAssessmentType, updates);
-    alert(`Applied green coverage values to ${appliedCount} plots for ${selectedAssessmentType} on ${selectedDate}.`);
   };
 
   return (
@@ -511,63 +512,43 @@ const ImageryAnalyzer = ({
             {committed && plots.length > 0 && (
               <div className="space-y-4 mt-6">
                 <div className="bg-green-50 border border-green-200 text-green-800 p-4 rounded">
-                  <p className="font-bold text-lg">✅ Analysis Complete!</p>
-                  <p className="text-sm">Extracted {plots.filter(p => !p.isBlank).length} plots</p>
+                  <p className="font-bold text-lg">✅ Images Extracted & Stored!</p>
+                  <p className="text-sm">Extracted {plots.filter(p => !p.isBlank).length} plot images for date: {fileDate}</p>
+                  <p className="text-xs mt-2">✓ Images have been automatically added to the field map</p>
                 </div>
 
-                {/* Date Selector */}
+                {/* Extracted Plot Images Preview */}
                 <div className="bg-white border rounded-lg p-4">
-                  <label className="block text-sm font-medium mb-2">
-                    Select Assessment Date to Apply Data
-                  </label>
-                  <select
-                    value={selectedDate}
-                    onChange={(e) => setSelectedDate(e.target.value)}
-                    className="w-full p-3 border rounded-lg text-lg"
-                  >
-                    <option value="">-- Select Date --</option>
-                    {currentDateObj && <option value={currentDateObj.date}>{currentDateObj.date} (Current)</option>}
-                  </select>
-                  <p className="text-xs text-gray-500 mt-1">
-                    Image date: {fileDate || 'Unknown'}
-                  </p>
-                </div>
-
-                {/* Assessment Type Selector */}
-                {selectedAssessmentType && (
-                  <div className="bg-white border rounded-lg p-4">
-                    <p className="text-sm font-medium mb-2">Apply to Assessment Type:</p>
-                    <p className="text-lg font-bold text-blue-600">{selectedAssessmentType}</p>
-                    <p className="text-xs text-gray-500 mt-1">Green coverage % will be applied</p>
-                  </div>
-                )}
-
-                {/* Plot Results Summary */}
-                <div className="bg-white border rounded-lg p-4 max-h-64 overflow-y-auto">
-                  <h3 className="font-semibold mb-3">Plot Results ({plots.length} plots)</h3>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 text-sm">
+                  <h3 className="font-semibold mb-3">Extracted Plot Images ({plots.length} plots)</h3>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
                     {plots.filter(p => !p.isBlank).slice(0, 20).map(plot => (
-                      <div key={plot.id} className="bg-gray-50 p-2 rounded border">
-                        <div className="font-medium">{plot.id}</div>
-                        <div className="text-green-600 font-bold">{plot.greenCoverage.toFixed(1)}%</div>
+                      <div key={plot.id} className="bg-gray-50 rounded border overflow-hidden">
+                        <img
+                          src={plot.imageData}
+                          alt={plot.id}
+                          className="w-full aspect-square object-cover"
+                        />
+                        <div className="p-2 text-center">
+                          <div className="font-medium text-sm">{plot.id}</div>
+                        </div>
                       </div>
                     ))}
                   </div>
                   {plots.filter(p => !p.isBlank).length > 20 && (
-                    <p className="text-xs text-gray-500 mt-2">
+                    <p className="text-xs text-gray-500 mt-3">
                       Showing first 20 of {plots.filter(p => !p.isBlank).length} plots...
                     </p>
                   )}
                 </div>
 
-                {/* Apply Button */}
-                <button
-                  onClick={applyToTrial}
-                  disabled={!selectedDate || !selectedAssessmentType}
-                  className="w-full px-6 py-4 bg-blue-600 text-white text-lg font-semibold rounded-lg hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  📊 Apply Green Coverage to Trial Data
-                </button>
+                <div className="bg-blue-50 border border-blue-200 text-blue-800 p-4 rounded">
+                  <p className="font-medium">📸 Next Steps:</p>
+                  <ol className="text-sm mt-2 space-y-1 list-decimal list-inside">
+                    <li>Go to the Field Map view</li>
+                    <li>Navigate to date: {fileDate}</li>
+                    <li>Click the camera icon on any plot to see the extracted image</li>
+                  </ol>
+                </div>
 
                 {/* Reset Button */}
                 <button
@@ -577,7 +558,7 @@ const ImageryAnalyzer = ({
                   }}
                   className="w-full px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition"
                 >
-                  ↺ Reset & Adjust Grid
+                  ↺ Process Another Image
                 </button>
               </div>
             )}

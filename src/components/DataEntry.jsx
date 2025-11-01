@@ -369,6 +369,7 @@ const DataEntry = ({
           selectedAssessmentType={selectedAssessmentType}
           onSelectAssessmentType={setSelectedAssessmentType}
           onBulkUpdateData={bulkUpdateData}
+          onPhotosChange={onPhotosChange}
         />
       )}
     </div>
