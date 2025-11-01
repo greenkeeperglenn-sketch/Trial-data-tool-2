@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
-import { Download, Unlock, Grid, List, FileText, BarChart3, Camera } from 'lucide-react';
+import { Download, Unlock, Grid, List, FileText, BarChart3, Camera, Presentation } from 'lucide-react';
 import DateNavigation from './DateNavigation';
 import DataEntryField from './DataEntryField';
 import DataEntryTable from './DataEntryTable';
 import DataEntryNotes from './DataEntryNotes';
 import Analysis from './Analysis';
 import ImageryAnalyzer from './ImageryAnalyzer';
+import PresentationMode from './PresentationMode';
 
 const DataEntry = ({
   config,
@@ -291,6 +292,18 @@ const DataEntry = ({
           >
             <Camera size={18} /> Imagery
           </button>
+
+          {/* Presentation Tab - Only show if we have assessment dates */}
+          {assessmentDates.length > 0 && (
+            <button
+              onClick={() => setViewMode('presentation')}
+              className={`flex items-center gap-2 px-4 py-2 rounded transition ${
+                viewMode === 'presentation' ? 'bg-purple-600 text-white' : 'bg-gray-200'
+              }`}
+            >
+              <Presentation size={18} /> Presentation
+            </button>
+          )}
         </div>
       </div>
 
@@ -372,6 +385,17 @@ const DataEntry = ({
           onBulkUpdateData={bulkUpdateData}
           onPhotosChange={onPhotosChange}
           onAssessmentDatesChange={onAssessmentDatesChange}
+        />
+      )}
+
+      {/* Presentation Mode - Show professional timeline-based presentation */}
+      {viewMode === 'presentation' && assessmentDates.length > 0 && (
+        <PresentationMode
+          config={config}
+          gridLayout={gridLayout}
+          assessmentDates={assessmentDates}
+          photos={photos}
+          notes={notes}
         />
       )}
     </div>
