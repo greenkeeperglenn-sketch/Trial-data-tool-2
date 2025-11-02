@@ -116,8 +116,43 @@ const MultiLineChart = ({ treatmentData, treatmentColors, currentDate, min, max,
     return height - padding - 50 - ((value - dataMin) / range) * chartHeight;
   };
 
-  // Find current date index
-  const currentDateIndex = allDates.findIndex(d => d === currentDate);
+  // Calculate position for current date (interpolate if between assessment dates)
+  const getCurrentDatePosition = () => {
+    if (!currentDate) return null;
+
+    // First check if currentDate is exactly an assessment date
+    const exactIndex = allDates.indexOf(currentDate);
+    if (exactIndex >= 0) {
+      return scaleX(exactIndex);
+    }
+
+    // If not, interpolate position based on chronological order
+    const currentTime = new Date(currentDate).getTime();
+    const dateTimes = allDates.map(d => new Date(d).getTime());
+
+    // Find the two dates it falls between
+    for (let i = 0; i < dateTimes.length - 1; i++) {
+      if (currentTime >= dateTimes[i] && currentTime <= dateTimes[i + 1]) {
+        // Interpolate position
+        const t = (currentTime - dateTimes[i]) / (dateTimes[i + 1] - dateTimes[i]);
+        const x1 = scaleX(i);
+        const x2 = scaleX(i + 1);
+        return x1 + t * (x2 - x1);
+      }
+    }
+
+    // If before first date or after last date
+    if (currentTime < dateTimes[0]) {
+      return scaleX(0);
+    }
+    if (currentTime > dateTimes[dateTimes.length - 1]) {
+      return scaleX(dateTimes.length - 1);
+    }
+
+    return null;
+  };
+
+  const currentDateX = getCurrentDatePosition();
 
   return (
     <svg width="100%" height={height} viewBox={`0 0 ${width} ${height}`} className="text-gray-300">
@@ -159,37 +194,35 @@ const MultiLineChart = ({ treatmentData, treatmentColors, currentDate, min, max,
         );
       })}
 
-      {/* Current date marker */}
-      {currentDateIndex >= 0 && (
+      {/* Current date marker - always show */}
+      {currentDateX !== null && (
         <g>
           <line
-            x1={scaleX(currentDateIndex)}
+            x1={currentDateX}
             y1={padding}
-            x2={scaleX(currentDateIndex)}
+            x2={currentDateX}
             y2={height - padding - 50}
             stroke="#a855f7"
             strokeWidth="3"
           />
           <text
-            x={scaleX(currentDateIndex)}
+            x={currentDateX}
             y={padding - 10}
             fontSize="14"
             fontWeight="bold"
             fill="#a855f7"
             textAnchor="middle"
           >
-            Current
+            Current ({currentDate})
           </text>
         </g>
       )}
 
       {/* Draw line for each treatment */}
       {Object.entries(treatmentData).map(([treatment, dataPoints]) => {
-        if (dataPoints.length === 0) return null;
-
         const color = treatmentColors[treatment];
 
-        // Create path for this treatment
+        // Create path for this treatment - skip if no data points
         const points = dataPoints.map(d => {
           const dateIndex = allDates.indexOf(d.date);
           const y = scaleY(parseFloat(d.value));
@@ -197,7 +230,11 @@ const MultiLineChart = ({ treatmentData, treatmentColors, currentDate, min, max,
           return { x: scaleX(dateIndex), y, date: d.date };
         }).filter(p => p !== null);
 
-        if (points.length === 0) return null;
+        // Still show in legend even if no points
+        if (points.length === 0) {
+          console.log(`No points for treatment: ${treatment}`);
+          return null;
+        }
 
         const pathData = points.map((p, i) => {
           return `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`;
@@ -230,12 +267,11 @@ const MultiLineChart = ({ treatmentData, treatmentColors, currentDate, min, max,
         );
       })}
 
-      {/* Legend */}
+      {/* Legend - show all treatments */}
       <g>
-        {Object.keys(treatmentData).map((treatment, idx) => {
+        {Object.entries(treatmentColors).map(([treatment, color], idx) => {
           const x = padding + (idx * 150);
           const y = height - 25;
-          const color = treatmentColors[treatment];
 
           return (
             <g key={treatment}>
@@ -352,10 +388,15 @@ const PresentationMode = ({
       treatmentData[treatment] = [];
     });
 
+    console.log(`Preparing data for ${typeName}, treatments:`, treatmentNames);
+
     // For each date, calculate average per treatment
     sortedDates.forEach(dateObj => {
       const assessment = dateObj.assessments[typeName];
-      if (!assessment) return;
+      if (!assessment) {
+        console.log(`No assessment data for ${typeName} on ${dateObj.date}`);
+        return;
+      }
 
       const treatmentStats = {};
 
@@ -377,6 +418,8 @@ const PresentationMode = ({
         });
       });
 
+      console.log(`Stats for ${dateObj.date}:`, Object.keys(treatmentStats));
+
       // Add data point for each treatment
       Object.entries(treatmentStats).forEach(([treatment, stats]) => {
         const avg = stats.values.reduce((sum, val) => sum + val, 0) / stats.values.length;
@@ -386,6 +429,8 @@ const PresentationMode = ({
         });
       });
     });
+
+    console.log('Final treatment data:', Object.keys(treatmentData).map(t => `${t}: ${treatmentData[t].length} points`));
 
     return treatmentData;
   };
