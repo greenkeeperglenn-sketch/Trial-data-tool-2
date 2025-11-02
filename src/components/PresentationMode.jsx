@@ -93,50 +93,37 @@ const SimpleBarChart = ({ data, min, max, currentDateColor }) => {
   );
 };
 
-// Simple SVG Line Chart Component
-const SimpleLineChart = ({ data, assessmentType, currentDate, min, max, color }) => {
+// Multi-Line Chart Component - One line per treatment
+const MultiLineChart = ({ treatmentData, treatmentColors, currentDate, min, max, allDates }) => {
   const width = 800;
-  const height = 300;
+  const height = 350;
   const padding = 60;
   const chartWidth = width - padding * 2;
-  const chartHeight = height - padding * 2;
+  const chartHeight = height - padding * 2 - 50; // Extra space for legend
 
-  if (!data || data.length === 0) return null;
-
-  // Find min/max values for scaling
-  const values = data.map(d => parseFloat(d.value)).filter(v => !isNaN(v));
-  if (values.length === 0) return null;
+  if (!treatmentData || Object.keys(treatmentData).length === 0) return null;
 
   const dataMin = min;
   const dataMax = max;
   const range = dataMax - dataMin;
 
+  const numDates = allDates.length;
+
   // Scale functions
-  const scaleX = (index) => padding + (index / (data.length - 1)) * chartWidth;
+  const scaleX = (dateIndex) => padding + (dateIndex / (numDates - 1)) * chartWidth;
   const scaleY = (value) => {
     if (isNaN(value)) return null;
-    return height - padding - ((value - dataMin) / range) * chartHeight;
+    return height - padding - 50 - ((value - dataMin) / range) * chartHeight;
   };
 
-  // Create path
-  const points = data.map((d, i) => {
-    const y = scaleY(parseFloat(d.value));
-    if (y === null) return null;
-    return { x: scaleX(i), y, date: d.date };
-  }).filter(p => p !== null);
-
-  const pathData = points.map((p, i) => {
-    return `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`;
-  }).join(' ');
-
   // Find current date index
-  const currentDateIndex = data.findIndex(d => d.date === currentDate);
+  const currentDateIndex = allDates.findIndex(d => d === currentDate);
 
   return (
     <svg width="100%" height={height} viewBox={`0 0 ${width} ${height}`} className="text-gray-300">
       {/* Grid lines */}
       {[0, 0.25, 0.5, 0.75, 1].map(pct => {
-        const y = height - padding - pct * chartHeight;
+        const y = height - padding - 50 - pct * chartHeight;
         const value = (dataMin + pct * range).toFixed(1);
         return (
           <g key={pct}>
@@ -156,18 +143,18 @@ const SimpleLineChart = ({ data, assessmentType, currentDate, min, max, color })
       })}
 
       {/* X-axis labels */}
-      {data.map((d, i) => {
+      {allDates.map((date, i) => {
         const x = scaleX(i);
         return (
           <text
             key={i}
             x={x}
-            y={height - padding + 20}
+            y={height - padding - 30}
             fontSize="11"
             fill="#9ca3af"
             textAnchor="middle"
           >
-            {d.date}
+            {date}
           </text>
         );
       })}
@@ -179,7 +166,7 @@ const SimpleLineChart = ({ data, assessmentType, currentDate, min, max, color })
             x1={scaleX(currentDateIndex)}
             y1={padding}
             x2={scaleX(currentDateIndex)}
-            y2={height - padding}
+            y2={height - padding - 50}
             stroke="#a855f7"
             strokeWidth="3"
           />
@@ -196,25 +183,88 @@ const SimpleLineChart = ({ data, assessmentType, currentDate, min, max, color })
         </g>
       )}
 
-      {/* Line path */}
-      <path
-        d={pathData}
-        fill="none"
-        stroke={color}
-        strokeWidth="3"
-      />
+      {/* Draw line for each treatment */}
+      {Object.entries(treatmentData).map(([treatment, dataPoints]) => {
+        if (dataPoints.length === 0) return null;
 
-      {/* Data points */}
-      {points.map((p, i) => (
-        <circle
-          key={i}
-          cx={p.x}
-          cy={p.y}
-          r="6"
-          fill={color}
-          className="hover:r-8 transition-all cursor-pointer"
-        />
-      ))}
+        const color = treatmentColors[treatment];
+
+        // Create path for this treatment
+        const points = dataPoints.map(d => {
+          const dateIndex = allDates.indexOf(d.date);
+          const y = scaleY(parseFloat(d.value));
+          if (y === null || dateIndex < 0) return null;
+          return { x: scaleX(dateIndex), y, date: d.date };
+        }).filter(p => p !== null);
+
+        if (points.length === 0) return null;
+
+        const pathData = points.map((p, i) => {
+          return `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`;
+        }).join(' ');
+
+        return (
+          <g key={treatment}>
+            {/* Line path */}
+            <path
+              d={pathData}
+              fill="none"
+              stroke={color}
+              strokeWidth="3"
+            />
+
+            {/* Data points */}
+            {points.map((p, i) => (
+              <circle
+                key={i}
+                cx={p.x}
+                cy={p.y}
+                r="5"
+                fill={color}
+                stroke="#1f2937"
+                strokeWidth="2"
+                className="hover:r-7 transition-all cursor-pointer"
+              />
+            ))}
+          </g>
+        );
+      })}
+
+      {/* Legend */}
+      <g>
+        {Object.keys(treatmentData).map((treatment, idx) => {
+          const x = padding + (idx * 150);
+          const y = height - 25;
+          const color = treatmentColors[treatment];
+
+          return (
+            <g key={treatment}>
+              <line
+                x1={x}
+                y1={y}
+                x2={x + 20}
+                y2={y}
+                stroke={color}
+                strokeWidth="3"
+              />
+              <circle
+                cx={x + 10}
+                cy={y}
+                r="4"
+                fill={color}
+              />
+              <text
+                x={x + 25}
+                y={y + 4}
+                fontSize="12"
+                fill="#9ca3af"
+              >
+                {treatment}
+              </text>
+            </g>
+          );
+        })}
+      </g>
     </svg>
   );
 };
@@ -293,22 +343,51 @@ const PresentationMode = ({
 
   const currentNotes = getCurrentNotes();
 
-  // Prepare chart data for a specific assessment type (line chart - all dates)
-  const prepareChartDataForType = (typeName) => {
-    return sortedDates.map(dateObj => {
-      const assessment = dateObj.assessments[typeName];
-      if (assessment) {
-        const values = Object.values(assessment)
-          .filter(v => v.entered && v.value !== '')
-          .map(v => parseFloat(v.value));
+  // Prepare chart data by treatment for line charts (all dates)
+  const prepareLineChartDataByTreatment = (typeName) => {
+    const treatmentData = {};
 
-        if (values.length > 0) {
-          const avg = values.reduce((sum, val) => sum + val, 0) / values.length;
-          return { date: dateObj.date, value: avg.toFixed(1) };
-        }
-      }
-      return { date: dateObj.date, value: null };
-    }).filter(d => d.value !== null);
+    // Initialize data structure for each treatment
+    treatmentNames.forEach(treatment => {
+      treatmentData[treatment] = [];
+    });
+
+    // For each date, calculate average per treatment
+    sortedDates.forEach(dateObj => {
+      const assessment = dateObj.assessments[typeName];
+      if (!assessment) return;
+
+      const treatmentStats = {};
+
+      // Calculate average for each treatment on this date
+      gridLayout.forEach(row => {
+        row.forEach(plot => {
+          if (!plot.isBlank) {
+            const treatment = plot.treatmentName || 'Untreated';
+            const plotData = assessment[plot.id];
+
+            if (plotData?.entered && plotData.value !== '') {
+              if (!treatmentStats[treatment]) {
+                treatmentStats[treatment] = { values: [], count: 0 };
+              }
+              treatmentStats[treatment].values.push(parseFloat(plotData.value));
+              treatmentStats[treatment].count++;
+            }
+          }
+        });
+      });
+
+      // Add data point for each treatment
+      Object.entries(treatmentStats).forEach(([treatment, stats]) => {
+        const avg = stats.values.reduce((sum, val) => sum + val, 0) / stats.values.length;
+        treatmentData[treatment].push({
+          date: dateObj.date,
+          value: avg.toFixed(1)
+        });
+      });
+    });
+
+    return treatmentData;
   };
 
   // Prepare bar chart data by treatment for current date
@@ -361,8 +440,6 @@ const PresentationMode = ({
       setCurrentSlide(currentSlide - 1);
     }
   };
-
-  const colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 text-white">
@@ -543,25 +620,27 @@ const PresentationMode = ({
         <div className="bg-gray-800 rounded-xl p-6 shadow-2xl">
           <h3 className="text-2xl font-bold mb-6 flex items-center gap-2">
             <TrendingUp size={24} className="text-orange-400" />
-            Assessment Trends
+            Treatment Trends Over Time
           </h3>
 
           <div className="space-y-8">
-            {config.assessmentTypes.map((type, idx) => {
-              const chartData = prepareChartDataForType(type.name);
-              if (chartData.length === 0) return null;
+            {config.assessmentTypes.map((type) => {
+              const treatmentLineData = prepareLineChartDataByTreatment(type.name);
+              if (Object.keys(treatmentLineData).length === 0) return null;
+
+              const allDates = sortedDates.map(d => d.date);
 
               return (
                 <div key={type.name} className="bg-gray-700 rounded-lg p-6">
                   <h4 className="text-xl font-semibold mb-4 text-center text-gray-200">{type.name}</h4>
                   <div className="flex justify-center">
-                    <SimpleLineChart
-                      data={chartData}
-                      assessmentType={type.name}
+                    <MultiLineChart
+                      treatmentData={treatmentLineData}
+                      treatmentColors={treatmentColors}
                       currentDate={currentDate?.date}
                       min={type.min}
                       max={type.max}
-                      color={colors[idx % colors.length]}
+                      allDates={allDates}
                     />
                   </div>
                 </div>
