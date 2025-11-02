@@ -182,23 +182,23 @@ const DataEntry = ({
         </div>
         
         <div className="flex gap-2 flex-wrap">
-          <button 
-            onClick={exportToCSV} 
-            className="flex items-center gap-2 px-3 py-2 bg-green-600 text-white rounded text-sm hover:bg-green-700 transition"
+          <button
+            onClick={exportToCSV}
+            className="flex items-center gap-2 px-3 py-2 bg-stri-green-success text-white rounded text-sm hover:bg-stri-green-growth transition"
           >
             <Download size={16} /> Export Data
           </button>
-          
-          <button 
-            onClick={exportSummaryCSV} 
-            className="flex items-center gap-2 px-3 py-2 bg-green-600 text-white rounded text-sm hover:bg-green-700 transition"
+
+          <button
+            onClick={exportSummaryCSV}
+            className="flex items-center gap-2 px-3 py-2 bg-stri-green-success text-white rounded text-sm hover:bg-stri-green-growth transition"
           >
             <Download size={16} /> Summary
           </button>
-          
-          <button 
-            onClick={onExportJSON} 
-            className="flex items-center gap-2 px-3 py-2 bg-purple-600 text-white rounded text-sm hover:bg-purple-700 transition"
+
+          <button
+            onClick={onExportJSON}
+            className="flex items-center gap-2 px-3 py-2 bg-stri-blue-research text-white rounded text-sm hover:bg-stri-blue-info transition"
           >
             <Download size={16} /> Backup Trial
           </button>
@@ -239,7 +239,7 @@ const DataEntry = ({
                 onClick={() => setShowInputDropdown(!showInputDropdown)}
                 className={`flex items-center gap-2 px-4 py-2 rounded transition ${
                   ['field', 'table', 'notes'].includes(viewMode)
-                    ? 'bg-blue-600 text-white'
+                    ? 'bg-stri-teal text-white'
                     : 'bg-gray-200'
                 }`}
               >
@@ -276,7 +276,7 @@ const DataEntry = ({
             <button
               onClick={() => setViewMode('analysis')}
               className={`flex items-center gap-2 px-4 py-2 rounded transition ${
-                viewMode === 'analysis' ? 'bg-blue-600 text-white' : 'bg-gray-200'
+                viewMode === 'analysis' ? 'bg-stri-teal text-white' : 'bg-gray-200'
               }`}
             >
               <BarChart3 size={18} /> Analysis
@@ -287,7 +287,7 @@ const DataEntry = ({
           <button
             onClick={() => setViewMode('imagery')}
             className={`flex items-center gap-2 px-4 py-2 rounded transition ${
-              viewMode === 'imagery' ? 'bg-blue-600 text-white' : 'bg-gray-200'
+              viewMode === 'imagery' ? 'bg-stri-teal text-white' : 'bg-gray-200'
             }`}
           >
             <Camera size={18} /> Imagery
@@ -298,7 +298,7 @@ const DataEntry = ({
             <button
               onClick={() => setViewMode('presentation')}
               className={`flex items-center gap-2 px-4 py-2 rounded transition ${
-                viewMode === 'presentation' ? 'bg-purple-600 text-white' : 'bg-gray-200'
+                viewMode === 'presentation' ? 'bg-stri-blue-info text-white' : 'bg-gray-200'
               }`}
             >
               <Presentation size={18} /> Presentation

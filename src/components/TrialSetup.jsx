@@ -129,7 +129,7 @@ const TrialSetup = ({ config, onConfigChange, onNext, onBack }) => {
                     type="text"
                     value={type.name}
                     onChange={(e) => updateAssessmentType(idx, 'name', e.target.value)}
-                    className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="w-full p-2 border rounded focus:ring-2 focus:ring-stri-teal focus:border-stri-teal"
                     placeholder="Assessment name"
                   />
                 </div>
@@ -142,7 +142,7 @@ const TrialSetup = ({ config, onConfigChange, onNext, onBack }) => {
                     step="0.1"
                     value={type.min}
                     onChange={(e) => updateAssessmentType(idx, 'min', parseFloat(e.target.value) || 0)}
-                    className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="w-full p-2 border rounded focus:ring-2 focus:ring-stri-teal focus:border-stri-teal"
                   />
                 </div>
                 
@@ -154,7 +154,7 @@ const TrialSetup = ({ config, onConfigChange, onNext, onBack }) => {
                     step="0.1"
                     value={type.max}
                     onChange={(e) => updateAssessmentType(idx, 'max', parseFloat(e.target.value) || 10)}
-                    className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="w-full p-2 border rounded focus:ring-2 focus:ring-stri-teal focus:border-stri-teal"
                   />
                 </div>
                 
@@ -171,7 +171,7 @@ const TrialSetup = ({ config, onConfigChange, onNext, onBack }) => {
             {/* Add Assessment Type Button */}
             <button
               onClick={addAssessmentType}
-              className="flex items-center gap-2 text-blue-600 hover:bg-blue-50 p-2 rounded transition"
+              className="flex items-center gap-2 text-stri-teal hover:bg-gray-50 p-2 rounded transition"
             >
               <Plus size={20} /> Add Assessment Type
             </button>
@@ -179,9 +179,9 @@ const TrialSetup = ({ config, onConfigChange, onNext, onBack }) => {
         </div>
 
         {/* Generate Layout Button */}
-        <button 
-          onClick={onNext} 
-          className="w-full bg-blue-600 text-white py-3 rounded-lg font-medium hover:bg-blue-700 transition"
+        <button
+          onClick={onNext}
+          className="w-full bg-stri-teal text-white py-3 rounded-lg font-medium hover:bg-stri-teal-light transition"
         >
           Generate Trial Layout →
         </button>

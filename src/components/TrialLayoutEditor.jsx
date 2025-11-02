@@ -179,17 +179,17 @@ const TrialLayoutEditor = ({
 
       {/* Controls */}
       <div className="bg-white p-4 rounded-lg shadow mb-4 flex gap-4 flex-wrap items-center">
-        <button 
+        <button
           onClick={randomizeAllBlocks}
-          className="flex items-center gap-2 px-4 py-2 bg-purple-500 hover:bg-purple-600 text-white rounded transition"
+          className="flex items-center gap-2 px-4 py-2 bg-stri-blue-info hover:bg-stri-teal text-white rounded transition"
         >
           <Shuffle size={20} />
           Randomize All Blocks
         </button>
-        
-        <button 
+
+        <button
           onClick={onFinalize}
-          className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded transition ml-auto"
+          className="flex items-center gap-2 px-4 py-2 bg-stri-green-success hover:bg-stri-green-growth text-white rounded transition ml-auto"
         >
           <Lock size={20} /> Finalize & Lock Layout
         </button>

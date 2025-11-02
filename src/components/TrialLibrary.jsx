@@ -18,19 +18,19 @@ const TrialLibrary = ({ trials, onCreateNew, onLoadTrial, onDeleteTrial, onImpor
       <div className="mb-6 flex gap-2 flex-wrap">
         <button
           onClick={onCreateNew}
-          className="flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+          className="flex items-center gap-2 px-6 py-3 bg-stri-teal text-white rounded-lg hover:bg-stri-teal-light transition"
         >
           <Plus size={20} /> Create New Trial
         </button>
 
         <button
           onClick={onLoadDemo}
-          className="flex items-center gap-2 px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition"
+          className="flex items-center gap-2 px-6 py-3 bg-stri-blue-research text-white rounded-lg hover:bg-stri-blue-info transition"
         >
           <Play size={20} /> Load Demo Trial
         </button>
 
-        <label className="flex items-center gap-2 px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 cursor-pointer transition">
+        <label className="flex items-center gap-2 px-6 py-3 bg-stri-green-success text-white rounded-lg hover:bg-stri-green-growth cursor-pointer transition">
           <Upload size={20} /> Import Trial (JSON)
           <input
             type="file"
@@ -42,9 +42,9 @@ const TrialLibrary = ({ trials, onCreateNew, onLoadTrial, onDeleteTrial, onImpor
       </div>
 
       {/* Info Box */}
-      <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+      <div className="mb-4 p-4 bg-blue-50 border-l-4 border-stri-blue-info rounded-lg">
         <p className="text-sm text-gray-700">
-          <strong>💡 Tip:</strong> Use "Backup Trial" inside each trial to export as JSON. 
+          <strong>💡 Tip:</strong> Use "Backup Trial" inside each trial to export as JSON.
           You can re-import here to restore data or share with colleagues.
         </p>
       </div>
@@ -90,9 +90,9 @@ const TrialLibrary = ({ trials, onCreateNew, onLoadTrial, onDeleteTrial, onImpor
               </div>
 
               {/* Open Button */}
-              <button 
-                onClick={() => onLoadTrial(trial.id)} 
-                className="w-full px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded transition"
+              <button
+                onClick={() => onLoadTrial(trial.id)}
+                className="w-full px-4 py-2 bg-stri-teal text-white hover:bg-stri-teal-light rounded transition font-semibold"
               >
                 Open Trial
               </button>

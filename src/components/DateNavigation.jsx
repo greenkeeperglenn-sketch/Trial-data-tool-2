@@ -27,12 +27,12 @@ const DateNavigation = ({
               type="date"
               value={newDate}
               onChange={(e) => setNewDate(e.target.value)}
-              className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="w-full p-2 border rounded focus:ring-2 focus:ring-stri-teal focus:border-stri-teal"
             />
           </div>
           <button 
             onClick={handleAddDate} 
-            className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 flex items-center gap-2 transition"
+            className="px-4 py-2 bg-stri-green-success text-white rounded hover:bg-stri-green-growth flex items-center gap-2 transition"
           >
             <Plus size={20} /> Add Date
           </button>
@@ -52,12 +52,12 @@ const DateNavigation = ({
               type="date"
               value={newDate}
               onChange={(e) => setNewDate(e.target.value)}
-              className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="w-full p-2 border rounded focus:ring-2 focus:ring-stri-teal focus:border-stri-teal"
             />
           </div>
           <button 
             onClick={handleAddDate} 
-            className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 flex items-center gap-2 transition"
+            className="px-4 py-2 bg-stri-green-success text-white rounded hover:bg-stri-green-growth flex items-center gap-2 transition"
           >
             <Plus size={20} /> Add Date
           </button>
@@ -73,7 +73,7 @@ const DateNavigation = ({
             className={`p-2 rounded transition ${
               currentDateIndex === 0 
                 ? 'text-gray-300 cursor-not-allowed' 
-                : 'text-blue-600 hover:bg-blue-50'
+                : 'text-stri-teal hover:bg-gray-50'
             }`}
           >
             <ChevronLeft size={24} />
@@ -92,7 +92,7 @@ const DateNavigation = ({
             className={`p-2 rounded transition ${
               currentDateIndex === assessmentDates.length - 1
                 ? 'text-gray-300 cursor-not-allowed'
-                : 'text-blue-600 hover:bg-blue-50'
+                : 'text-stri-teal hover:bg-gray-50'
             }`}
           >
             <ChevronRight size={24} />

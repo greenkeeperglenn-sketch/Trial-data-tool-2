@@ -97,7 +97,7 @@ const DataEntryField = ({
           onMouseLeave={() => setShowTreatments(false)}
           onTouchStart={() => setShowTreatments(true)}
           onTouchEnd={() => setShowTreatments(false)}
-          className="flex-1 px-4 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition"
+          className="flex-1 px-4 py-3 bg-stri-blue-info text-white rounded-lg hover:bg-stri-teal transition"
         >
           <Eye size={20} className="inline mr-2" /> Hold to Show Treatments
         </button>

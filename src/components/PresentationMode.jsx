@@ -202,7 +202,7 @@ const MultiLineChart = ({ treatmentData, treatmentColors, currentDate, min, max,
             y1={padding}
             x2={currentDateX}
             y2={height - padding - 50}
-            stroke="#a855f7"
+            stroke="#00BFB8"
             strokeWidth="3"
           />
           <text
@@ -210,7 +210,7 @@ const MultiLineChart = ({ treatmentData, treatmentColors, currentDate, min, max,
             y={padding - 10}
             fontSize="14"
             fontWeight="bold"
-            fill="#a855f7"
+            fill="#00BFB8"
             textAnchor="middle"
           >
             Current ({currentDate})
@@ -340,16 +340,26 @@ const PresentationMode = ({
 
   const treatmentGroups = getTreatmentGroups();
 
-  // Create consistent color mapping for treatments
+  // Create consistent color mapping for treatments using STRI brand colors
   const treatmentNames = Object.keys(treatmentGroups).sort();
   const treatmentColors = {};
-  const colorPalette = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16'];
+  // STRI Brand Color Palette for treatments
+  const colorPalette = [
+    '#00BFB8', // STRI Teal - Primary
+    '#43B12E', // STRI Green Growth - Design
+    '#00B6ED', // STRI Blue Info - Plan
+    '#E2E200', // STRI Yellow - Build/Attention
+    '#8ED8B2', // STRI Green Success - Environment
+    '#0072BC', // STRI Blue Research
+    '#71DCDF', // STRI Teal Light
+    '#4E6584'  // STRI Blue Deep
+  ];
   treatmentNames.forEach((name, idx) => {
     treatmentColors[name] = colorPalette[idx % colorPalette.length];
   });
 
-  // Color for current date across all charts
-  const currentDateColor = '#a855f7'; // Purple
+  // Color for current date across all charts - STRI Teal
+  const currentDateColor = '#00BFB8'; // STRI Primary Teal
 
   // Get photos for current date
   const getPhotosForDate = (date) => {
@@ -492,7 +502,7 @@ const PresentationMode = ({
       <div className="bg-gray-800 border-b border-gray-700 sticky top-0 z-10 shadow-lg">
         <div className="max-w-7xl mx-auto p-6">
           {/* Trial Title */}
-          <h1 className="text-3xl font-bold mb-4 text-center bg-gradient-to-r from-blue-400 to-purple-400 bg-clip-text text-transparent">
+          <h1 className="text-3xl font-bold mb-4 text-center bg-gradient-to-r from-stri-teal to-stri-blue-info bg-clip-text text-transparent">
             {config.trialName}
           </h1>
 
@@ -501,7 +511,7 @@ const PresentationMode = ({
             <button
               onClick={prevSlide}
               disabled={currentSlide === 0}
-              className="p-2 rounded-lg bg-gray-700 hover:bg-gray-600 disabled:opacity-30 disabled:cursor-not-allowed transition"
+              className="p-2 rounded-lg bg-stri-blue-deep hover:bg-stri-blue-research disabled:opacity-30 disabled:cursor-not-allowed transition"
             >
               <ChevronLeft size={24} />
             </button>
@@ -513,7 +523,7 @@ const PresentationMode = ({
                   onClick={() => setCurrentSlide(idx)}
                   className={`px-4 py-2 rounded-lg transition whitespace-nowrap ${
                     idx === currentSlide
-                      ? 'bg-purple-600 shadow-lg scale-110'
+                      ? 'bg-stri-teal shadow-lg scale-110'
                       : idx < currentSlide
                       ? 'bg-gray-600 opacity-60'
                       : 'bg-gray-700 opacity-40'
@@ -528,7 +538,7 @@ const PresentationMode = ({
             <button
               onClick={nextSlide}
               disabled={currentSlide === sortedDates.length - 1}
-              className="p-2 rounded-lg bg-gray-700 hover:bg-gray-600 disabled:opacity-30 disabled:cursor-not-allowed transition"
+              className="p-2 rounded-lg bg-stri-blue-deep hover:bg-stri-blue-research disabled:opacity-30 disabled:cursor-not-allowed transition"
             >
               <ChevronRight size={24} />
             </button>
@@ -552,7 +562,7 @@ const PresentationMode = ({
         {/* Bar Charts by Treatment - Current Date */}
         <div className="bg-gray-800 rounded-xl p-6 shadow-2xl">
           <h3 className="text-2xl font-bold mb-6 flex items-center gap-2">
-            <TrendingUp size={24} className="text-blue-400" />
+            <TrendingUp size={24} className="text-stri-teal" />
             Results by Treatment (Current Date)
           </h3>
 
@@ -582,7 +592,7 @@ const PresentationMode = ({
         {Object.keys(currentPhotos).length > 0 && (
           <div className="bg-gray-800 rounded-xl p-6 shadow-2xl">
             <h3 className="text-2xl font-bold mb-6 flex items-center gap-2">
-              <ImageIcon size={24} className="text-blue-400" />
+              <ImageIcon size={24} className="text-stri-teal" />
               Plot Images by Treatment
             </h3>
 
@@ -647,13 +657,13 @@ const PresentationMode = ({
         {currentNotes.length > 0 && (
           <div className="bg-gray-800 rounded-xl p-6 shadow-2xl">
             <h3 className="text-2xl font-bold mb-6 flex items-center gap-2">
-              <FileText size={24} className="text-green-400" />
+              <FileText size={24} className="text-stri-green-success" />
               Notes
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {currentNotes.map(({ plotId, note }) => (
                 <div key={plotId} className="bg-gray-700 rounded-lg p-4">
-                  <div className="font-semibold text-blue-400 mb-2">Plot {plotId}</div>
+                  <div className="font-semibold text-stri-teal mb-2">Plot {plotId}</div>
                   <p className="text-gray-300 text-sm">{note}</p>
                 </div>
               ))}
@@ -664,7 +674,7 @@ const PresentationMode = ({
         {/* Graphs Section - One per Assessment Type */}
         <div className="bg-gray-800 rounded-xl p-6 shadow-2xl">
           <h3 className="text-2xl font-bold mb-6 flex items-center gap-2">
-            <TrendingUp size={24} className="text-orange-400" />
+            <TrendingUp size={24} className="text-stri-blue-info" />
             Treatment Trends Over Time
           </h3>
 
@@ -699,7 +709,7 @@ const PresentationMode = ({
           <button
             onClick={prevSlide}
             disabled={currentSlide === 0}
-            className="px-6 py-3 rounded-lg bg-gray-700 hover:bg-gray-600 disabled:opacity-30 disabled:cursor-not-allowed transition flex items-center gap-2"
+            className="px-6 py-3 rounded-lg bg-stri-blue-deep hover:bg-stri-blue-research disabled:opacity-30 disabled:cursor-not-allowed transition flex items-center gap-2"
           >
             <ChevronLeft size={20} />
             Previous
@@ -712,7 +722,7 @@ const PresentationMode = ({
           <button
             onClick={nextSlide}
             disabled={currentSlide === sortedDates.length - 1}
-            className="px-6 py-3 rounded-lg bg-gray-700 hover:bg-gray-600 disabled:opacity-30 disabled:cursor-not-allowed transition flex items-center gap-2"
+            className="px-6 py-3 rounded-lg bg-stri-blue-deep hover:bg-stri-blue-research disabled:opacity-30 disabled:cursor-not-allowed transition flex items-center gap-2"
           >
             Next
             <ChevronRight size={20} />
