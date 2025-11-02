@@ -1,6 +1,98 @@
 import React, { useState } from 'react';
 import { ChevronLeft, ChevronRight, Calendar, Image as ImageIcon, FileText, TrendingUp } from 'lucide-react';
 
+// Simple SVG Bar Chart Component by Treatment
+const SimpleBarChart = ({ data, min, max, currentDateColor }) => {
+  const width = 600;
+  const height = 300;
+  const padding = 60;
+  const chartWidth = width - padding * 2;
+  const chartHeight = height - padding * 2;
+
+  if (!data || data.length === 0) return null;
+
+  const dataMin = min;
+  const dataMax = max;
+  const range = dataMax - dataMin;
+
+  const barWidth = chartWidth / data.length * 0.7;
+  const barSpacing = chartWidth / data.length;
+
+  return (
+    <svg width="100%" height={height} viewBox={`0 0 ${width} ${height}`}>
+      {/* Grid lines */}
+      {[0, 0.25, 0.5, 0.75, 1].map(pct => {
+        const y = height - padding - pct * chartHeight;
+        const value = (dataMin + pct * range).toFixed(1);
+        return (
+          <g key={pct}>
+            <line
+              x1={padding}
+              y1={y}
+              x2={width - padding}
+              y2={y}
+              stroke="#374151"
+              strokeDasharray="3 3"
+            />
+            <text x={padding - 10} y={y + 5} fontSize="12" fill="#9ca3af" textAnchor="end">
+              {value}
+            </text>
+          </g>
+        );
+      })}
+
+      {/* Bars */}
+      {data.map((item, idx) => {
+        const x = padding + idx * barSpacing + (barSpacing - barWidth) / 2;
+        const barHeight = (parseFloat(item.value) - dataMin) / range * chartHeight;
+        const y = height - padding - barHeight;
+
+        return (
+          <g key={idx}>
+            <rect
+              x={x}
+              y={y}
+              width={barWidth}
+              height={barHeight}
+              fill={item.color}
+              className="hover:opacity-80 transition-opacity"
+            />
+            <text
+              x={x + barWidth / 2}
+              y={y - 5}
+              fontSize="14"
+              fontWeight="bold"
+              fill="#fff"
+              textAnchor="middle"
+            >
+              {item.value}
+            </text>
+            <text
+              x={x + barWidth / 2}
+              y={height - padding + 20}
+              fontSize="11"
+              fill="#9ca3af"
+              textAnchor="middle"
+              className="max-w-20"
+            >
+              {item.treatment}
+            </text>
+            <text
+              x={x + barWidth / 2}
+              y={height - padding + 35}
+              fontSize="9"
+              fill="#6b7280"
+              textAnchor="middle"
+            >
+              (n={item.count})
+            </text>
+          </g>
+        );
+      })}
+    </svg>
+  );
+};
+
 // Simple SVG Line Chart Component
 const SimpleLineChart = ({ data, assessmentType, currentDate, min, max, color }) => {
   const width = 800;
@@ -162,6 +254,17 @@ const PresentationMode = ({
 
   const treatmentGroups = getTreatmentGroups();
 
+  // Create consistent color mapping for treatments
+  const treatmentNames = Object.keys(treatmentGroups).sort();
+  const treatmentColors = {};
+  const colorPalette = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16'];
+  treatmentNames.forEach((name, idx) => {
+    treatmentColors[name] = colorPalette[idx % colorPalette.length];
+  });
+
+  // Color for current date across all charts
+  const currentDateColor = '#a855f7'; // Purple
+
   // Get photos for current date
   const getPhotosForDate = (date) => {
     const datePhotos = {};
@@ -190,7 +293,7 @@ const PresentationMode = ({
 
   const currentNotes = getCurrentNotes();
 
-  // Prepare chart data for a specific assessment type
+  // Prepare chart data for a specific assessment type (line chart - all dates)
   const prepareChartDataForType = (typeName) => {
     return sortedDates.map(dateObj => {
       const assessment = dateObj.assessments[typeName];
@@ -206,6 +309,45 @@ const PresentationMode = ({
       }
       return { date: dateObj.date, value: null };
     }).filter(d => d.value !== null);
+  };
+
+  // Prepare bar chart data by treatment for current date
+  const prepareBarChartDataForType = (typeName) => {
+    if (!currentDate) return [];
+
+    const assessment = currentDate.assessments[typeName];
+    if (!assessment) return [];
+
+    const treatmentStats = {};
+
+    // Calculate average for each treatment
+    gridLayout.forEach(row => {
+      row.forEach(plot => {
+        if (!plot.isBlank) {
+          const treatment = plot.treatmentName || 'Untreated';
+          const plotData = assessment[plot.id];
+
+          if (plotData?.entered && plotData.value !== '') {
+            if (!treatmentStats[treatment]) {
+              treatmentStats[treatment] = { values: [], count: 0 };
+            }
+            treatmentStats[treatment].values.push(parseFloat(plotData.value));
+            treatmentStats[treatment].count++;
+          }
+        }
+      });
+    });
+
+    // Convert to array with averages
+    return Object.entries(treatmentStats).map(([treatment, stats]) => {
+      const avg = stats.values.reduce((sum, val) => sum + val, 0) / stats.values.length;
+      return {
+        treatment,
+        value: avg.toFixed(1),
+        count: stats.count,
+        color: treatmentColors[treatment]
+      };
+    }).sort((a, b) => a.treatment.localeCompare(b.treatment));
   };
 
   const nextSlide = () => {
@@ -285,6 +427,35 @@ const PresentationMode = ({
           <p className="text-gray-400">Assessment Data</p>
         </div>
 
+        {/* Bar Charts by Treatment - Current Date */}
+        <div className="bg-gray-800 rounded-xl p-6 shadow-2xl">
+          <h3 className="text-2xl font-bold mb-6 flex items-center gap-2">
+            <TrendingUp size={24} className="text-blue-400" />
+            Results by Treatment (Current Date)
+          </h3>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {config.assessmentTypes.map((type) => {
+              const barData = prepareBarChartDataForType(type.name);
+              if (barData.length === 0) return null;
+
+              return (
+                <div key={type.name} className="bg-gray-700 rounded-lg p-4">
+                  <h4 className="text-lg font-semibold mb-3 text-center text-gray-200">{type.name}</h4>
+                  <div className="flex justify-center">
+                    <SimpleBarChart
+                      data={barData}
+                      min={type.min}
+                      max={type.max}
+                      currentDateColor={currentDateColor}
+                    />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
         {/* Photos Section - Grouped by Treatment */}
         {Object.keys(currentPhotos).length > 0 && (
           <div className="bg-gray-800 rounded-xl p-6 shadow-2xl">
@@ -293,36 +464,60 @@ const PresentationMode = ({
               Plot Images by Treatment
             </h3>
 
-            {Object.entries(treatmentGroups).map(([treatment, plots]) => {
-              const treatmentPhotos = plots.filter(plot => currentPhotos[plot.id]);
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
+              {Object.entries(treatmentGroups).map(([treatment, plots]) => {
+                const treatmentPhotos = plots.filter(plot => currentPhotos[plot.id]);
 
-              if (treatmentPhotos.length === 0) return null;
+                if (treatmentPhotos.length === 0) return null;
 
-              return (
-                <div key={treatment} className="mb-8 last:mb-0">
-                  <h4 className="text-xl font-semibold mb-4 text-purple-400">{treatment}</h4>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
-                    {treatmentPhotos.map(plot => {
-                      const plotPhotos = currentPhotos[plot.id];
-                      if (!plotPhotos || plotPhotos.length === 0) return null;
+                const treatmentColor = treatmentColors[treatment];
 
-                      return (
-                        <div key={plot.id} className="bg-gray-700 rounded-lg overflow-hidden shadow-lg hover:shadow-2xl transition transform hover:scale-105">
-                          <img
-                            src={plotPhotos[0]}
-                            alt={plot.id}
-                            className="w-full aspect-square object-cover"
-                          />
-                          <div className="p-2 text-center">
-                            <div className="font-medium text-sm">{plot.id}</div>
+                return (
+                  <div key={treatment} className="space-y-4">
+                    <div
+                      className="text-center font-bold text-lg py-2 rounded-lg"
+                      style={{
+                        backgroundColor: `${treatmentColor}30`,
+                        borderLeft: `4px solid ${treatmentColor}`,
+                        borderRight: `4px solid ${treatmentColor}`
+                      }}
+                    >
+                      {treatment}
+                    </div>
+
+                    <div className="space-y-4">
+                      {treatmentPhotos.map(plot => {
+                        const plotPhotos = currentPhotos[plot.id];
+                        if (!plotPhotos || plotPhotos.length === 0) return null;
+
+                        return (
+                          <div
+                            key={plot.id}
+                            className="rounded-lg overflow-hidden shadow-lg hover:shadow-2xl transition transform hover:scale-105"
+                            style={{
+                              border: `4px solid ${treatmentColor}`,
+                              backgroundColor: treatmentColor
+                            }}
+                          >
+                            <img
+                              src={plotPhotos[0]}
+                              alt={plot.id}
+                              className="w-full aspect-square object-cover"
+                            />
+                            <div
+                              className="p-2 text-center font-semibold text-white"
+                              style={{ backgroundColor: treatmentColor }}
+                            >
+                              {plot.id}
+                            </div>
                           </div>
-                        </div>
-                      );
-                    })}
+                        );
+                      })}
+                    </div>
                   </div>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
           </div>
         )}
 
