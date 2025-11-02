@@ -1,18 +1,36 @@
 import React, { useState, useEffect } from 'react';
+import { Loader } from 'lucide-react';
 
-// Import components (we'll create these next)
+// Import components
+import Auth from './components/Auth';
 import TrialLibrary from './components/TrialLibrary';
 import TrialSetup from './components/TrialSetup';
 import TrialLayoutEditor from './components/TrialLayoutEditor';
 import DataEntry from './components/DataEntry';
 
+// Import Supabase services
+import { supabase } from './services/supabase';
+import {
+  getAllTrials,
+  createTrial,
+  updateTrial,
+  deleteTrial as deleteTrialDB,
+  migrateFromLocalStorage
+} from './services/database';
+
 const App = () => {
+  // Authentication state
+  const [user, setUser] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
+
   // Navigation state
   const [step, setStep] = useState('library'); // 'library', 'setup', 'layoutBuilder', 'entry'
   const [currentTrialId, setCurrentTrialId] = useState(null);
 
   // Data state
   const [trials, setTrials] = useState({});
+  const [trialsLoading, setTrialsLoading] = useState(false);
+
   const [config, setConfig] = useState({
     trialName: '',
     numBlocks: 4,
@@ -23,7 +41,7 @@ const App = () => {
       { name: 'Turf Color', min: 1, max: 10 }
     ]
   });
-  
+
   const [gridLayout, setGridLayout] = useState([]);
   const [orientation, setOrientation] = useState(0);
   const [layoutLocked, setLayoutLocked] = useState(false);
@@ -31,25 +49,79 @@ const App = () => {
   const [photos, setPhotos] = useState({});
   const [notes, setNotes] = useState({});
 
-  // Load trials from localStorage
+  // =====================================================
+  // AUTHENTICATION MANAGEMENT
+  // =====================================================
+
+  // Check for existing session on mount
   useEffect(() => {
-    const savedTrials = localStorage.getItem('trials');
-    if (savedTrials) {
-      setTrials(JSON.parse(savedTrials));
-    }
+    checkUser();
+
+    // Listen for auth state changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (_event, session) => {
+        setUser(session?.user ?? null);
+        if (session?.user) {
+          loadTrialsFromDatabase();
+        } else {
+          setTrials({});
+        }
+      }
+    );
+
+    return () => subscription.unsubscribe();
   }, []);
 
-  // Save trials to localStorage (database-ready structure)
-  useEffect(() => {
-    if (Object.keys(trials).length > 0) {
-      localStorage.setItem('trials', JSON.stringify(trials));
-    }
-  }, [trials]);
+  const checkUser = async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      setUser(session?.user ?? null);
 
-  // Auto-save current trial
-  const saveCurrentTrial = () => {
+      if (session?.user) {
+        await loadTrialsFromDatabase();
+        await checkForLocalStorageMigration();
+      }
+    } catch (error) {
+      console.error('Error checking user:', error);
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  const handleSignOut = async () => {
+    try {
+      await supabase.auth.signOut();
+      setUser(null);
+      setTrials({});
+      setStep('library');
+    } catch (error) {
+      console.error('Error signing out:', error);
+      alert('Error signing out. Please try again.');
+    }
+  };
+
+  // =====================================================
+  // DATABASE OPERATIONS
+  // =====================================================
+
+  // Load all trials from database
+  const loadTrialsFromDatabase = async () => {
+    setTrialsLoading(true);
+    try {
+      const dbTrials = await getAllTrials();
+      setTrials(dbTrials);
+    } catch (error) {
+      console.error('Error loading trials:', error);
+      alert('Error loading trials from database');
+    } finally {
+      setTrialsLoading(false);
+    }
+  };
+
+  // Auto-save current trial to database
+  const saveCurrentTrial = async () => {
     if (!currentTrialId) return;
-    
+
     const trialData = {
       id: currentTrialId,
       name: config.trialName,
@@ -63,21 +135,36 @@ const App = () => {
       lastModified: new Date().toISOString(),
       created: trials[currentTrialId]?.created || new Date().toISOString()
     };
-    
-    setTrials(prev => ({ ...prev, [currentTrialId]: trialData }));
+
+    try {
+      const updatedTrial = await updateTrial(currentTrialId, trialData);
+      setTrials(prev => ({ ...prev, [currentTrialId]: updatedTrial }));
+    } catch (error) {
+      console.error('Error saving trial:', error);
+      // Silently fail on auto-save errors (user can manually save)
+    }
   };
 
-  // Auto-save when data changes
+  // Auto-save when data changes (debounced)
   useEffect(() => {
-    if (currentTrialId && gridLayout.length > 0) {
-      saveCurrentTrial();
+    if (currentTrialId && gridLayout.length > 0 && user) {
+      const timeout = setTimeout(() => {
+        saveCurrentTrial();
+      }, 1000); // Debounce 1 second
+
+      return () => clearTimeout(timeout);
     }
   }, [config, gridLayout, orientation, layoutLocked, assessmentDates, photos, notes]);
 
+  // =====================================================
+  // TRIAL CRUD OPERATIONS
+  // =====================================================
+
   // Create new trial
-  const createNewTrial = () => {
-    const id = Date.now().toString();
-    setCurrentTrialId(id);
+  const createNewTrial = async () => {
+    const tempId = `temp-${Date.now()}`;
+    setCurrentTrialId(tempId);
+
     setConfig({
       trialName: 'New Trial',
       numBlocks: 4,
@@ -97,11 +184,37 @@ const App = () => {
     setStep('setup');
   };
 
+  // Finalize new trial (save to database)
+  const finalizeNewTrial = async () => {
+    try {
+      const trialData = {
+        id: currentTrialId,
+        name: config.trialName,
+        config,
+        gridLayout,
+        orientation,
+        layoutLocked,
+        assessmentDates,
+        photos,
+        notes,
+        created: new Date().toISOString(),
+        lastModified: new Date().toISOString()
+      };
+
+      const newTrial = await createTrial(trialData);
+      setCurrentTrialId(newTrial.id);
+      setTrials(prev => ({ ...prev, [newTrial.id]: newTrial }));
+    } catch (error) {
+      console.error('Error creating trial:', error);
+      alert('Error creating trial. Please try again.');
+    }
+  };
+
   // Load existing trial
   const loadTrial = (trialId) => {
     const trial = trials[trialId];
     if (!trial) return;
-    
+
     setCurrentTrialId(trialId);
     setConfig(trial.config);
     setGridLayout(trial.gridLayout || []);
@@ -114,21 +227,27 @@ const App = () => {
   };
 
   // Delete trial
-  const deleteTrial = (trialId) => {
-    if (confirm('Delete this trial? This cannot be undone.')) {
+  const handleDeleteTrial = async (trialId) => {
+    if (!confirm('Delete this trial? This cannot be undone.')) return;
+
+    try {
+      await deleteTrialDB(trialId);
       setTrials(prev => {
         const newTrials = { ...prev };
         delete newTrials[trialId];
         return newTrials;
       });
+    } catch (error) {
+      console.error('Error deleting trial:', error);
+      alert('Error deleting trial. Please try again.');
     }
   };
 
-  // Export trial as JSON (database-ready format)
+  // Export trial as JSON
   const exportTrialJSON = () => {
     const trial = trials[currentTrialId];
     if (!trial) return;
-    
+
     const dataStr = JSON.stringify(trial, null, 2);
     const blob = new Blob([dataStr], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -140,20 +259,21 @@ const App = () => {
   };
 
   // Import trial from JSON
-  const importTrialJSON = (e) => {
+  const importTrialJSON = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
     const reader = new FileReader();
-    reader.onload = (event) => {
+    reader.onload = async (event) => {
       try {
         const imported = JSON.parse(event.target.result);
-        const newId = Date.now().toString();
-        imported.id = newId;
-        imported.lastModified = new Date().toISOString();
-        setTrials(prev => ({ ...prev, [newId]: imported }));
+
+        // Create in database
+        const newTrial = await createTrial(imported);
+        setTrials(prev => ({ ...prev, [newTrial.id]: newTrial }));
         alert('Trial imported successfully!');
       } catch (err) {
+        console.error('Error importing trial:', err);
         alert('Error importing trial. Check file format.');
       }
     };
@@ -166,11 +286,8 @@ const App = () => {
       const response = await fetch('/demo-trial.json');
       const demoData = await response.json();
 
-      const newId = Date.now().toString();
-      demoData.id = newId;
-      demoData.lastModified = new Date().toISOString();
-
-      setTrials(prev => ({ ...prev, [newId]: demoData }));
+      const newTrial = await createTrial(demoData);
+      setTrials(prev => ({ ...prev, [newTrial.id]: newTrial }));
       alert('Demo trial loaded successfully! You can now open it from the library.');
     } catch (err) {
       console.error('Error loading demo trial:', err);
@@ -178,16 +295,75 @@ const App = () => {
     }
   };
 
+  // =====================================================
+  // MIGRATION FROM LOCALSTORAGE
+  // =====================================================
+
+  const checkForLocalStorageMigration = async () => {
+    try {
+      const savedTrials = localStorage.getItem('trials');
+      if (!savedTrials) return;
+
+      const localTrials = JSON.parse(savedTrials);
+      const trialCount = Object.keys(localTrials).length;
+
+      if (trialCount === 0) return;
+
+      if (confirm(
+        `Found ${trialCount} trial(s) in local storage. Would you like to migrate them to the database?`
+      )) {
+        const results = await migrateFromLocalStorage(localTrials);
+
+        alert(
+          `Migration complete!\nSuccessful: ${results.success}\nFailed: ${results.errors.length}`
+        );
+
+        if (results.success > 0) {
+          // Reload trials from database
+          await loadTrialsFromDatabase();
+          // Clear localStorage after successful migration
+          localStorage.removeItem('trials');
+        }
+      }
+    } catch (error) {
+      console.error('Migration error:', error);
+    }
+  };
+
+  // =====================================================
+  // RENDER
+  // =====================================================
+
+  // Show loading spinner while checking auth
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-gray-100 flex items-center justify-center">
+        <div className="text-center">
+          <Loader size={48} className="animate-spin text-stri-teal mx-auto mb-4" />
+          <p className="text-gray-600">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Show auth screen if not logged in
+  if (!user) {
+    return <Auth onAuthSuccess={() => checkUser()} />;
+  }
+
   // Router - render appropriate component based on step
   if (step === 'library') {
     return (
       <TrialLibrary
         trials={trials}
+        loading={trialsLoading}
+        user={user}
         onCreateNew={createNewTrial}
         onLoadTrial={loadTrial}
-        onDeleteTrial={deleteTrial}
+        onDeleteTrial={handleDeleteTrial}
         onImportTrial={importTrialJSON}
         onLoadDemo={loadDemoTrial}
+        onSignOut={handleSignOut}
       />
     );
   }
@@ -211,8 +387,14 @@ const App = () => {
         orientation={orientation}
         onLayoutChange={setGridLayout}
         onOrientationChange={setOrientation}
-        onFinalize={() => {
+        onFinalize={async () => {
           setLayoutLocked(true);
+
+          // If this is a new trial (temp ID), create it in database
+          if (currentTrialId.startsWith('temp-')) {
+            await finalizeNewTrial();
+          }
+
           setStep('entry');
         }}
         onBack={() => setStep('setup')}
@@ -240,8 +422,8 @@ const App = () => {
           }
         }}
         onExportJSON={exportTrialJSON}
-        onBackToLibrary={() => {
-          saveCurrentTrial();
+        onBackToLibrary={async () => {
+          await saveCurrentTrial();
           setStep('library');
         }}
       />

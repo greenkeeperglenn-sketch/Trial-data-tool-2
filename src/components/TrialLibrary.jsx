@@ -1,7 +1,7 @@
 import React from 'react';
-import { Plus, Trash2, Upload, Play } from 'lucide-react';
+import { Plus, Trash2, Upload, Play, LogOut, User } from 'lucide-react';
 
-const TrialLibrary = ({ trials, onCreateNew, onLoadTrial, onDeleteTrial, onImportTrial, onLoadDemo }) => {
+const TrialLibrary = ({ trials, loading, user, onCreateNew, onLoadTrial, onDeleteTrial, onImportTrial, onLoadDemo, onSignOut }) => {
   const trialList = Object.values(trials).sort((a, b) => 
     new Date(b.lastModified) - new Date(a.lastModified)
   );
@@ -9,9 +9,28 @@ const TrialLibrary = ({ trials, onCreateNew, onLoadTrial, onDeleteTrial, onImpor
   return (
     <div className="p-6 max-w-6xl mx-auto">
       {/* Header */}
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold mb-2">Trial Library</h1>
-        <p className="text-gray-600">Manage your field trials</p>
+      <div className="mb-6 flex justify-between items-start">
+        <div>
+          <h1 className="text-3xl font-bold mb-2">Trial Library</h1>
+          <p className="text-gray-600">Manage your field trials</p>
+        </div>
+
+        {/* User Info and Sign Out */}
+        {user && (
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 text-sm text-gray-600">
+              <User size={16} />
+              <span>{user.email}</span>
+            </div>
+            <button
+              onClick={onSignOut}
+              className="flex items-center gap-2 px-4 py-2 text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition"
+            >
+              <LogOut size={16} />
+              Sign Out
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Action Buttons */}
@@ -51,7 +70,12 @@ const TrialLibrary = ({ trials, onCreateNew, onLoadTrial, onDeleteTrial, onImpor
 
       {/* Trial Cards Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {trialList.length === 0 ? (
+        {loading ? (
+          <div className="col-span-full text-center py-12">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-stri-teal mx-auto"></div>
+            <p className="text-gray-600 mt-4">Loading trials...</p>
+          </div>
+        ) : trialList.length === 0 ? (
           <div className="col-span-full text-center py-12 bg-gray-50 rounded-lg">
             <p className="text-gray-600">No trials yet. Create your first trial!</p>
           </div>
