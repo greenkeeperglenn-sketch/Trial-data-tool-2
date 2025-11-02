@@ -143,7 +143,7 @@ const App = () => {
   const importTrialJSON = (e) => {
     const file = e.target.files[0];
     if (!file) return;
-    
+
     const reader = new FileReader();
     reader.onload = (event) => {
       try {
@@ -160,6 +160,24 @@ const App = () => {
     reader.readAsText(file);
   };
 
+  // Load demo trial
+  const loadDemoTrial = async () => {
+    try {
+      const response = await fetch('/demo-trial.json');
+      const demoData = await response.json();
+
+      const newId = Date.now().toString();
+      demoData.id = newId;
+      demoData.lastModified = new Date().toISOString();
+
+      setTrials(prev => ({ ...prev, [newId]: demoData }));
+      alert('Demo trial loaded successfully! You can now open it from the library.');
+    } catch (err) {
+      console.error('Error loading demo trial:', err);
+      alert('Error loading demo trial. Please try again.');
+    }
+  };
+
   // Router - render appropriate component based on step
   if (step === 'library') {
     return (
@@ -169,6 +187,7 @@ const App = () => {
         onLoadTrial={loadTrial}
         onDeleteTrial={deleteTrial}
         onImportTrial={importTrialJSON}
+        onLoadDemo={loadDemoTrial}
       />
     );
   }
