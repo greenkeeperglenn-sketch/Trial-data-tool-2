@@ -4,22 +4,45 @@ import { createClient } from '@supabase/supabase-js';
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
+// Check if credentials are placeholder values
+const isPlaceholder = (value) => {
+  return !value ||
+         value.includes('your-project-id') ||
+         value.includes('your_anon_key_here') ||
+         value === 'undefined';
+};
+
 // Validate environment variables
-if (!supabaseUrl || !supabaseAnonKey) {
-  console.error('Missing Supabase environment variables!');
-  console.error('Please create a .env file with:');
-  console.error('VITE_SUPABASE_URL=your_project_url');
-  console.error('VITE_SUPABASE_ANON_KEY=your_anon_key');
+export const hasValidCredentials = () => {
+  return supabaseUrl &&
+         supabaseAnonKey &&
+         !isPlaceholder(supabaseUrl) &&
+         !isPlaceholder(supabaseAnonKey);
+};
+
+if (!hasValidCredentials()) {
+  console.error('⚠️ Invalid or missing Supabase credentials!');
+  console.error('Please update your .env file with real values from Supabase dashboard');
+  console.error('Current URL:', supabaseUrl);
+  console.error('Current Key:', supabaseAnonKey ? 'Set but appears to be placeholder' : 'Not set');
 }
 
-// Create Supabase client
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-  auth: {
-    autoRefreshToken: true,
-    persistSession: true,
-    detectSessionInUrl: true
-  }
-});
+// Create Supabase client (will work even with placeholder values, but operations will fail)
+export const supabase = hasValidCredentials()
+  ? createClient(supabaseUrl, supabaseAnonKey, {
+      auth: {
+        autoRefreshToken: true,
+        persistSession: true,
+        detectSessionInUrl: true
+      }
+    })
+  : createClient('https://placeholder.supabase.co', 'placeholder-key', {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+        detectSessionInUrl: false
+      }
+    });
 
 // Helper function to check if user is authenticated
 export const isAuthenticated = async () => {

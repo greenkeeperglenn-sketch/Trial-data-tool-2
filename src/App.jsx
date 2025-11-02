@@ -9,7 +9,7 @@ import TrialLayoutEditor from './components/TrialLayoutEditor';
 import DataEntry from './components/DataEntry';
 
 // Import Supabase services
-import { supabase } from './services/supabase';
+import { supabase, hasValidCredentials } from './services/supabase';
 import {
   getAllTrials,
   createTrial,
@@ -333,6 +333,64 @@ const App = () => {
   // =====================================================
   // RENDER
   // =====================================================
+
+  // Check for valid Supabase credentials first
+  if (!hasValidCredentials()) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-red-50 to-orange-50 flex items-center justify-center p-4">
+        <div className="max-w-2xl w-full bg-white rounded-xl shadow-2xl p-8">
+          <div className="text-center mb-6">
+            <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <span className="text-4xl">⚠️</span>
+            </div>
+            <h1 className="text-3xl font-bold text-gray-900 mb-2">Supabase Configuration Required</h1>
+            <p className="text-gray-600">Your Supabase credentials are missing or invalid</p>
+          </div>
+
+          <div className="bg-gray-50 rounded-lg p-6 mb-6">
+            <h2 className="font-bold text-lg mb-3">Quick Setup (5 minutes):</h2>
+            <ol className="space-y-3 text-sm text-gray-700">
+              <li className="flex gap-3">
+                <span className="font-bold text-stri-teal">1.</span>
+                <span>Go to <a href="https://supabase.com/dashboard" target="_blank" rel="noopener noreferrer" className="text-stri-teal hover:underline font-medium">supabase.com/dashboard</a></span>
+              </li>
+              <li className="flex gap-3">
+                <span className="font-bold text-stri-teal">2.</span>
+                <span>Click your project → <strong>Settings</strong> (⚙️) → <strong>API</strong></span>
+              </li>
+              <li className="flex gap-3">
+                <span className="font-bold text-stri-teal">3.</span>
+                <span>Copy your <strong>Project URL</strong> and <strong>anon public</strong> key</span>
+              </li>
+              <li className="flex gap-3">
+                <span className="font-bold text-stri-teal">4.</span>
+                <span>Update the <code className="bg-gray-200 px-2 py-1 rounded">.env</code> file in your project root</span>
+              </li>
+              <li className="flex gap-3">
+                <span className="font-bold text-stri-teal">5.</span>
+                <span>Restart your dev server (Ctrl+C then <code className="bg-gray-200 px-2 py-1 rounded">npm run dev</code>)</span>
+              </li>
+            </ol>
+          </div>
+
+          <div className="bg-blue-50 border-l-4 border-stri-blue-info rounded p-4 mb-6">
+            <p className="text-sm text-gray-700">
+              <strong>Need help?</strong> Check the <code className="bg-white px-2 py-1 rounded">SUPABASE_SETUP.md</code> file in your project for detailed instructions.
+            </p>
+          </div>
+
+          <div className="text-center">
+            <button
+              onClick={() => window.location.reload()}
+              className="px-6 py-3 bg-stri-teal hover:bg-stri-teal-light text-white rounded-lg font-semibold transition"
+            >
+              Refresh After Setup
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   // Show loading spinner while checking auth
   if (authLoading) {
