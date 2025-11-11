@@ -122,6 +122,9 @@ const App = () => {
   const saveCurrentTrial = async () => {
     if (!currentTrialId) return;
 
+    // Don't try to save trials with temporary IDs (not yet in database)
+    if (currentTrialId.startsWith('temp-')) return;
+
     const trialData = {
       id: currentTrialId,
       name: config.trialName,
