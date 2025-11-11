@@ -1,6 +1,39 @@
 import React, { useState } from 'react';
 import { ChevronLeft, ChevronRight, Calendar, Image as ImageIcon, FileText, TrendingUp } from 'lucide-react';
 
+// Helper function to calculate auto-scale min/max with padding
+const calculateAutoScale = (values) => {
+  if (!values || values.length === 0) {
+    return { min: 0, max: 100 };
+  }
+
+  const numericValues = values.map(v => parseFloat(v)).filter(v => !isNaN(v));
+  if (numericValues.length === 0) {
+    return { min: 0, max: 100 };
+  }
+
+  const dataMin = Math.min(...numericValues);
+  const dataMax = Math.max(...numericValues);
+
+  // If all values are the same, add padding above and below
+  if (dataMin === dataMax) {
+    const padding = Math.abs(dataMax * 0.1) || 1; // 10% padding or 1 if value is 0
+    return {
+      min: Math.max(0, dataMin - padding),
+      max: dataMax + padding
+    };
+  }
+
+  // Add 10% padding to the range
+  const range = dataMax - dataMin;
+  const padding = range * 0.1;
+
+  return {
+    min: Math.max(0, dataMin - padding), // Don't go below 0
+    max: dataMax + padding
+  };
+};
+
 // Simple SVG Bar Chart Component by Treatment
 const SimpleBarChart = ({ data, min, max, currentDateColor }) => {
   const width = 600;
@@ -571,14 +604,18 @@ const PresentationMode = ({
               const barData = prepareBarChartDataForType(type.name);
               if (barData.length === 0) return null;
 
+              // Calculate auto-scale from actual data
+              const values = barData.map(d => d.value);
+              const autoScale = calculateAutoScale(values);
+
               return (
                 <div key={type.name} className="bg-gray-700 rounded-lg p-4">
                   <h4 className="text-lg font-semibold mb-3 text-center text-gray-200">{type.name}</h4>
                   <div className="flex justify-center">
                     <SimpleBarChart
                       data={barData}
-                      min={type.min}
-                      max={type.max}
+                      min={autoScale.min}
+                      max={autoScale.max}
                       currentDateColor={currentDateColor}
                     />
                   </div>
@@ -685,6 +722,12 @@ const PresentationMode = ({
 
               const allDates = sortedDates.map(d => d.date);
 
+              // Calculate auto-scale from all treatment data
+              const allValues = Object.values(treatmentLineData)
+                .flat()
+                .map(d => d.value);
+              const autoScale = calculateAutoScale(allValues);
+
               return (
                 <div key={type.name} className="bg-gray-700 rounded-lg p-6">
                   <h4 className="text-xl font-semibold mb-4 text-center text-gray-200">{type.name}</h4>
@@ -693,8 +736,8 @@ const PresentationMode = ({
                       treatmentData={treatmentLineData}
                       treatmentColors={treatmentColors}
                       currentDate={currentDate?.date}
-                      min={type.min}
-                      max={type.max}
+                      min={autoScale.min}
+                      max={autoScale.max}
                       allDates={allDates}
                     />
                   </div>
