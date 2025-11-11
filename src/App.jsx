@@ -7,6 +7,7 @@ import TrialLibrary from './components/TrialLibrary';
 import TrialSetup from './components/TrialSetup';
 import TrialLayoutEditor from './components/TrialLayoutEditor';
 import DataEntry from './components/DataEntry';
+import ExcelImport from './components/ExcelImport';
 
 // Import Supabase services
 import { supabase, hasValidCredentials } from './services/supabase';
@@ -26,6 +27,7 @@ const App = () => {
   // Navigation state
   const [step, setStep] = useState('library'); // 'library', 'setup', 'layoutBuilder', 'entry'
   const [currentTrialId, setCurrentTrialId] = useState(null);
+  const [showExcelImport, setShowExcelImport] = useState(false);
 
   // Data state
   const [trials, setTrials] = useState({});
@@ -298,6 +300,20 @@ const App = () => {
     }
   };
 
+  // Handle Excel import
+  const handleExcelImport = async (parsedData) => {
+    try {
+      console.log('[App] Importing Excel data:', parsedData);
+      const newTrial = await createTrial(parsedData);
+      setTrials(prev => ({ ...prev, [newTrial.id]: newTrial }));
+      setShowExcelImport(false);
+      alert(`Trial "${parsedData.name}" imported successfully with ${parsedData.assessmentDates.length} assessment dates!`);
+    } catch (err) {
+      console.error('[App] Import error:', err);
+      alert('Error importing trial from Excel: ' + err.message);
+    }
+  };
+
   // =====================================================
   // MIGRATION FROM LOCALSTORAGE
   // =====================================================
@@ -415,17 +431,27 @@ const App = () => {
   // Router - render appropriate component based on step
   if (step === 'library') {
     return (
-      <TrialLibrary
-        trials={trials}
-        loading={trialsLoading}
-        user={user}
-        onCreateNew={createNewTrial}
-        onLoadTrial={loadTrial}
-        onDeleteTrial={handleDeleteTrial}
-        onImportTrial={importTrialJSON}
-        onLoadDemo={loadDemoTrial}
-        onSignOut={handleSignOut}
-      />
+      <>
+        <TrialLibrary
+          trials={trials}
+          loading={trialsLoading}
+          user={user}
+          onCreateNew={createNewTrial}
+          onLoadTrial={loadTrial}
+          onDeleteTrial={handleDeleteTrial}
+          onImportTrial={importTrialJSON}
+          onImportExcel={() => setShowExcelImport(true)}
+          onLoadDemo={loadDemoTrial}
+          onSignOut={handleSignOut}
+        />
+
+        {showExcelImport && (
+          <ExcelImport
+            onImport={handleExcelImport}
+            onCancel={() => setShowExcelImport(false)}
+          />
+        )}
+      </>
     );
   }
 

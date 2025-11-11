@@ -1,7 +1,7 @@
 import React from 'react';
-import { Plus, Trash2, Upload, Play, LogOut, User } from 'lucide-react';
+import { Plus, Trash2, Upload, Play, LogOut, User, FileSpreadsheet } from 'lucide-react';
 
-const TrialLibrary = ({ trials, loading, user, onCreateNew, onLoadTrial, onDeleteTrial, onImportTrial, onLoadDemo, onSignOut }) => {
+const TrialLibrary = ({ trials, loading, user, onCreateNew, onLoadTrial, onDeleteTrial, onImportTrial, onImportExcel, onLoadDemo, onSignOut }) => {
   const trialList = Object.values(trials).sort((a, b) => 
     new Date(b.lastModified) - new Date(a.lastModified)
   );
@@ -48,6 +48,13 @@ const TrialLibrary = ({ trials, loading, user, onCreateNew, onLoadTrial, onDelet
           className="flex items-center gap-2 px-6 py-3 bg-stri-blue-research text-white rounded-lg hover:bg-stri-blue-info transition"
         >
           <Play size={20} /> Load Demo Trial
+        </button>
+
+        <button
+          onClick={onImportExcel}
+          className="flex items-center gap-2 px-6 py-3 bg-stri-green-growth text-white rounded-lg hover:bg-stri-green-success transition"
+        >
+          <FileSpreadsheet size={20} /> Import from Excel
         </button>
 
         <label className="flex items-center gap-2 px-6 py-3 bg-stri-green-success text-white rounded-lg hover:bg-stri-green-growth cursor-pointer transition">
