@@ -293,14 +293,11 @@ function convertToTrialFormat(parsedSheets) {
     };
   });
 
-  // Generate trial ID
-  const trialId = Date.now().toString();
-
   // Use trial name from first sheet
   const trialName = firstSheet.metadata.trialName || 'Imported Trial';
 
   return {
-    id: trialId,
+    // Don't set id - let Supabase auto-generate a proper UUID
     name: trialName,
     config: {
       blocks: blocks.length,
