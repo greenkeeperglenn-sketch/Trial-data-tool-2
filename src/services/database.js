@@ -152,8 +152,7 @@ export const deleteTrial = async (trialId) => {
  * @returns {Object} Database-formatted trial
  */
 const convertToDatabase = (trial, userId) => {
-  return {
-    id: trial.id,
+  const dbTrial = {
     user_id: userId,
     name: trial.name || trial.config?.trialName || 'Untitled Trial',
     config: trial.config,
@@ -163,9 +162,20 @@ const convertToDatabase = (trial, userId) => {
     assessment_dates: trial.assessmentDates || [],
     photos: trial.photos || {},
     notes: trial.notes || {},
-    created_at: trial.created,
     last_modified: trial.lastModified || new Date().toISOString()
   };
+
+  // Only include id if it's a valid UUID (not a temp ID)
+  if (trial.id && !trial.id.startsWith('temp-')) {
+    dbTrial.id = trial.id;
+  }
+
+  // Only include created_at if it exists (for updates)
+  if (trial.created) {
+    dbTrial.created_at = trial.created;
+  }
+
+  return dbTrial;
 };
 
 /**
