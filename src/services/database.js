@@ -70,7 +70,13 @@ export const createTrial = async (trialData) => {
       throw new Error('User must be authenticated to create trials');
     }
 
+    console.log('[createTrial] Input trialData:', trialData);
+    console.log('[createTrial] trialData.id:', trialData.id);
+
     const dbTrial = convertToDatabase(trialData, user.id);
+
+    console.log('[createTrial] Converted dbTrial:', dbTrial);
+    console.log('[createTrial] dbTrial.id:', dbTrial.id);
 
     const { data, error } = await supabase
       .from('trials')
