@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { ChevronLeft, ChevronRight, Calendar, Image as ImageIcon, FileText, TrendingUp } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { ChevronLeft, ChevronRight, Calendar, Image as ImageIcon, FileText, TrendingUp, Eye, EyeOff } from 'lucide-react';
 
 // Helper function to calculate auto-scale min/max with padding
 const calculateAutoScale = (values) => {
@@ -346,6 +346,8 @@ const PresentationMode = ({
   notes
 }) => {
   const [currentSlide, setCurrentSlide] = useState(0);
+  const [visibleTreatments, setVisibleTreatments] = useState({});
+  const [visibleAssessments, setVisibleAssessments] = useState({});
 
   // Get all dates sorted chronologically
   const sortedDates = [...assessmentDates].sort((a, b) =>
@@ -375,6 +377,21 @@ const PresentationMode = ({
 
   // Create consistent color mapping for treatments using STRI brand colors
   const treatmentNames = Object.keys(treatmentGroups).sort();
+
+  // Initialize visibility states - all visible by default
+  useEffect(() => {
+    const treatments = {};
+    treatmentNames.forEach(name => {
+      treatments[name] = true;
+    });
+    setVisibleTreatments(treatments);
+
+    const assessments = {};
+    config.assessmentTypes.forEach(type => {
+      assessments[type.name] = true;
+    });
+    setVisibleAssessments(assessments);
+  }, [treatmentNames.join(','), config.assessmentTypes.map(t => t.name).join(',')]);
   const treatmentColors = {};
   // STRI Brand Color Palette for treatments
   const colorPalette = [
@@ -393,6 +410,21 @@ const PresentationMode = ({
 
   // Color for current date across all charts - STRI Teal
   const currentDateColor = '#00BFB8'; // STRI Primary Teal
+
+  // Toggle functions
+  const toggleTreatment = (treatment) => {
+    setVisibleTreatments(prev => ({
+      ...prev,
+      [treatment]: !prev[treatment]
+    }));
+  };
+
+  const toggleAssessment = (assessmentName) => {
+    setVisibleAssessments(prev => ({
+      ...prev,
+      [assessmentName]: !prev[assessmentName]
+    }));
+  };
 
   // Get photos for current date
   const getPhotosForDate = (date) => {
@@ -426,9 +458,11 @@ const PresentationMode = ({
   const prepareLineChartDataByTreatment = (typeName) => {
     const treatmentData = {};
 
-    // Initialize data structure for each treatment
+    // Initialize data structure for each visible treatment
     treatmentNames.forEach(treatment => {
-      treatmentData[treatment] = [];
+      if (visibleTreatments[treatment]) {
+        treatmentData[treatment] = [];
+      }
     });
 
     console.log(`Preparing data for ${typeName}, treatments:`, treatmentNames);
@@ -448,6 +482,9 @@ const PresentationMode = ({
         row.forEach(plot => {
           if (!plot.isBlank) {
             const treatment = plot.treatmentName || 'Untreated';
+            // Only include visible treatments
+            if (!visibleTreatments[treatment]) return;
+
             const plotData = assessment[plot.id];
 
             if (plotData?.entered && plotData.value !== '') {
@@ -492,6 +529,9 @@ const PresentationMode = ({
       row.forEach(plot => {
         if (!plot.isBlank) {
           const treatment = plot.treatmentName || 'Untreated';
+          // Only include visible treatments
+          if (!visibleTreatments[treatment]) return;
+
           const plotData = assessment[plot.id];
 
           if (plotData?.entered && plotData.value !== '') {
@@ -592,6 +632,73 @@ const PresentationMode = ({
           <p className="text-gray-400">Assessment Data</p>
         </div>
 
+        {/* Filter Controls */}
+        <div className="bg-gray-800 rounded-xl p-6 shadow-2xl">
+          <h3 className="text-xl font-bold mb-4 text-stri-teal">Display Filters</h3>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Treatment Toggles */}
+            <div>
+              <h4 className="text-lg font-semibold mb-3 text-gray-300">Treatments</h4>
+              <div className="space-y-2">
+                {treatmentNames.map(treatment => (
+                  <button
+                    key={treatment}
+                    onClick={() => toggleTreatment(treatment)}
+                    className={`w-full flex items-center gap-3 px-4 py-2 rounded-lg transition ${
+                      visibleTreatments[treatment]
+                        ? 'bg-gray-700 hover:bg-gray-600'
+                        : 'bg-gray-900 opacity-50 hover:opacity-70'
+                    }`}
+                  >
+                    {visibleTreatments[treatment] ? (
+                      <Eye size={20} className="text-stri-teal flex-shrink-0" />
+                    ) : (
+                      <EyeOff size={20} className="text-gray-500 flex-shrink-0" />
+                    )}
+                    <div className="flex items-center gap-2 flex-1">
+                      <div
+                        className="w-4 h-4 rounded-full flex-shrink-0"
+                        style={{ backgroundColor: treatmentColors[treatment] }}
+                      />
+                      <span className={visibleTreatments[treatment] ? 'text-white' : 'text-gray-500'}>
+                        {treatment}
+                      </span>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Assessment Type Toggles */}
+            <div>
+              <h4 className="text-lg font-semibold mb-3 text-gray-300">Assessment Types</h4>
+              <div className="space-y-2">
+                {config.assessmentTypes.map(type => (
+                  <button
+                    key={type.name}
+                    onClick={() => toggleAssessment(type.name)}
+                    className={`w-full flex items-center gap-3 px-4 py-2 rounded-lg transition ${
+                      visibleAssessments[type.name]
+                        ? 'bg-gray-700 hover:bg-gray-600'
+                        : 'bg-gray-900 opacity-50 hover:opacity-70'
+                    }`}
+                  >
+                    {visibleAssessments[type.name] ? (
+                      <Eye size={20} className="text-stri-blue-info flex-shrink-0" />
+                    ) : (
+                      <EyeOff size={20} className="text-gray-500 flex-shrink-0" />
+                    )}
+                    <span className={visibleAssessments[type.name] ? 'text-white' : 'text-gray-500'}>
+                      {type.name}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+
         {/* Bar Charts by Treatment - Current Date */}
         <div className="bg-gray-800 rounded-xl p-6 shadow-2xl">
           <h3 className="text-2xl font-bold mb-6 flex items-center gap-2">
@@ -600,7 +707,7 @@ const PresentationMode = ({
           </h3>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {config.assessmentTypes.map((type) => {
+            {config.assessmentTypes.filter(type => visibleAssessments[type.name]).map((type) => {
               const barData = prepareBarChartDataForType(type.name);
               if (barData.length === 0) return null;
 
@@ -634,7 +741,9 @@ const PresentationMode = ({
             </h3>
 
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
-              {Object.entries(treatmentGroups).map(([treatment, plots]) => {
+              {Object.entries(treatmentGroups)
+                .filter(([treatment]) => visibleTreatments[treatment])
+                .map(([treatment, plots]) => {
                 const treatmentPhotos = plots.filter(plot => currentPhotos[plot.id]);
 
                 if (treatmentPhotos.length === 0) return null;
@@ -716,7 +825,7 @@ const PresentationMode = ({
           </h3>
 
           <div className="space-y-8">
-            {config.assessmentTypes.map((type) => {
+            {config.assessmentTypes.filter(type => visibleAssessments[type.name]).map((type) => {
               const treatmentLineData = prepareLineChartDataByTreatment(type.name);
               if (Object.keys(treatmentLineData).length === 0) return null;
 
