@@ -1,7 +1,7 @@
 import React from 'react';
-import { Plus, Trash2, Upload } from 'lucide-react';
+import { Plus, Trash2, Upload, Play, LogOut, User } from 'lucide-react';
 
-const TrialLibrary = ({ trials, onCreateNew, onLoadTrial, onDeleteTrial, onImportTrial }) => {
+const TrialLibrary = ({ trials, loading, user, onCreateNew, onLoadTrial, onDeleteTrial, onImportTrial, onLoadDemo, onSignOut }) => {
   const trialList = Object.values(trials).sort((a, b) => 
     new Date(b.lastModified) - new Date(a.lastModified)
   );
@@ -9,27 +9,54 @@ const TrialLibrary = ({ trials, onCreateNew, onLoadTrial, onDeleteTrial, onImpor
   return (
     <div className="p-6 max-w-6xl mx-auto">
       {/* Header */}
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold mb-2">Trial Library</h1>
-        <p className="text-gray-600">Manage your field trials</p>
+      <div className="mb-6 flex justify-between items-start">
+        <div>
+          <h1 className="text-3xl font-bold mb-2">Trial Library</h1>
+          <p className="text-gray-600">Manage your field trials</p>
+        </div>
+
+        {/* User Info & Sign Out */}
+        {user && (
+          <div className="flex items-center gap-3">
+            <div className="text-right">
+              <div className="flex items-center gap-2 text-sm text-gray-600">
+                <User size={16} />
+                <span>{user.email}</span>
+              </div>
+            </div>
+            <button
+              onClick={onSignOut}
+              className="flex items-center gap-2 px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition"
+            >
+              <LogOut size={16} /> Sign Out
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Action Buttons */}
       <div className="mb-6 flex gap-2 flex-wrap">
-        <button 
-          onClick={onCreateNew} 
-          className="flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+        <button
+          onClick={onCreateNew}
+          className="flex items-center gap-2 px-6 py-3 bg-stri-teal text-white rounded-lg hover:bg-stri-teal-light transition"
         >
           <Plus size={20} /> Create New Trial
         </button>
-        
-        <label className="flex items-center gap-2 px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 cursor-pointer transition">
+
+        <button
+          onClick={onLoadDemo}
+          className="flex items-center gap-2 px-6 py-3 bg-stri-blue-research text-white rounded-lg hover:bg-stri-blue-info transition"
+        >
+          <Play size={20} /> Load Demo Trial
+        </button>
+
+        <label className="flex items-center gap-2 px-6 py-3 bg-stri-green-success text-white rounded-lg hover:bg-stri-green-growth cursor-pointer transition">
           <Upload size={20} /> Import Trial (JSON)
-          <input 
-            type="file" 
-            accept=".json" 
-            onChange={onImportTrial} 
-            className="hidden" 
+          <input
+            type="file"
+            accept=".json"
+            onChange={onImportTrial}
+            className="hidden"
           />
         </label>
       </div>

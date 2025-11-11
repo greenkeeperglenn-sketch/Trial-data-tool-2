@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
-import { Download, Unlock, Grid, List, FileText, BarChart3 } from 'lucide-react';
+import { Download, Unlock, Grid, List, FileText, BarChart3, Camera, Presentation } from 'lucide-react';
 import DateNavigation from './DateNavigation';
 import DataEntryField from './DataEntryField';
 import DataEntryTable from './DataEntryTable';
 import DataEntryNotes from './DataEntryNotes';
 import Analysis from './Analysis';
+import ImageryAnalyzer from './ImageryAnalyzer';
+import PresentationMode from './PresentationMode';
 
 const DataEntry = ({
   config,
@@ -25,7 +27,7 @@ const DataEntry = ({
   const [selectedAssessmentType, setSelectedAssessmentType] = useState(
     config.assessmentTypes[0]?.name || ''
   );
-  const [viewMode, setViewMode] = useState('field'); // 'field', 'table', 'notes', 'analysis'
+  const [viewMode, setViewMode] = useState('field'); // 'field', 'table', 'notes', 'analysis', 'imagery', 'presentation'
   const [showInputDropdown, setShowInputDropdown] = useState(false);
 
   const currentDateObj = assessmentDates[currentDateIndex];
@@ -65,6 +67,28 @@ const DataEntry = ({
                 ...d.assessments[assessmentType],
                 [plotId]: { value, entered: value !== '' }
               }
+            }
+          };
+        }
+        return d;
+      })
+    );
+  };
+
+  // Bulk update plot data (for imagery analyzer)
+  const handleBulkUpdateData = (date, assessmentType, updates) => {
+    onAssessmentDatesChange(
+      assessmentDates.map(d => {
+        if (d.date === date) {
+          const updatedAssessments = { ...d.assessments[assessmentType] };
+          Object.entries(updates).forEach(([plotId, value]) => {
+            updatedAssessments[plotId] = { value, entered: value !== '' };
+          });
+          return {
+            ...d,
+            assessments: {
+              ...d.assessments,
+              [assessmentType]: updatedAssessments
             }
           };
         }
@@ -241,7 +265,7 @@ const DataEntry = ({
               </div>
               
               {/* Analysis Tab */}
-              <button 
+              <button
                 onClick={() => setViewMode('analysis')}
                 className={`flex items-center gap-2 px-4 py-2 rounded transition ${
                   viewMode === 'analysis' ? 'bg-blue-600 text-white' : 'bg-gray-200'
@@ -249,6 +273,28 @@ const DataEntry = ({
               >
                 <BarChart3 size={18} /> Analysis
               </button>
+
+              {/* Imagery Tab - Always available */}
+              <button
+                onClick={() => setViewMode('imagery')}
+                className={`flex items-center gap-2 px-4 py-2 rounded transition ${
+                  viewMode === 'imagery' ? 'bg-stri-teal text-white' : 'bg-gray-200'
+                }`}
+              >
+                <Camera size={18} /> Imagery
+              </button>
+
+              {/* Presentation Tab - Only show if we have assessment dates */}
+              {assessmentDates.length > 0 && (
+                <button
+                  onClick={() => setViewMode('presentation')}
+                  className={`flex items-center gap-2 px-4 py-2 rounded transition ${
+                    viewMode === 'presentation' ? 'bg-stri-blue-info text-white' : 'bg-gray-200'
+                  }`}
+                >
+                  <Presentation size={18} /> Presentation
+                </button>
+              )}
             </div>
           </div>
 
@@ -310,6 +356,34 @@ const DataEntry = ({
               gridLayout={gridLayout}
               assessmentDates={assessmentDates}
               selectedAssessmentType={selectedAssessmentType}
+            />
+          )}
+
+          {/* Imagery Analyzer - Always available, even without assessment dates */}
+          {viewMode === 'imagery' && (
+            <ImageryAnalyzer
+              gridLayout={gridLayout}
+              config={config}
+              assessmentDates={assessmentDates}
+              currentDateObj={currentDateObj}
+              selectedAssessmentType={selectedAssessmentType}
+              onSelectAssessmentType={setSelectedAssessmentType}
+              onBulkUpdateData={handleBulkUpdateData}
+              onPhotosChange={onPhotosChange}
+              onAssessmentDatesChange={onAssessmentDatesChange}
+            />
+          )}
+
+          {/* Presentation Mode - Show professional timeline-based presentation */}
+          {viewMode === 'presentation' && assessmentDates.length > 0 && (
+            <PresentationMode
+              config={config}
+              gridLayout={gridLayout}
+              assessmentDates={assessmentDates}
+              photos={photos}
+              notes={notes}
+              selectedAssessmentType={selectedAssessmentType}
+              onSelectAssessmentType={setSelectedAssessmentType}
             />
           )}
         </>

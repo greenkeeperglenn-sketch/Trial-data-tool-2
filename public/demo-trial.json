@@ -1,0 +1,158 @@
+{
+  "id": "demo-trial-2024",
+  "name": "Demo Turf Trial 2024",
+  "config": {
+    "trialName": "Demo Turf Trial 2024",
+    "numBlocks": 4,
+    "numTreatments": 4,
+    "treatments": ["Control", "Treatment A", "Treatment B", "Treatment C"],
+    "assessmentTypes": [
+      { "name": "Turf Quality", "min": 1, "max": 9 },
+      { "name": "Turf Color", "min": 1, "max": 9 },
+      { "name": "Disease Severity", "min": 0, "max": 10 }
+    ]
+  },
+  "gridLayout": [
+    [
+      { "id": "1-1", "treatment": 0, "treatmentName": "Control", "block": 1, "isBlank": false },
+      { "id": "1-2", "treatment": 1, "treatmentName": "Treatment A", "block": 1, "isBlank": false },
+      { "id": "1-3", "treatment": 2, "treatmentName": "Treatment B", "block": 1, "isBlank": false },
+      { "id": "1-4", "treatment": 3, "treatmentName": "Treatment C", "block": 1, "isBlank": false }
+    ],
+    [
+      { "id": "2-1", "treatment": 1, "treatmentName": "Treatment A", "block": 2, "isBlank": false },
+      { "id": "2-2", "treatment": 3, "treatmentName": "Treatment C", "block": 2, "isBlank": false },
+      { "id": "2-3", "treatment": 0, "treatmentName": "Control", "block": 2, "isBlank": false },
+      { "id": "2-4", "treatment": 2, "treatmentName": "Treatment B", "block": 2, "isBlank": false }
+    ],
+    [
+      { "id": "3-1", "treatment": 2, "treatmentName": "Treatment B", "block": 3, "isBlank": false },
+      { "id": "3-2", "treatment": 0, "treatmentName": "Control", "block": 3, "isBlank": false },
+      { "id": "3-3", "treatment": 3, "treatmentName": "Treatment C", "block": 3, "isBlank": false },
+      { "id": "3-4", "treatment": 1, "treatmentName": "Treatment A", "block": 3, "isBlank": false }
+    ],
+    [
+      { "id": "4-1", "treatment": 3, "treatmentName": "Treatment C", "block": 4, "isBlank": false },
+      { "id": "4-2", "treatment": 2, "treatmentName": "Treatment B", "block": 4, "isBlank": false },
+      { "id": "4-3", "treatment": 1, "treatmentName": "Treatment A", "block": 4, "isBlank": false },
+      { "id": "4-4", "treatment": 0, "treatmentName": "Control", "block": 4, "isBlank": false }
+    ]
+  ],
+  "orientation": 0,
+  "layoutLocked": true,
+  "assessmentDates": [
+    {
+      "date": "2024-06-15",
+      "assessments": {
+        "Turf Quality": {
+          "1-1": { "value": "5.5", "entered": true }, "1-2": { "value": "7.0", "entered": true },
+          "1-3": { "value": "6.5", "entered": true }, "1-4": { "value": "6.0", "entered": true },
+          "2-1": { "value": "7.5", "entered": true }, "2-2": { "value": "6.5", "entered": true },
+          "2-3": { "value": "5.0", "entered": true }, "2-4": { "value": "6.0", "entered": true },
+          "3-1": { "value": "6.5", "entered": true }, "3-2": { "value": "5.5", "entered": true },
+          "3-3": { "value": "6.0", "entered": true }, "3-4": { "value": "7.0", "entered": true },
+          "4-1": { "value": "6.5", "entered": true }, "4-2": { "value": "6.5", "entered": true },
+          "4-3": { "value": "7.5", "entered": true }, "4-4": { "value": "5.5", "entered": true }
+        },
+        "Turf Color": {
+          "1-1": { "value": "5.0", "entered": true }, "1-2": { "value": "6.5", "entered": true },
+          "1-3": { "value": "6.0", "entered": true }, "1-4": { "value": "5.5", "entered": true },
+          "2-1": { "value": "7.0", "entered": true }, "2-2": { "value": "6.0", "entered": true },
+          "2-3": { "value": "5.0", "entered": true }, "2-4": { "value": "6.0", "entered": true },
+          "3-1": { "value": "6.5", "entered": true }, "3-2": { "value": "5.5", "entered": true },
+          "3-3": { "value": "5.5", "entered": true }, "3-4": { "value": "6.5", "entered": true },
+          "4-1": { "value": "6.0", "entered": true }, "4-2": { "value": "6.5", "entered": true },
+          "4-3": { "value": "7.0", "entered": true }, "4-4": { "value": "5.0", "entered": true }
+        },
+        "Disease Severity": {
+          "1-1": { "value": "3.0", "entered": true }, "1-2": { "value": "1.5", "entered": true },
+          "1-3": { "value": "2.0", "entered": true }, "1-4": { "value": "2.5", "entered": true },
+          "2-1": { "value": "1.0", "entered": true }, "2-2": { "value": "2.5", "entered": true },
+          "2-3": { "value": "3.5", "entered": true }, "2-4": { "value": "2.0", "entered": true },
+          "3-1": { "value": "2.0", "entered": true }, "3-2": { "value": "3.0", "entered": true },
+          "3-3": { "value": "2.5", "entered": true }, "3-4": { "value": "1.5", "entered": true },
+          "4-1": { "value": "2.5", "entered": true }, "4-2": { "value": "2.0", "entered": true },
+          "4-3": { "value": "1.0", "entered": true }, "4-4": { "value": "3.0", "entered": true }
+        }
+      }
+    },
+    {
+      "date": "2024-07-01",
+      "assessments": {
+        "Turf Quality": {
+          "1-1": { "value": "6.0", "entered": true }, "1-2": { "value": "7.5", "entered": true },
+          "1-3": { "value": "7.0", "entered": true }, "1-4": { "value": "6.5", "entered": true },
+          "2-1": { "value": "8.0", "entered": true }, "2-2": { "value": "7.0", "entered": true },
+          "2-3": { "value": "5.5", "entered": true }, "2-4": { "value": "6.5", "entered": true },
+          "3-1": { "value": "7.0", "entered": true }, "3-2": { "value": "6.0", "entered": true },
+          "3-3": { "value": "6.5", "entered": true }, "3-4": { "value": "7.5", "entered": true },
+          "4-1": { "value": "7.0", "entered": true }, "4-2": { "value": "7.0", "entered": true },
+          "4-3": { "value": "8.0", "entered": true }, "4-4": { "value": "6.0", "entered": true }
+        },
+        "Turf Color": {
+          "1-1": { "value": "5.5", "entered": true }, "1-2": { "value": "7.0", "entered": true },
+          "1-3": { "value": "6.5", "entered": true }, "1-4": { "value": "6.0", "entered": true },
+          "2-1": { "value": "7.5", "entered": true }, "2-2": { "value": "6.5", "entered": true },
+          "2-3": { "value": "5.5", "entered": true }, "2-4": { "value": "6.5", "entered": true },
+          "3-1": { "value": "7.0", "entered": true }, "3-2": { "value": "6.0", "entered": true },
+          "3-3": { "value": "6.0", "entered": true }, "3-4": { "value": "7.0", "entered": true },
+          "4-1": { "value": "6.5", "entered": true }, "4-2": { "value": "7.0", "entered": true },
+          "4-3": { "value": "7.5", "entered": true }, "4-4": { "value": "5.5", "entered": true }
+        },
+        "Disease Severity": {
+          "1-1": { "value": "2.5", "entered": true }, "1-2": { "value": "1.0", "entered": true },
+          "1-3": { "value": "1.5", "entered": true }, "1-4": { "value": "2.0", "entered": true },
+          "2-1": { "value": "0.5", "entered": true }, "2-2": { "value": "2.0", "entered": true },
+          "2-3": { "value": "3.0", "entered": true }, "2-4": { "value": "1.5", "entered": true },
+          "3-1": { "value": "1.5", "entered": true }, "3-2": { "value": "2.5", "entered": true },
+          "3-3": { "value": "2.0", "entered": true }, "3-4": { "value": "1.0", "entered": true },
+          "4-1": { "value": "2.0", "entered": true }, "4-2": { "value": "1.5", "entered": true },
+          "4-3": { "value": "0.5", "entered": true }, "4-4": { "value": "2.5", "entered": true }
+        }
+      }
+    },
+    {
+      "date": "2024-07-15",
+      "assessments": {
+        "Turf Quality": {
+          "1-1": { "value": "6.5", "entered": true }, "1-2": { "value": "8.0", "entered": true },
+          "1-3": { "value": "7.5", "entered": true }, "1-4": { "value": "7.0", "entered": true },
+          "2-1": { "value": "8.5", "entered": true }, "2-2": { "value": "7.5", "entered": true },
+          "2-3": { "value": "6.0", "entered": true }, "2-4": { "value": "7.0", "entered": true },
+          "3-1": { "value": "7.5", "entered": true }, "3-2": { "value": "6.5", "entered": true },
+          "3-3": { "value": "7.0", "entered": true }, "3-4": { "value": "8.0", "entered": true },
+          "4-1": { "value": "7.5", "entered": true }, "4-2": { "value": "7.5", "entered": true },
+          "4-3": { "value": "8.5", "entered": true }, "4-4": { "value": "6.5", "entered": true }
+        },
+        "Turf Color": {
+          "1-1": { "value": "6.0", "entered": true }, "1-2": { "value": "7.5", "entered": true },
+          "1-3": { "value": "7.0", "entered": true }, "1-4": { "value": "6.5", "entered": true },
+          "2-1": { "value": "8.0", "entered": true }, "2-2": { "value": "7.0", "entered": true },
+          "2-3": { "value": "6.0", "entered": true }, "2-4": { "value": "7.0", "entered": true },
+          "3-1": { "value": "7.5", "entered": true }, "3-2": { "value": "6.5", "entered": true },
+          "3-3": { "value": "6.5", "entered": true }, "3-4": { "value": "7.5", "entered": true },
+          "4-1": { "value": "7.0", "entered": true }, "4-2": { "value": "7.5", "entered": true },
+          "4-3": { "value": "8.0", "entered": true }, "4-4": { "value": "6.0", "entered": true }
+        },
+        "Disease Severity": {
+          "1-1": { "value": "2.0", "entered": true }, "1-2": { "value": "0.5", "entered": true },
+          "1-3": { "value": "1.0", "entered": true }, "1-4": { "value": "1.5", "entered": true },
+          "2-1": { "value": "0.0", "entered": true }, "2-2": { "value": "1.5", "entered": true },
+          "2-3": { "value": "2.5", "entered": true }, "2-4": { "value": "1.0", "entered": true },
+          "3-1": { "value": "1.0", "entered": true }, "3-2": { "value": "2.0", "entered": true },
+          "3-3": { "value": "1.5", "entered": true }, "3-4": { "value": "0.5", "entered": true },
+          "4-1": { "value": "1.5", "entered": true }, "4-2": { "value": "1.0", "entered": true },
+          "4-3": { "value": "0.0", "entered": true }, "4-4": { "value": "2.0", "entered": true }
+        }
+      }
+    }
+  ],
+  "photos": {},
+  "notes": {
+    "2024-07-01_1-2": "Excellent response to treatment, very uniform color",
+    "2024-07-01_2-1": "Best plot in the trial, excellent quality",
+    "2024-07-15_2-3": "Some disease pressure observed, monitor closely"
+  },
+  "lastModified": "2024-07-15T12:00:00.000Z",
+  "created": "2024-06-01T08:00:00.000Z"
+}
