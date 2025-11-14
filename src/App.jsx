@@ -314,6 +314,44 @@ const App = () => {
     }
   };
 
+  // Handle config changes (for editing trial setup)
+  const handleConfigChange = (newConfig, currentAssessmentDates) => {
+    // Update config
+    setConfig(newConfig);
+
+    // Migrate assessment data to match new assessment types
+    const migratedDates = currentAssessmentDates.map(dateObj => {
+      const newAssessments = {};
+
+      // For each new assessment type, try to preserve existing data
+      newConfig.assessmentTypes.forEach(newType => {
+        // Check if this assessment type exists in old data
+        const oldData = dateObj.assessments[newType.name];
+
+        if (oldData) {
+          // Preserve existing data
+          newAssessments[newType.name] = oldData;
+        } else {
+          // Create new empty assessment data for all plots
+          newAssessments[newType.name] = {};
+          gridLayout.flat().forEach(plot => {
+            if (!plot.isBlank) {
+              newAssessments[newType.name][plot.id] = { value: '', entered: false };
+            }
+          });
+        }
+      });
+
+      return {
+        ...dateObj,
+        assessments: newAssessments
+      };
+    });
+
+    setAssessmentDates(migratedDates);
+    alert('Trial configuration updated successfully!');
+  };
+
   // =====================================================
   // MIGRATION FROM LOCALSTORAGE
   // =====================================================
@@ -502,6 +540,7 @@ const App = () => {
         onAssessmentDatesChange={setAssessmentDates}
         onPhotosChange={setPhotos}
         onNotesChange={setNotes}
+        onConfigChange={handleConfigChange}
         onUnlockLayout={() => {
           if (confirm('⚠️ Unlocking layout may affect existing data. Continue?')) {
             setLayoutLocked(false);

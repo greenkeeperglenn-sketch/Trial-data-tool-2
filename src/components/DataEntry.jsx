@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Download, Unlock, Grid, List, FileText, BarChart3, Camera, Presentation } from 'lucide-react';
+import { Download, Unlock, Grid, List, FileText, BarChart3, Camera, Presentation, Settings } from 'lucide-react';
 import DateNavigation from './DateNavigation';
 import DataEntryField from './DataEntryField';
 import DataEntryTable from './DataEntryTable';
@@ -7,6 +7,7 @@ import DataEntryNotes from './DataEntryNotes';
 import Analysis from './Analysis';
 import ImageryAnalyzer from './ImageryAnalyzer';
 import PresentationMode from './PresentationMode';
+import TrialConfigEditor from './TrialConfigEditor';
 
 const DataEntry = ({
   config,
@@ -21,7 +22,8 @@ const DataEntry = ({
   onNotesChange,
   onUnlockLayout,
   onExportJSON,
-  onBackToLibrary
+  onBackToLibrary,
+  onConfigChange
 }) => {
   const [currentDateIndex, setCurrentDateIndex] = useState(0);
   const [selectedAssessmentType, setSelectedAssessmentType] = useState(
@@ -29,6 +31,7 @@ const DataEntry = ({
   );
   const [viewMode, setViewMode] = useState('field'); // 'field', 'table', 'notes', 'analysis', 'imagery', 'presentation'
   const [showInputDropdown, setShowInputDropdown] = useState(false);
+  const [showConfigEditor, setShowConfigEditor] = useState(false);
 
   const currentDateObj = assessmentDates[currentDateIndex];
 
@@ -95,6 +98,14 @@ const DataEntry = ({
         return d;
       })
     );
+  };
+
+  // Handle config changes
+  const handleConfigSave = (newConfig) => {
+    if (onConfigChange) {
+      onConfigChange(newConfig, assessmentDates);
+    }
+    setShowConfigEditor(false);
   };
 
   // Export CSV data
@@ -175,38 +186,45 @@ const DataEntry = ({
         </div>
         
         <div className="flex gap-2 flex-wrap">
-          <button 
-            onClick={exportToCSV} 
+          <button
+            onClick={() => setShowConfigEditor(true)}
+            className="flex items-center gap-2 px-3 py-2 bg-blue-600 text-white rounded text-sm hover:bg-blue-700 transition"
+          >
+            <Settings size={16} /> Edit Config
+          </button>
+
+          <button
+            onClick={exportToCSV}
             className="flex items-center gap-2 px-3 py-2 bg-green-600 text-white rounded text-sm hover:bg-green-700 transition"
           >
             <Download size={16} /> Export Data
           </button>
-          
-          <button 
-            onClick={exportSummaryCSV} 
+
+          <button
+            onClick={exportSummaryCSV}
             className="flex items-center gap-2 px-3 py-2 bg-green-600 text-white rounded text-sm hover:bg-green-700 transition"
           >
             <Download size={16} /> Summary
           </button>
-          
-          <button 
-            onClick={onExportJSON} 
+
+          <button
+            onClick={onExportJSON}
             className="flex items-center gap-2 px-3 py-2 bg-purple-600 text-white rounded text-sm hover:bg-purple-700 transition"
           >
             <Download size={16} /> Backup Trial
           </button>
-          
+
           {layoutLocked && (
-            <button 
-              onClick={onUnlockLayout} 
+            <button
+              onClick={onUnlockLayout}
               className="flex items-center gap-2 px-3 py-2 bg-red-600 text-white rounded text-sm hover:bg-red-700 transition"
             >
               <Unlock size={16} /> Unlock Layout
             </button>
           )}
-          
-          <button 
-            onClick={onBackToLibrary} 
+
+          <button
+            onClick={onBackToLibrary}
             className="px-3 py-2 bg-gray-200 rounded text-sm hover:bg-gray-300 transition"
           >
             ← Library
@@ -387,6 +405,15 @@ const DataEntry = ({
             />
           )}
         </>
+      )}
+
+      {/* Config Editor Modal */}
+      {showConfigEditor && (
+        <TrialConfigEditor
+          config={config}
+          onSave={handleConfigSave}
+          onCancel={() => setShowConfigEditor(false)}
+        />
       )}
     </div>
   );
