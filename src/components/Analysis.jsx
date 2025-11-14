@@ -3,7 +3,31 @@ import * as ss from 'simple-statistics';
 import { jStat } from 'jstat';
 
 const Analysis = ({ config, gridLayout, assessmentDates, selectedAssessmentType }) => {
-  
+
+  // Safety checks
+  if (!config || !gridLayout || !assessmentDates || !selectedAssessmentType) {
+    return (
+      <div className="p-8 bg-red-50 rounded-lg border border-red-200">
+        <h3 className="text-lg font-bold text-red-800 mb-2">Unable to Load Analysis</h3>
+        <p className="text-red-600">Missing required data. Please ensure you have:</p>
+        <ul className="list-disc ml-6 mt-2 text-red-600">
+          <li>Selected an assessment type</li>
+          <li>Added assessment dates</li>
+          <li>Entered some data</li>
+        </ul>
+      </div>
+    );
+  }
+
+  if (assessmentDates.length === 0) {
+    return (
+      <div className="p-8 bg-yellow-50 rounded-lg border border-yellow-200">
+        <h3 className="text-lg font-bold text-yellow-800 mb-2">No Assessment Dates</h3>
+        <p className="text-yellow-600">Please add assessment dates to view analysis.</p>
+      </div>
+    );
+  }
+
   // Calculate comprehensive statistics for a single date
   const calculateStats = (dateObj) => {
     const assessmentData = dateObj.assessments[selectedAssessmentType];

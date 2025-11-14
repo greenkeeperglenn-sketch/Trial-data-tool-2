@@ -4,9 +4,29 @@ import { X, Save, Plus, Trash2, Edit2 } from 'lucide-react';
 export default function TrialConfigEditor({ config, onSave, onCancel }) {
   const [editedConfig, setEditedConfig] = useState({
     ...config,
-    treatments: [...config.treatments],
-    assessmentTypes: config.assessmentTypes.map(type => ({ ...type }))
+    treatments: config.treatments ? [...config.treatments] : [],
+    assessmentTypes: config.assessmentTypes ? config.assessmentTypes.map(type => ({ ...type })) : []
   });
+
+  // Safety check - if config is invalid, show error
+  if (!config || !config.treatments || !config.assessmentTypes) {
+    return (
+      <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+        <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+          <h2 className="text-xl font-bold text-red-600 mb-4">Configuration Error</h2>
+          <p className="text-gray-700 mb-4">
+            The trial configuration is missing required data. Please try reloading the trial.
+          </p>
+          <button
+            onClick={onCancel}
+            className="w-full px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   const handleTrialNameChange = (value) => {
     setEditedConfig({ ...editedConfig, trialName: value });
