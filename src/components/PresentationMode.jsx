@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ChevronLeft, ChevronRight, Calendar, Image as ImageIcon, FileText, TrendingUp, Eye, EyeOff, GripVertical } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Calendar, Image as ImageIcon, FileText, TrendingUp, Eye, EyeOff, ArrowUp, ArrowDown } from 'lucide-react';
 
 // Helper function to calculate auto-scale min/max with padding
 const calculateAutoScale = (values) => {
@@ -338,24 +338,30 @@ const MultiLineChart = ({ treatmentData, treatmentColors, currentDate, min, max,
   );
 };
 
-// Draggable Section Wrapper
-const DraggableSection = ({ sectionId, children, onDragStart, onDragOver, onDrop, onDragEnd, isDragging }) => {
+// Section Wrapper with Reorder Controls
+const SectionWithControls = ({ sectionId, children, onMoveUp, onMoveDown, canMoveUp, canMoveDown }) => {
   return (
-    <div
-      draggable
-      onDragStart={(e) => onDragStart(e, sectionId)}
-      onDragOver={onDragOver}
-      onDrop={(e) => onDrop(e, sectionId)}
-      onDragEnd={onDragEnd}
-      className={`transition-all ${isDragging ? 'opacity-50 scale-95' : 'opacity-100'}`}
-    >
-      <div className="relative group">
-        {/* Drag Handle */}
-        <div className="absolute -left-8 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity cursor-move">
-          <GripVertical size={24} className="text-stri-teal" />
-        </div>
-        {children}
+    <div className="relative">
+      {/* Reorder Controls */}
+      <div className="absolute -right-16 top-8 flex flex-col gap-2 z-10">
+        <button
+          onClick={() => onMoveUp(sectionId)}
+          disabled={!canMoveUp}
+          className="p-2 rounded-lg bg-stri-teal hover:bg-stri-blue-info disabled:opacity-20 disabled:cursor-not-allowed transition shadow-lg hover:scale-110"
+          title="Move section up"
+        >
+          <ArrowUp size={20} />
+        </button>
+        <button
+          onClick={() => onMoveDown(sectionId)}
+          disabled={!canMoveDown}
+          className="p-2 rounded-lg bg-stri-teal hover:bg-stri-blue-info disabled:opacity-20 disabled:cursor-not-allowed transition shadow-lg hover:scale-110"
+          title="Move section down"
+        >
+          <ArrowDown size={20} />
+        </button>
       </div>
+      {children}
     </div>
   );
 };
@@ -371,7 +377,6 @@ const PresentationMode = ({
   const [visibleTreatments, setVisibleTreatments] = useState({});
   const [visibleAssessments, setVisibleAssessments] = useState({});
   const [sectionOrder, setSectionOrder] = useState(['barCharts', 'photos', 'notes', 'graphs']);
-  const [draggedSection, setDraggedSection] = useState(null);
 
   // Get all dates sorted chronologically
   const sortedDates = [...assessmentDates].sort((a, b) =>
@@ -450,39 +455,23 @@ const PresentationMode = ({
     }));
   };
 
-  // Drag and drop handlers
-  const handleDragStart = (e, sectionId) => {
-    setDraggedSection(sectionId);
-    e.dataTransfer.effectAllowed = 'move';
-  };
-
-  const handleDragOver = (e) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-  };
-
-  const handleDrop = (e, targetSectionId) => {
-    e.preventDefault();
-
-    if (draggedSection === targetSectionId) {
-      setDraggedSection(null);
-      return;
+  // Section reordering handlers
+  const moveSectionUp = (sectionId) => {
+    const index = sectionOrder.indexOf(sectionId);
+    if (index > 0) {
+      const newOrder = [...sectionOrder];
+      [newOrder[index - 1], newOrder[index]] = [newOrder[index], newOrder[index - 1]];
+      setSectionOrder(newOrder);
     }
-
-    const newOrder = [...sectionOrder];
-    const draggedIndex = newOrder.indexOf(draggedSection);
-    const targetIndex = newOrder.indexOf(targetSectionId);
-
-    // Remove dragged item and insert at target position
-    newOrder.splice(draggedIndex, 1);
-    newOrder.splice(targetIndex, 0, draggedSection);
-
-    setSectionOrder(newOrder);
-    setDraggedSection(null);
   };
 
-  const handleDragEnd = () => {
-    setDraggedSection(null);
+  const moveSectionDown = (sectionId) => {
+    const index = sectionOrder.indexOf(sectionId);
+    if (index < sectionOrder.length - 1) {
+      const newOrder = [...sectionOrder];
+      [newOrder[index], newOrder[index + 1]] = [newOrder[index + 1], newOrder[index]];
+      setSectionOrder(newOrder);
+    }
   };
 
   // Get photos for current date
@@ -885,9 +874,10 @@ const PresentationMode = ({
           <ChevronLeft size={28} />
         </button>
 
-        <div className="bg-gray-800 rounded-full px-4 py-2 text-center shadow-2xl">
-          <div className="text-xs text-gray-400">Slide</div>
-          <div className="text-lg font-bold">{currentSlide + 1}/{sortedDates.length}</div>
+        <div className="bg-gray-800 rounded-lg px-3 py-2 text-center shadow-2xl min-w-[100px]">
+          <div className="text-xs text-gray-400 mb-1">Current</div>
+          <div className="text-sm font-bold text-stri-teal">{currentDate?.date}</div>
+          <div className="text-xs text-gray-500 mt-1">{currentSlide + 1}/{sortedDates.length}</div>
         </div>
 
         <button
@@ -975,31 +965,31 @@ const PresentationMode = ({
           </div>
         </div>
 
-        {/* Draggable Hint */}
+        {/* Reorder Hint */}
         <div className="bg-stri-teal bg-opacity-10 border border-stri-teal rounded-lg p-4 text-center">
           <p className="text-stri-teal text-sm">
-            <GripVertical size={16} className="inline mr-2" />
-            Hover over sections and drag to reorder them
+            <ArrowUp size={16} className="inline mr-1" />
+            <ArrowDown size={16} className="inline mr-2" />
+            Use the arrow buttons to reorder sections
           </p>
         </div>
 
-        {/* Dynamic Content Sections - Draggable and Reorderable */}
-        {sectionOrder.map((sectionId) => {
+        {/* Dynamic Content Sections - Reorderable */}
+        {sectionOrder.map((sectionId, index) => {
           const content = sectionRenderers[sectionId]();
           if (!content) return null;
 
           return (
-            <DraggableSection
+            <SectionWithControls
               key={sectionId}
               sectionId={sectionId}
-              onDragStart={handleDragStart}
-              onDragOver={handleDragOver}
-              onDrop={handleDrop}
-              onDragEnd={handleDragEnd}
-              isDragging={draggedSection === sectionId}
+              onMoveUp={moveSectionUp}
+              onMoveDown={moveSectionDown}
+              canMoveUp={index > 0}
+              canMoveDown={index < sectionOrder.length - 1}
             >
               {content}
-            </DraggableSection>
+            </SectionWithControls>
           );
         })}
       </div>
