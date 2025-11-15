@@ -221,6 +221,44 @@ export function parseExcelFile(file) {
 }
 
 /**
+ * Normalize date string to YYYY-MM-DD format
+ */
+function normalizeDateFormat(dateStr) {
+  if (!dateStr) return new Date().toISOString().split('T')[0];
+
+  // If already in YYYY-MM-DD format, return as-is
+  if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+    return dateStr;
+  }
+
+  try {
+    // Try to parse the date string
+    const date = new Date(dateStr);
+    if (!isNaN(date.getTime())) {
+      return date.toISOString().split('T')[0];
+    }
+  } catch (e) {
+    console.warn('Could not parse date:', dateStr);
+  }
+
+  // If all else fails, try to extract a date-like pattern
+  // Handle formats like "15/03/2024", "3-15-24", "Mar 15 2024", etc.
+  const cleaned = String(dateStr).replace(/[^\d\/\-]/g, '');
+  try {
+    const date = new Date(cleaned);
+    if (!isNaN(date.getTime())) {
+      return date.toISOString().split('T')[0];
+    }
+  } catch (e) {
+    console.warn('Could not extract date from:', dateStr);
+  }
+
+  // Last resort: use current date
+  console.warn('Using current date for unparseable date string:', dateStr);
+  return new Date().toISOString().split('T')[0];
+}
+
+/**
  * Convert parsed sheets to Trial Data Tool format
  */
 function convertToTrialFormat(parsedSheets) {
@@ -259,10 +297,13 @@ function convertToTrialFormat(parsedSheets) {
   // Process assessment dates - convert to app format
   const assessmentDates = parsedSheets.map(sheet => {
     // Try to parse the date from sheet name or metadata
-    let date = sheet.sheetName;
+    let dateStr = sheet.sheetName;
     if (sheet.metadata.date) {
-      date = sheet.metadata.date;
+      dateStr = sheet.metadata.date;
     }
+
+    // Normalize date to YYYY-MM-DD format
+    const date = normalizeDateFormat(dateStr);
 
     // Create assessments object in the format the app expects
     const assessments = {};
