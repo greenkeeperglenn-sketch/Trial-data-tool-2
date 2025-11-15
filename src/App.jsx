@@ -553,13 +553,27 @@ const App = () => {
         onLayoutChange={setGridLayout}
         onOrientationChange={setOrientation}
         onFinalize={async () => {
+          console.log('[App] Finalizing trial layout');
+          console.log('[App] Current trial ID:', currentTrialId);
+          console.log('[App] Grid layout:', gridLayout);
+          console.log('[App] Config:', config);
+
           setLayoutLocked(true);
 
           // If this is a new trial (temp ID), create it in database
           if (currentTrialId.startsWith('temp-')) {
-            await finalizeNewTrial();
+            console.log('[App] Creating new trial in database');
+            try {
+              await finalizeNewTrial();
+              console.log('[App] Trial created successfully');
+            } catch (error) {
+              console.error('[App] Error creating trial:', error);
+              alert('Error saving trial: ' + error.message);
+              return; // Don't proceed to entry if save failed
+            }
           }
 
+          console.log('[App] Navigating to entry screen');
           setStep('entry');
         }}
         onBack={() => setStep('setup')}

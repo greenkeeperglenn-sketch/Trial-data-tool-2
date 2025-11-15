@@ -240,6 +240,20 @@ const DataEntry = ({
         onAddDate={handleAddDate}
       />
 
+      {assessmentDates.length === 0 && (
+        <div className="bg-blue-50 border-2 border-blue-200 rounded-lg p-8 text-center mt-4">
+          <h3 className="text-xl font-bold text-blue-900 mb-2">Welcome to your new trial!</h3>
+          <p className="text-blue-700 mb-4">
+            Your trial layout is ready. Click "Add Date" above to start recording assessment data.
+          </p>
+          <div className="text-sm text-blue-600">
+            <p><strong>Trial Name:</strong> {config.trialName}</p>
+            <p><strong>Grid Size:</strong> {gridLayout.length} rows × {gridLayout[0]?.length || 0} columns</p>
+            <p><strong>Plots:</strong> {gridLayout.flat().filter(p => !p.isBlank).length}</p>
+          </div>
+        </div>
+      )}
+
       {assessmentDates.length > 0 && (
         <>
           {/* View Mode Navigation */}
