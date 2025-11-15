@@ -316,19 +316,17 @@ const App = () => {
 
   // Handle config changes (for editing trial setup)
   const handleConfigChange = (newConfig, currentAssessmentDates) => {
-    // Create mapping of old assessment names to new ones by index
-    const assessmentNameMap = {};
-    config.assessmentTypes.forEach((oldType, index) => {
-      if (newConfig.assessmentTypes[index]) {
-        assessmentNameMap[oldType.name] = newConfig.assessmentTypes[index].name;
-      }
-    });
-
-    console.log('[App] Assessment name mapping:', assessmentNameMap);
+    console.log('[App] handleConfigChange called');
+    console.log('[App] Old config assessment types:', config.assessmentTypes.map(t => t.name));
+    console.log('[App] New config assessment types:', newConfig.assessmentTypes.map(t => t.name));
+    console.log('[App] Grid layout available:', !!gridLayout, 'Plots:', gridLayout?.flat().filter(p => !p.isBlank).length);
 
     // Migrate assessment data to match new assessment types
     const migratedDates = currentAssessmentDates.map(dateObj => {
       const newAssessments = {};
+
+      console.log(`[App] Processing date: ${dateObj.date}`);
+      console.log(`[App] Available assessments in date:`, Object.keys(dateObj.assessments));
 
       // For each new assessment type, try to preserve existing data
       newConfig.assessmentTypes.forEach((newType, index) => {
@@ -337,30 +335,39 @@ const App = () => {
 
         if (oldType && oldType.name !== newType.name) {
           // This is a rename - migrate data from old name to new name
-          console.log(`[App] Migrating data: "${oldType.name}" -> "${newType.name}"`);
+          console.log(`[App] Migrating: "${oldType.name}" -> "${newType.name}"`);
           const oldData = dateObj.assessments[oldType.name];
           if (oldData) {
+            const dataCount = Object.keys(oldData).filter(k => oldData[k].entered).length;
+            console.log(`[App] Found ${dataCount} entered values for "${oldType.name}"`);
             newAssessments[newType.name] = oldData;
           } else {
-            // Create empty data if old data doesn't exist
+            console.warn(`[App] No data found for "${oldType.name}"`);
             newAssessments[newType.name] = {};
+            if (gridLayout && gridLayout.length > 0) {
+              gridLayout.flat().forEach(plot => {
+                if (!plot.isBlank) {
+                  newAssessments[newType.name][plot.id] = { value: '', entered: false };
+                }
+              });
+            }
+          }
+        } else if (dateObj.assessments[newType.name]) {
+          // Name hasn't changed, preserve existing data
+          const dataCount = Object.keys(dateObj.assessments[newType.name]).filter(k => dateObj.assessments[newType.name][k].entered).length;
+          console.log(`[App] Preserving ${dataCount} values for "${newType.name}"`);
+          newAssessments[newType.name] = dateObj.assessments[newType.name];
+        } else {
+          // This is a new assessment type - create empty data
+          console.log(`[App] New assessment type: "${newType.name}"`);
+          newAssessments[newType.name] = {};
+          if (gridLayout && gridLayout.length > 0) {
             gridLayout.flat().forEach(plot => {
               if (!plot.isBlank) {
                 newAssessments[newType.name][plot.id] = { value: '', entered: false };
               }
             });
           }
-        } else if (dateObj.assessments[newType.name]) {
-          // Name hasn't changed, preserve existing data
-          newAssessments[newType.name] = dateObj.assessments[newType.name];
-        } else {
-          // This is a new assessment type - create empty data
-          newAssessments[newType.name] = {};
-          gridLayout.flat().forEach(plot => {
-            if (!plot.isBlank) {
-              newAssessments[newType.name][plot.id] = { value: '', entered: false };
-            }
-          });
         }
       });
 
@@ -370,10 +377,19 @@ const App = () => {
       };
     });
 
-    // Update config
+    console.log('[App] Migration complete, updating state');
+
+    // Update config and assessment dates
     setConfig(newConfig);
     setAssessmentDates(migratedDates);
-    alert('Trial configuration updated successfully!');
+
+    // Save immediately after config change
+    setTimeout(async () => {
+      console.log('[App] Auto-saving after config change');
+      await saveCurrentTrial();
+    }, 500);
+
+    alert('Trial configuration updated successfully! Data has been preserved.');
   };
 
   // =====================================================
