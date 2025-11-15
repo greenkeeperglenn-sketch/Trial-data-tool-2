@@ -772,19 +772,6 @@ const PresentationMode = ({
         });
       });
 
-    // Sort photos - by treatment index then by block
-    const sortedPhotos = sortPhotosByPosition
-      ? [...allPhotos].sort((a, b) => {
-          // Sort by actual grid position (row then column)
-          if (a.rowIdx !== b.rowIdx) return a.rowIdx - b.rowIdx;
-          return a.colIdx - b.colIdx;
-        })
-      : [...allPhotos].sort((a, b) => {
-          // Sort by treatment index, then by block
-          if (a.treatmentIdx !== b.treatmentIdx) return a.treatmentIdx - b.treatmentIdx;
-          return a.block - b.block;
-        });
-
     return (
       <div className="bg-gray-800 rounded-xl p-6 shadow-2xl">
         <div className="flex items-center justify-between mb-6">
@@ -805,81 +792,211 @@ const PresentationMode = ({
                 ? 'bg-orange-500 hover:bg-orange-600 text-white'
                 : 'bg-purple-600 hover:bg-purple-700 text-white'
             }`}
-            title="Hold to sort by field position"
+            title="Hold to show field map layout"
           >
             <MapPin size={20} />
-            {sortPhotosByPosition ? 'Sorted by Position' : 'Hold to Sort by Position'}
+            {sortPhotosByPosition ? 'Field Map View' : 'Hold for Field Map View'}
           </button>
         </div>
 
-        {/* Photo grid - small thumbnails */}
-        <div className="flex flex-wrap gap-3">
-          {sortedPhotos.map((photo) => (
-            <div
-              key={photo.plotId}
-              className="relative group cursor-pointer"
-              onClick={() => setExpandedPhoto(expandedPhoto === photo.plotId ? null : photo.plotId)}
-            >
-              {/* Thumbnail */}
-              <div
-                className="w-24 h-24 rounded-lg overflow-hidden shadow-lg transition-all hover:scale-105"
-                style={{
-                  border: `3px solid ${photo.color}`
-                }}
-              >
-                <img
-                  src={photo.image}
-                  alt={photo.plotId}
-                  className="w-full h-full object-cover"
-                />
-              </div>
+        {sortPhotosByPosition ? (
+          // Field Map Layout - Show grid with blanks
+          <div className="space-y-2">
+            {gridLayout.map((row, rowIdx) => (
+              <div key={rowIdx} className="flex gap-2 justify-center">
+                {row.map((plot, colIdx) => {
+                  const photo = allPhotos.find(p => p.plotId === plot.id);
 
-              {/* Label */}
-              <div
-                className="absolute bottom-0 left-0 right-0 text-center text-xs font-semibold text-white px-1 py-0.5"
-                style={{ backgroundColor: photo.color }}
-              >
-                {photo.plotId}
-              </div>
+                  if (plot.isBlank) {
+                    // Grey square for blank plots
+                    return (
+                      <div
+                        key={colIdx}
+                        className="w-24 h-24 rounded-lg border-2 border-dashed border-gray-600 bg-gray-700 flex items-center justify-center"
+                      >
+                        <span className="text-gray-500 text-xs">Blank</span>
+                      </div>
+                    );
+                  }
 
-              {/* Expanded view on click */}
-              {expandedPhoto === photo.plotId && (
-                <div
-                  className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setExpandedPhoto(null);
-                  }}
-                >
-                  <div className="relative w-full h-full flex items-center justify-center">
-                    <img
-                      src={photo.image}
-                      alt={photo.plotId}
-                      className="max-w-full max-h-full object-contain rounded-lg shadow-2xl"
-                      style={{ border: `8px solid ${photo.color}` }}
-                      onClick={(e) => e.stopPropagation()}
-                    />
+                  if (!photo) {
+                    // No photo for this plot
+                    return (
+                      <div
+                        key={colIdx}
+                        className="w-24 h-24 rounded-lg border-2 border-gray-600 bg-gray-700 flex items-center justify-center"
+                      >
+                        <span className="text-gray-400 text-xs">{plot.id}</span>
+                      </div>
+                    );
+                  }
+
+                  return (
                     <div
-                      className="absolute top-4 left-1/2 -translate-x-1/2 text-center text-3xl font-bold text-white px-6 py-3 rounded-lg shadow-xl"
-                      style={{ backgroundColor: photo.color }}
+                      key={colIdx}
+                      className="relative group cursor-pointer"
+                      onClick={() => setExpandedPhoto(expandedPhoto === photo.plotId ? null : photo.plotId)}
                     >
-                      Plot {photo.plotId} - {photo.treatment}
+                      {/* Thumbnail */}
+                      <div
+                        className="w-24 h-24 rounded-lg overflow-hidden shadow-lg transition-all hover:scale-105"
+                        style={{
+                          border: `3px solid ${photo.color}`
+                        }}
+                      >
+                        <img
+                          src={photo.image}
+                          alt={photo.plotId}
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+
+                      {/* Label */}
+                      <div
+                        className="absolute bottom-0 left-0 right-0 text-center text-xs font-semibold text-white px-1 py-0.5"
+                        style={{ backgroundColor: photo.color }}
+                      >
+                        {photo.plotId}
+                      </div>
+
+                      {/* Expanded view on click */}
+                      {expandedPhoto === photo.plotId && (
+                        <div
+                          className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setExpandedPhoto(null);
+                          }}
+                        >
+                          <div className="relative w-full h-full flex items-center justify-center">
+                            <img
+                              src={photo.image}
+                              alt={photo.plotId}
+                              className="max-w-full max-h-full object-contain rounded-lg shadow-2xl"
+                              style={{ border: `8px solid ${photo.color}` }}
+                              onClick={(e) => e.stopPropagation()}
+                            />
+                            <div
+                              className="absolute top-4 left-1/2 -translate-x-1/2 text-center text-3xl font-bold text-white px-6 py-3 rounded-lg shadow-xl"
+                              style={{ backgroundColor: photo.color }}
+                            >
+                              Plot {photo.plotId} - {photo.treatment}
+                            </div>
+                            <button
+                              className="absolute top-4 right-4 bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg font-semibold shadow-xl"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setExpandedPhoto(null);
+                              }}
+                            >
+                              Close (X)
+                            </button>
+                          </div>
+                        </div>
+                      )}
                     </div>
-                    <button
-                      className="absolute top-4 right-4 bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg font-semibold shadow-xl"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setExpandedPhoto(null);
-                      }}
-                    >
-                      Close (X)
-                    </button>
+                  );
+                })}
+              </div>
+            ))}
+          </div>
+        ) : (
+          // Treatment Column Layout
+          <div className="grid gap-6" style={{ gridTemplateColumns: `repeat(${config.treatments.length}, minmax(0, 1fr))` }}>
+            {config.treatments.map((treatment, treatmentIdx) => {
+              const color = treatmentColors[treatment];
+              const treatmentPhotos = allPhotos
+                .filter(p => p.treatmentIdx === treatmentIdx)
+                .sort((a, b) => a.block - b.block);
+
+              if (treatmentPhotos.length === 0) return null;
+
+              return (
+                <div key={treatmentIdx} className="space-y-3">
+                  {/* Treatment Header */}
+                  <div
+                    className="text-center font-bold text-lg py-3 rounded-lg shadow-lg"
+                    style={{
+                      backgroundColor: color,
+                      color: 'white'
+                    }}
+                  >
+                    {treatment}
+                  </div>
+
+                  {/* Photos for this treatment */}
+                  <div className="space-y-3">
+                    {treatmentPhotos.map((photo) => (
+                      <div
+                        key={photo.plotId}
+                        className="relative group cursor-pointer"
+                        onClick={() => setExpandedPhoto(expandedPhoto === photo.plotId ? null : photo.plotId)}
+                      >
+                        {/* Thumbnail */}
+                        <div
+                          className="w-full aspect-square rounded-lg overflow-hidden shadow-lg transition-all hover:scale-105"
+                          style={{
+                            border: `3px solid ${photo.color}`
+                          }}
+                        >
+                          <img
+                            src={photo.image}
+                            alt={photo.plotId}
+                            className="w-full h-full object-cover"
+                          />
+                        </div>
+
+                        {/* Label */}
+                        <div
+                          className="absolute bottom-0 left-0 right-0 text-center text-sm font-semibold text-white px-2 py-1"
+                          style={{ backgroundColor: photo.color }}
+                        >
+                          {photo.plotId}
+                        </div>
+
+                        {/* Expanded view on click */}
+                        {expandedPhoto === photo.plotId && (
+                          <div
+                            className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setExpandedPhoto(null);
+                            }}
+                          >
+                            <div className="relative w-full h-full flex items-center justify-center">
+                              <img
+                                src={photo.image}
+                                alt={photo.plotId}
+                                className="max-w-full max-h-full object-contain rounded-lg shadow-2xl"
+                                style={{ border: `8px solid ${photo.color}` }}
+                                onClick={(e) => e.stopPropagation()}
+                              />
+                              <div
+                                className="absolute top-4 left-1/2 -translate-x-1/2 text-center text-3xl font-bold text-white px-6 py-3 rounded-lg shadow-xl"
+                                style={{ backgroundColor: photo.color }}
+                              >
+                                Plot {photo.plotId} - {photo.treatment}
+                              </div>
+                              <button
+                                className="absolute top-4 right-4 bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg font-semibold shadow-xl"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setExpandedPhoto(null);
+                                }}
+                              >
+                                Close (X)
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ))}
                   </div>
                 </div>
-              )}
-            </div>
-          ))}
-        </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     );
   };
