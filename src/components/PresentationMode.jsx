@@ -301,39 +301,54 @@ const MultiLineChart = ({ treatmentData, treatmentColors, currentDate, min, max,
         );
       })}
 
-      {/* Legend - show all treatments vertically on the right */}
+      {/* Legend - show all treatments vertically on the right, sorted by current date value */}
       <g>
-        {Object.entries(treatmentColors).map(([treatment, color], idx) => {
-          const x = padding + chartWidth + 30;  // Legend starts 30px after chart
-          const y = padding + (idx * 25);  // 25px spacing between items
+        {(() => {
+          // Get current date values for each treatment to sort by
+          const treatmentValuesAtCurrentDate = Object.entries(treatmentData).map(([treatment, dataPoints]) => {
+            const currentDataPoint = dataPoints.find(d => d.date === currentDate);
+            const value = currentDataPoint ? parseFloat(currentDataPoint.value) : -Infinity;
+            return { treatment, value };
+          });
 
-          return (
-            <g key={treatment}>
-              <line
-                x1={x}
-                y1={y}
-                x2={x + 20}
-                y2={y}
-                stroke={color}
-                strokeWidth="3"
-              />
-              <circle
-                cx={x + 10}
-                cy={y}
-                r="4"
-                fill={color}
-              />
-              <text
-                x={x + 25}
-                y={y + 4}
-                fontSize="12"
-                fill="#9ca3af"
-              >
-                {treatment}
-              </text>
-            </g>
-          );
-        })}
+          // Sort by value (highest to lowest)
+          const sortedTreatments = treatmentValuesAtCurrentDate
+            .sort((a, b) => b.value - a.value)
+            .map(item => item.treatment);
+
+          return sortedTreatments.map((treatment, idx) => {
+            const color = treatmentColors[treatment];
+            const x = padding + chartWidth + 30;  // Legend starts 30px after chart
+            const y = padding + (idx * 25);  // 25px spacing between items
+
+            return (
+              <g key={treatment}>
+                <line
+                  x1={x}
+                  y1={y}
+                  x2={x + 20}
+                  y2={y}
+                  stroke={color}
+                  strokeWidth="3"
+                />
+                <circle
+                  cx={x + 10}
+                  cy={y}
+                  r="4"
+                  fill={color}
+                />
+                <text
+                  x={x + 25}
+                  y={y + 4}
+                  fontSize="12"
+                  fill="#9ca3af"
+                >
+                  {treatment}
+                </text>
+              </g>
+            );
+          });
+        })()}
       </g>
     </svg>
   );
@@ -595,7 +610,7 @@ const PresentationMode = ({
       });
     });
 
-    // Convert to array with averages
+    // Convert to array with averages, sorted by value (highest to lowest)
     return Object.entries(treatmentStats).map(([treatment, stats]) => {
       const avg = stats.values.reduce((sum, val) => sum + val, 0) / stats.values.length;
       return {
@@ -604,7 +619,7 @@ const PresentationMode = ({
         count: stats.count,
         color: treatmentColors[treatment]
       };
-    }).sort((a, b) => a.treatment.localeCompare(b.treatment));
+    }).sort((a, b) => parseFloat(b.value) - parseFloat(a.value)); // Sort by value descending
   };
 
   const nextSlide = () => {
