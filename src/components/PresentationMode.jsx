@@ -128,11 +128,12 @@ const SimpleBarChart = ({ data, min, max, currentDateColor }) => {
 
 // Multi-Line Chart Component - One line per treatment
 const MultiLineChart = ({ treatmentData, treatmentColors, currentDate, min, max, allDates }) => {
-  const width = 800;
+  const width = 1000;  // Increased to make room for legend on right
   const height = 350;
   const padding = 60;
-  const chartWidth = width - padding * 2;
-  const chartHeight = height - padding * 2 - 50; // Extra space for legend
+  const legendWidth = 200;  // Space reserved for legend on right
+  const chartWidth = width - padding * 2 - legendWidth;  // Chart area excludes legend space
+  const chartHeight = height - padding * 2;  // No bottom space needed for legend anymore
 
   if (!treatmentData || Object.keys(treatmentData).length === 0) return null;
 
@@ -146,7 +147,7 @@ const MultiLineChart = ({ treatmentData, treatmentColors, currentDate, min, max,
   const scaleX = (dateIndex) => padding + (dateIndex / (numDates - 1)) * chartWidth;
   const scaleY = (value) => {
     if (isNaN(value)) return null;
-    return height - padding - 50 - ((value - dataMin) / range) * chartHeight;
+    return height - padding - ((value - dataMin) / range) * chartHeight;
   };
 
   // Calculate position for current date (interpolate if between assessment dates)
@@ -191,14 +192,14 @@ const MultiLineChart = ({ treatmentData, treatmentColors, currentDate, min, max,
     <svg width="100%" height={height} viewBox={`0 0 ${width} ${height}`} className="text-gray-300">
       {/* Grid lines */}
       {[0, 0.25, 0.5, 0.75, 1].map(pct => {
-        const y = height - padding - 50 - pct * chartHeight;
+        const y = height - padding - pct * chartHeight;
         const value = (dataMin + pct * range).toFixed(1);
         return (
           <g key={pct}>
             <line
               x1={padding}
               y1={y}
-              x2={width - padding}
+              x2={padding + chartWidth}
               y2={y}
               stroke="#374151"
               strokeDasharray="3 3"
@@ -217,7 +218,7 @@ const MultiLineChart = ({ treatmentData, treatmentColors, currentDate, min, max,
           <text
             key={i}
             x={x}
-            y={height - padding - 30}
+            y={height - padding + 20}
             fontSize="11"
             fill="#9ca3af"
             textAnchor="middle"
@@ -234,7 +235,7 @@ const MultiLineChart = ({ treatmentData, treatmentColors, currentDate, min, max,
             x1={currentDateX}
             y1={padding}
             x2={currentDateX}
-            y2={height - padding - 50}
+            y2={height - padding}
             stroke="#00BFB8"
             strokeWidth="3"
           />
@@ -300,11 +301,11 @@ const MultiLineChart = ({ treatmentData, treatmentColors, currentDate, min, max,
         );
       })}
 
-      {/* Legend - show all treatments */}
+      {/* Legend - show all treatments vertically on the right */}
       <g>
         {Object.entries(treatmentColors).map(([treatment, color], idx) => {
-          const x = padding + (idx * 150);
-          const y = height - 25;
+          const x = padding + chartWidth + 30;  // Legend starts 30px after chart
+          const y = padding + (idx * 25);  // 25px spacing between items
 
           return (
             <g key={treatment}>
