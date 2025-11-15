@@ -2,14 +2,18 @@ import React, { useState } from 'react';
 import { X, Save, Plus, Trash2, Edit2 } from 'lucide-react';
 
 export default function TrialConfigEditor({ config, onSave, onCancel }) {
-  const [editedConfig, setEditedConfig] = useState({
-    ...config,
-    treatments: config.treatments ? [...config.treatments] : [],
-    assessmentTypes: config.assessmentTypes ? config.assessmentTypes.map(type => ({ ...type })) : []
-  });
+  // Debug logging
+  console.log('[TrialConfigEditor] Received config:', config);
+  console.log('[TrialConfigEditor] Has treatments:', config?.treatments);
+  console.log('[TrialConfigEditor] Has assessmentTypes:', config?.assessmentTypes);
 
   // Safety check - if config is invalid, show error
   if (!config || !config.treatments || !config.assessmentTypes) {
+    console.error('[TrialConfigEditor] Invalid config detected:', {
+      config,
+      hasTreatments: !!config?.treatments,
+      hasAssessmentTypes: !!config?.assessmentTypes
+    });
     return (
       <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
         <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
@@ -17,6 +21,12 @@ export default function TrialConfigEditor({ config, onSave, onCancel }) {
           <p className="text-gray-700 mb-4">
             The trial configuration is missing required data. Please try reloading the trial.
           </p>
+          <div className="bg-gray-100 p-3 rounded text-xs mb-4">
+            <p>Debug info:</p>
+            <p>Has config: {config ? 'Yes' : 'No'}</p>
+            <p>Has treatments: {config?.treatments ? 'Yes' : 'No'}</p>
+            <p>Has assessmentTypes: {config?.assessmentTypes ? 'Yes' : 'No'}</p>
+          </div>
           <button
             onClick={onCancel}
             className="w-full px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700"
@@ -27,6 +37,12 @@ export default function TrialConfigEditor({ config, onSave, onCancel }) {
       </div>
     );
   }
+
+  const [editedConfig, setEditedConfig] = useState({
+    ...config,
+    treatments: config.treatments ? [...config.treatments] : [],
+    assessmentTypes: config.assessmentTypes ? config.assessmentTypes.map(type => ({ ...type })) : []
+  });
 
   const handleTrialNameChange = (value) => {
     setEditedConfig({ ...editedConfig, trialName: value });
