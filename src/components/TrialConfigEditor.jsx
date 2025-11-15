@@ -184,6 +184,59 @@ export default function TrialConfigEditor({ config, gridLayout, orientation, onS
     setLocalGridLayout(newGrid);
   };
 
+  // Handle plot selection from dropdown
+  const handlePlotSelect = (rowIdx, colIdx, value) => {
+    const newGrid = localGridLayout.map(row => [...row]);
+
+    if (value === 'BLANK') {
+      // Set to blank
+      newGrid[rowIdx][colIdx] = {
+        id: `${rowIdx + 1}-${colIdx + 1}`,
+        block: rowIdx + 1,
+        treatment: 0,
+        treatmentName: '',
+        isBlank: true,
+        plotNumber: colIdx + 1
+      };
+    } else {
+      // Parse the value: "block-treatment" format
+      const [blockStr, treatmentStr] = value.split('-');
+      const block = parseInt(blockStr);
+      const treatmentIdx = parseInt(treatmentStr);
+
+      newGrid[rowIdx][colIdx] = {
+        id: `${block}-${colIdx + 1}`,
+        block: block,
+        treatment: treatmentIdx,
+        treatmentName: editedConfig.treatments[treatmentIdx] || `Treatment ${treatmentIdx + 1}`,
+        isBlank: false,
+        plotNumber: colIdx + 1
+      };
+    }
+
+    setLocalGridLayout(newGrid);
+  };
+
+  // Generate all possible plot combinations
+  const getAllPossiblePlots = () => {
+    const plots = [];
+    const numBlocks = Math.max(4, localGridLayout.length); // At least 4 blocks or current rows
+
+    for (let block = 1; block <= numBlocks; block++) {
+      editedConfig.treatments.forEach((treatment, treatmentIdx) => {
+        plots.push({
+          value: `${block}-${treatmentIdx}`,
+          label: `Block ${block} - ${treatment}`,
+          block,
+          treatmentIdx,
+          treatmentName: treatment
+        });
+      });
+    }
+
+    return plots;
+  };
+
   // Add a row of blank plots
   const addBlankRow = () => {
     if (localGridLayout.length === 0) return;
@@ -533,49 +586,47 @@ export default function TrialConfigEditor({ config, gridLayout, orientation, onS
                 <div className="space-y-2">
                   {localGridLayout.map((row, rowIdx) => (
                     <div key={rowIdx} className="flex gap-2">
-                      {row.map((plot, colIdx) => (
-                        <div
-                          key={colIdx}
-                          draggable={!plot.isBlank}
-                          onDragStart={() => handleDragStart(rowIdx, colIdx)}
-                          onDragOver={handleDragOver}
-                          onDrop={() => handleDrop(rowIdx, colIdx)}
-                          onClick={(e) => togglePlotBlank(rowIdx, colIdx, e)}
-                          className={`
-                            relative min-w-[100px] h-20 rounded border-2 flex flex-col items-center justify-center
-                            text-xs transition-all cursor-pointer group
-                            ${plot.isBlank
-                              ? 'border-dashed border-gray-300 bg-gray-100 text-gray-400 hover:border-green-400 hover:bg-green-50'
-                              : 'border-solid border-blue-400 bg-white hover:border-blue-600 hover:shadow-lg'
-                            }
-                            ${draggedPlot?.rowIdx === rowIdx && draggedPlot?.colIdx === colIdx ? 'opacity-50' : ''}
-                          `}
-                          title={plot.isBlank ? 'Click to convert to plot' : 'Click to convert to blank'}
-                        >
-                          {/* Toggle indicator on hover */}
-                          <div className={`
-                            absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity
-                            ${plot.isBlank ? 'text-green-600' : 'text-orange-600'}
-                          `}>
-                            <Square size={14} />
-                          </div>
+                      {row.map((plot, colIdx) => {
+                        const allPlots = getAllPossiblePlots();
+                        const currentValue = plot.isBlank
+                          ? 'BLANK'
+                          : `${plot.block}-${plot.treatment}`;
 
-                          {plot.isBlank ? (
-                            <span>Blank</span>
-                          ) : (
-                            <>
-                              <div className="flex items-center gap-1 text-gray-600">
-                                <Grip size={12} />
-                                <span className="font-semibold">{plot.id}</span>
+                        return (
+                          <div
+                            key={colIdx}
+                            className={`
+                              relative min-w-[140px] rounded border-2 p-2
+                              ${plot.isBlank
+                                ? 'border-dashed border-gray-300 bg-gray-100'
+                                : 'border-solid border-blue-400 bg-white'
+                              }
+                            `}
+                          >
+                            {/* Dropdown for plot selection */}
+                            <select
+                              value={currentValue}
+                              onChange={(e) => handlePlotSelect(rowIdx, colIdx, e.target.value)}
+                              className="w-full text-xs p-1 border rounded bg-white hover:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            >
+                              <option value="BLANK">-- Blank --</option>
+                              {allPlots.map((plotOption) => (
+                                <option key={plotOption.value} value={plotOption.value}>
+                                  {plotOption.label}
+                                </option>
+                              ))}
+                            </select>
+
+                            {/* Display current plot info */}
+                            {!plot.isBlank && (
+                              <div className="mt-1 text-xs text-center">
+                                <div className="font-semibold text-gray-600">{plot.id}</div>
+                                <div className="text-blue-700 truncate">{plot.treatmentName}</div>
                               </div>
-                              <div className="font-medium text-blue-700">Block {plot.block}</div>
-                              <div className="text-gray-700 truncate max-w-full px-1">
-                                {plot.treatmentName}
-                              </div>
-                            </>
-                          )}
-                        </div>
-                      ))}
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
                   ))}
                 </div>
@@ -586,8 +637,9 @@ export default function TrialConfigEditor({ config, gridLayout, orientation, onS
                   <strong>Tips:</strong>
                 </p>
                 <ul className="text-sm text-blue-800 list-disc list-inside mt-1 space-y-1">
-                  <li>Drag and drop plots to rearrange them</li>
-                  <li>Click any plot to toggle between blank and real plot</li>
+                  <li>Use dropdown menus to assign plots to each position</li>
+                  <li>Select "-- Blank --" to make a position empty</li>
+                  <li>Choose any Block-Treatment combination from the dropdown</li>
                   <li>Use buttons above to add/remove rows and columns</li>
                   <li>Blank plots won't appear in data entry</li>
                 </ul>
