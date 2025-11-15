@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Save, Plus, Trash2, Edit2, Grip, RotateCw } from 'lucide-react';
+import { X, Save, Plus, Trash2, Edit2, Grip, RotateCw, Square, Columns, Rows } from 'lucide-react';
 
 export default function TrialConfigEditor({ config, gridLayout, orientation, onSave, onCancel }) {
   // Debug logging
@@ -152,6 +152,99 @@ export default function TrialConfigEditor({ config, gridLayout, orientation, onS
   const rotateCompass = (degrees) => {
     const newOrientation = (localOrientation + degrees + 360) % 360;
     setLocalOrientation(newOrientation);
+  };
+
+  // Toggle plot between blank and non-blank
+  const togglePlotBlank = (rowIdx, colIdx, e) => {
+    e.stopPropagation();
+    e.preventDefault();
+
+    const newGrid = localGridLayout.map(row => [...row]);
+    const plot = newGrid[rowIdx][colIdx];
+
+    if (plot.isBlank) {
+      // Convert from blank to real plot - assign next available treatment
+      const treatmentIdx = 0; // Default to first treatment
+      newGrid[rowIdx][colIdx] = {
+        id: `${rowIdx + 1}-${colIdx + 1}`,
+        block: rowIdx + 1,
+        treatment: treatmentIdx,
+        treatmentName: editedConfig.treatments[treatmentIdx] || 'Treatment 1',
+        isBlank: false,
+        plotNumber: colIdx + 1
+      };
+    } else {
+      // Convert to blank
+      newGrid[rowIdx][colIdx] = {
+        ...plot,
+        isBlank: true
+      };
+    }
+
+    setLocalGridLayout(newGrid);
+  };
+
+  // Add a row of blank plots
+  const addBlankRow = () => {
+    if (localGridLayout.length === 0) return;
+
+    const numCols = localGridLayout[0].length;
+    const newRowIdx = localGridLayout.length;
+    const newRow = Array.from({ length: numCols }, (_, colIdx) => ({
+      id: `${newRowIdx + 1}-${colIdx + 1}`,
+      block: newRowIdx + 1,
+      treatment: 0,
+      treatmentName: '',
+      isBlank: true,
+      plotNumber: colIdx + 1
+    }));
+
+    setLocalGridLayout([...localGridLayout, newRow]);
+  };
+
+  // Add a column of blank plots
+  const addBlankColumn = () => {
+    const newGrid = localGridLayout.map((row, rowIdx) => {
+      const newColIdx = row.length;
+      return [
+        ...row,
+        {
+          id: `${rowIdx + 1}-${newColIdx + 1}`,
+          block: rowIdx + 1,
+          treatment: 0,
+          treatmentName: '',
+          isBlank: true,
+          plotNumber: newColIdx + 1
+        }
+      ];
+    });
+
+    setLocalGridLayout(newGrid);
+  };
+
+  // Remove last row
+  const removeLastRow = () => {
+    if (localGridLayout.length <= 1) {
+      alert('Cannot remove the last row');
+      return;
+    }
+
+    if (!confirm('Remove the last row? This cannot be undone.')) return;
+
+    setLocalGridLayout(localGridLayout.slice(0, -1));
+  };
+
+  // Remove last column
+  const removeLastColumn = () => {
+    if (localGridLayout.length === 0 || localGridLayout[0].length <= 1) {
+      alert('Cannot remove the last column');
+      return;
+    }
+
+    if (!confirm('Remove the last column from all rows? This cannot be undone.')) return;
+
+    const newGrid = localGridLayout.map(row => row.slice(0, -1));
+    setLocalGridLayout(newGrid);
   };
 
   const handleSave = () => {
@@ -390,6 +483,51 @@ export default function TrialConfigEditor({ config, gridLayout, orientation, onS
                 </div>
               </div>
 
+              {/* Grid Management Buttons */}
+              <div className="flex gap-2 flex-wrap">
+                <button
+                  onClick={addBlankRow}
+                  className="flex items-center gap-2 px-3 py-2 bg-green-600 text-white rounded text-sm hover:bg-green-700 transition"
+                  type="button"
+                  title="Add a row of blank plots"
+                >
+                  <Plus size={16} />
+                  <Rows size={16} />
+                  Add Blank Row
+                </button>
+
+                <button
+                  onClick={addBlankColumn}
+                  className="flex items-center gap-2 px-3 py-2 bg-green-600 text-white rounded text-sm hover:bg-green-700 transition"
+                  type="button"
+                  title="Add a column of blank plots"
+                >
+                  <Plus size={16} />
+                  <Columns size={16} />
+                  Add Blank Column
+                </button>
+
+                <button
+                  onClick={removeLastRow}
+                  className="flex items-center gap-2 px-3 py-2 bg-red-600 text-white rounded text-sm hover:bg-red-700 transition"
+                  type="button"
+                  title="Remove the last row"
+                >
+                  <Trash2 size={16} />
+                  Remove Last Row
+                </button>
+
+                <button
+                  onClick={removeLastColumn}
+                  className="flex items-center gap-2 px-3 py-2 bg-red-600 text-white rounded text-sm hover:bg-red-700 transition"
+                  type="button"
+                  title="Remove the last column"
+                >
+                  <Trash2 size={16} />
+                  Remove Last Column
+                </button>
+              </div>
+
               {/* Grid Display */}
               <div className="border border-gray-300 rounded-lg p-4 bg-gray-50 overflow-x-auto">
                 <div className="space-y-2">
@@ -402,16 +540,26 @@ export default function TrialConfigEditor({ config, gridLayout, orientation, onS
                           onDragStart={() => handleDragStart(rowIdx, colIdx)}
                           onDragOver={handleDragOver}
                           onDrop={() => handleDrop(rowIdx, colIdx)}
+                          onClick={(e) => togglePlotBlank(rowIdx, colIdx, e)}
                           className={`
-                            min-w-[100px] h-20 rounded border-2 flex flex-col items-center justify-center
-                            text-xs transition-all
+                            relative min-w-[100px] h-20 rounded border-2 flex flex-col items-center justify-center
+                            text-xs transition-all cursor-pointer group
                             ${plot.isBlank
-                              ? 'border-dashed border-gray-300 bg-gray-100 text-gray-400'
-                              : 'border-solid border-blue-400 bg-white hover:border-blue-600 cursor-move hover:shadow-lg'
+                              ? 'border-dashed border-gray-300 bg-gray-100 text-gray-400 hover:border-green-400 hover:bg-green-50'
+                              : 'border-solid border-blue-400 bg-white hover:border-blue-600 hover:shadow-lg'
                             }
                             ${draggedPlot?.rowIdx === rowIdx && draggedPlot?.colIdx === colIdx ? 'opacity-50' : ''}
                           `}
+                          title={plot.isBlank ? 'Click to convert to plot' : 'Click to convert to blank'}
                         >
+                          {/* Toggle indicator on hover */}
+                          <div className={`
+                            absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity
+                            ${plot.isBlank ? 'text-green-600' : 'text-orange-600'}
+                          `}>
+                            <Square size={14} />
+                          </div>
+
                           {plot.isBlank ? (
                             <span>Blank</span>
                           ) : (
@@ -435,8 +583,14 @@ export default function TrialConfigEditor({ config, gridLayout, orientation, onS
 
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
                 <p className="text-sm text-blue-800">
-                  <strong>Tip:</strong> Drag and drop plots to rearrange them. The plot ID, block number, and treatment name are shown for easy identification.
+                  <strong>Tips:</strong>
                 </p>
+                <ul className="text-sm text-blue-800 list-disc list-inside mt-1 space-y-1">
+                  <li>Drag and drop plots to rearrange them</li>
+                  <li>Click any plot to toggle between blank and real plot</li>
+                  <li>Use buttons above to add/remove rows and columns</li>
+                  <li>Blank plots won't appear in data entry</li>
+                </ul>
               </div>
             </div>
           )}
