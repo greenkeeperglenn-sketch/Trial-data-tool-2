@@ -569,11 +569,10 @@ const PresentationMode = ({
   const prepareLineChartDataByTreatment = (typeName) => {
     const treatmentData = {};
 
-    // Initialize data structure for each visible treatment
+    // Initialize data structure for each treatment (visible or not initially)
+    // We'll filter by visibility when rendering
     treatmentNames.forEach(treatment => {
-      if (visibleTreatments[treatment]) {
-        treatmentData[treatment] = [];
-      }
+      treatmentData[treatment] = [];
     });
 
     console.log(`Preparing data for ${typeName}, treatments:`, treatmentNames);
@@ -593,8 +592,6 @@ const PresentationMode = ({
         row.forEach(plot => {
           if (!plot.isBlank) {
             const treatment = plot.treatmentName || 'Untreated';
-            // Only include visible treatments
-            if (!visibleTreatments[treatment]) return;
 
             const plotData = assessment[plot.id];
 
@@ -614,6 +611,10 @@ const PresentationMode = ({
       // Add data point for each treatment
       Object.entries(treatmentStats).forEach(([treatment, stats]) => {
         const avg = stats.values.reduce((sum, val) => sum + val, 0) / stats.values.length;
+        // Ensure the array exists before pushing
+        if (!treatmentData[treatment]) {
+          treatmentData[treatment] = [];
+        }
         treatmentData[treatment].push({
           date: dateObj.date,
           value: avg.toFixed(1)
@@ -623,7 +624,15 @@ const PresentationMode = ({
 
     console.log('Final treatment data:', Object.keys(treatmentData).map(t => `${t}: ${treatmentData[t].length} points`));
 
-    return treatmentData;
+    // Filter by visible treatments before returning
+    const filteredData = {};
+    Object.entries(treatmentData).forEach(([treatment, data]) => {
+      if (visibleTreatments[treatment] !== false) {  // Include if true or undefined (default visible)
+        filteredData[treatment] = data;
+      }
+    });
+
+    return filteredData;
   };
 
   // Prepare bar chart data by treatment for current date
