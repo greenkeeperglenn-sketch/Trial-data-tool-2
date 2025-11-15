@@ -319,7 +319,30 @@ const App = () => {
     console.log('[App] handleConfigChange called');
     console.log('[App] Old config assessment types:', config.assessmentTypes.map(t => t.name));
     console.log('[App] New config assessment types:', newConfig.assessmentTypes.map(t => t.name));
+    console.log('[App] Old config treatments:', config.treatments);
+    console.log('[App] New config treatments:', newConfig.treatments);
     console.log('[App] Grid layout available:', !!gridLayout, 'Plots:', gridLayout?.flat().filter(p => !p.isBlank).length);
+
+    // Update gridLayout with new treatment names
+    const updatedGridLayout = gridLayout.map(row =>
+      row.map(plot => {
+        if (plot.isBlank) return plot;
+
+        // Update treatment name based on treatment index
+        const treatmentIndex = plot.treatment;
+        const newTreatmentName = newConfig.treatments[treatmentIndex];
+
+        if (newTreatmentName && newTreatmentName !== plot.treatmentName) {
+          console.log(`[App] Updating plot ${plot.id} treatment: "${plot.treatmentName}" -> "${newTreatmentName}"`);
+          return {
+            ...plot,
+            treatmentName: newTreatmentName
+          };
+        }
+
+        return plot;
+      })
+    );
 
     // Migrate assessment data to match new assessment types
     const migratedDates = currentAssessmentDates.map(dateObj => {
@@ -344,8 +367,8 @@ const App = () => {
           } else {
             console.warn(`[App] No data found for "${oldType.name}"`);
             newAssessments[newType.name] = {};
-            if (gridLayout && gridLayout.length > 0) {
-              gridLayout.flat().forEach(plot => {
+            if (updatedGridLayout && updatedGridLayout.length > 0) {
+              updatedGridLayout.flat().forEach(plot => {
                 if (!plot.isBlank) {
                   newAssessments[newType.name][plot.id] = { value: '', entered: false };
                 }
@@ -361,8 +384,8 @@ const App = () => {
           // This is a new assessment type - create empty data
           console.log(`[App] New assessment type: "${newType.name}"`);
           newAssessments[newType.name] = {};
-          if (gridLayout && gridLayout.length > 0) {
-            gridLayout.flat().forEach(plot => {
+          if (updatedGridLayout && updatedGridLayout.length > 0) {
+            updatedGridLayout.flat().forEach(plot => {
               if (!plot.isBlank) {
                 newAssessments[newType.name][plot.id] = { value: '', entered: false };
               }
@@ -379,8 +402,9 @@ const App = () => {
 
     console.log('[App] Migration complete, updating state');
 
-    // Update config and assessment dates
+    // Update config, grid layout, and assessment dates
     setConfig(newConfig);
+    setGridLayout(updatedGridLayout);
     setAssessmentDates(migratedDates);
 
     // Save immediately after config change
