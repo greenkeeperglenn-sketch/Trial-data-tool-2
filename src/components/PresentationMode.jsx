@@ -37,10 +37,11 @@ const calculateAutoScale = (values) => {
 // Simple SVG Bar Chart Component by Treatment
 const SimpleBarChart = ({ data, min, max, currentDateColor }) => {
   const width = 600;
-  const height = 300;
+  const height = 350;  // Increased to accommodate rotated labels
   const padding = 60;
+  const bottomPadding = 80;  // Extra space for rotated labels
   const chartWidth = width - padding * 2;
-  const chartHeight = height - padding * 2;
+  const chartHeight = height - padding - bottomPadding;
 
   if (!data || data.length === 0) return null;
 
@@ -55,7 +56,7 @@ const SimpleBarChart = ({ data, min, max, currentDateColor }) => {
     <svg width="100%" height={height} viewBox={`0 0 ${width} ${height}`}>
       {/* Grid lines */}
       {[0, 0.25, 0.5, 0.75, 1].map(pct => {
-        const y = height - padding - pct * chartHeight;
+        const y = height - bottomPadding - pct * chartHeight;
         const value = (dataMin + pct * range).toFixed(1);
         return (
           <g key={pct}>
@@ -78,7 +79,7 @@ const SimpleBarChart = ({ data, min, max, currentDateColor }) => {
       {data.map((item, idx) => {
         const x = padding + idx * barSpacing + (barSpacing - barWidth) / 2;
         const barHeight = (parseFloat(item.value) - dataMin) / range * chartHeight;
-        const y = height - padding - barHeight;
+        const y = height - bottomPadding - barHeight;
 
         return (
           <g key={idx}>
@@ -90,6 +91,7 @@ const SimpleBarChart = ({ data, min, max, currentDateColor }) => {
               fill={item.color}
               className="hover:opacity-80 transition-opacity"
             />
+            {/* Value label above bar */}
             <text
               x={x + barWidth / 2}
               y={y - 5}
@@ -100,22 +102,29 @@ const SimpleBarChart = ({ data, min, max, currentDateColor }) => {
             >
               {item.value}
             </text>
+
+            {/* Treatment name - rotated for better readability */}
             <text
               x={x + barWidth / 2}
-              y={height - padding + 20}
-              fontSize="11"
-              fill="#9ca3af"
-              textAnchor="middle"
-              className="max-w-20"
+              y={height - bottomPadding + 15}
+              fontSize="13"
+              fontWeight="500"
+              fill="#d1d5db"
+              textAnchor="end"
+              transform={`rotate(-45, ${x + barWidth / 2}, ${height - bottomPadding + 15})`}
+              className="cursor-pointer hover:fill-white transition-colors"
             >
               {item.treatment}
             </text>
+
+            {/* Sample count */}
             <text
               x={x + barWidth / 2}
-              y={height - padding + 35}
-              fontSize="9"
+              y={height - bottomPadding + 35}
+              fontSize="10"
               fill="#6b7280"
-              textAnchor="middle"
+              textAnchor="end"
+              transform={`rotate(-45, ${x + barWidth / 2}, ${height - bottomPadding + 35})`}
             >
               (n={item.count})
             </text>
@@ -129,11 +138,12 @@ const SimpleBarChart = ({ data, min, max, currentDateColor }) => {
 // Multi-Line Chart Component - One line per treatment
 const MultiLineChart = ({ treatmentData, treatmentColors, currentDate, min, max, allDates }) => {
   const width = 1000;  // Increased to make room for legend on right
-  const height = 350;
+  const height = 400;  // Increased to accommodate rotated labels
   const padding = 60;
+  const bottomPadding = 80;  // Extra space for rotated labels
   const legendWidth = 200;  // Space reserved for legend on right
   const chartWidth = width - padding * 2 - legendWidth;  // Chart area excludes legend space
-  const chartHeight = height - padding * 2;  // No bottom space needed for legend anymore
+  const chartHeight = height - padding - bottomPadding;
 
   if (!treatmentData || Object.keys(treatmentData).length === 0) return null;
 
@@ -147,7 +157,7 @@ const MultiLineChart = ({ treatmentData, treatmentColors, currentDate, min, max,
   const scaleX = (dateIndex) => padding + (dateIndex / (numDates - 1)) * chartWidth;
   const scaleY = (value) => {
     if (isNaN(value)) return null;
-    return height - padding - ((value - dataMin) / range) * chartHeight;
+    return height - bottomPadding - ((value - dataMin) / range) * chartHeight;
   };
 
   // Calculate position for current date (interpolate if between assessment dates)
@@ -192,7 +202,7 @@ const MultiLineChart = ({ treatmentData, treatmentColors, currentDate, min, max,
     <svg width="100%" height={height} viewBox={`0 0 ${width} ${height}`} className="text-gray-300">
       {/* Grid lines */}
       {[0, 0.25, 0.5, 0.75, 1].map(pct => {
-        const y = height - padding - pct * chartHeight;
+        const y = height - bottomPadding - pct * chartHeight;
         const value = (dataMin + pct * range).toFixed(1);
         return (
           <g key={pct}>
@@ -211,17 +221,21 @@ const MultiLineChart = ({ treatmentData, treatmentColors, currentDate, min, max,
         );
       })}
 
-      {/* X-axis labels */}
+      {/* X-axis labels - rotated for better readability */}
       {allDates.map((date, i) => {
         const x = scaleX(i);
+        const labelY = height - bottomPadding + 20;
         return (
           <text
             key={i}
             x={x}
-            y={height - padding + 20}
-            fontSize="11"
+            y={labelY}
+            fontSize="13"
+            fontWeight="500"
             fill="#9ca3af"
-            textAnchor="middle"
+            textAnchor="end"
+            transform={`rotate(-45, ${x}, ${labelY})`}
+            className="cursor-pointer hover:fill-white transition-colors"
           >
             {date}
           </text>
@@ -235,7 +249,7 @@ const MultiLineChart = ({ treatmentData, treatmentColors, currentDate, min, max,
             x1={currentDateX}
             y1={padding}
             x2={currentDateX}
-            y2={height - padding}
+            y2={height - bottomPadding}
             stroke="#00BFB8"
             strokeWidth="3"
           />
