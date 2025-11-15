@@ -8,7 +8,7 @@ export default function TrialConfigEditor({ config, onSave, onCancel }) {
   console.log('[TrialConfigEditor] Has assessmentTypes:', config?.assessmentTypes);
 
   // Safety check - if config is invalid, show error
-  if (!config || !config.treatments || !config.assessmentTypes) {
+  if (!config || !config.assessmentTypes) {
     console.error('[TrialConfigEditor] Invalid config detected:', {
       config,
       hasTreatments: !!config?.treatments,
@@ -38,9 +38,22 @@ export default function TrialConfigEditor({ config, onSave, onCancel }) {
     );
   }
 
+  // Handle treatments - could be array or number (numTreatments)
+  const getTreatmentsArray = () => {
+    if (Array.isArray(config.treatments)) {
+      return [...config.treatments];
+    }
+    // If treatments is a number (numTreatments), generate array
+    if (typeof config.treatments === 'number' || typeof config.numTreatments === 'number') {
+      const count = config.treatments || config.numTreatments || 3;
+      return Array.from({ length: count }, (_, i) => `Treatment ${i + 1}`);
+    }
+    return ['Treatment 1', 'Treatment 2', 'Treatment 3'];
+  };
+
   const [editedConfig, setEditedConfig] = useState({
     ...config,
-    treatments: config.treatments ? [...config.treatments] : [],
+    treatments: getTreatmentsArray(),
     assessmentTypes: config.assessmentTypes ? config.assessmentTypes.map(type => ({ ...type })) : []
   });
 
