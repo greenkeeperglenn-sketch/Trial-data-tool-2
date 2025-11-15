@@ -316,23 +316,45 @@ const App = () => {
 
   // Handle config changes (for editing trial setup)
   const handleConfigChange = (newConfig, currentAssessmentDates) => {
-    // Update config
-    setConfig(newConfig);
+    // Create mapping of old assessment names to new ones by index
+    const assessmentNameMap = {};
+    config.assessmentTypes.forEach((oldType, index) => {
+      if (newConfig.assessmentTypes[index]) {
+        assessmentNameMap[oldType.name] = newConfig.assessmentTypes[index].name;
+      }
+    });
+
+    console.log('[App] Assessment name mapping:', assessmentNameMap);
 
     // Migrate assessment data to match new assessment types
     const migratedDates = currentAssessmentDates.map(dateObj => {
       const newAssessments = {};
 
       // For each new assessment type, try to preserve existing data
-      newConfig.assessmentTypes.forEach(newType => {
-        // Check if this assessment type exists in old data
-        const oldData = dateObj.assessments[newType.name];
+      newConfig.assessmentTypes.forEach((newType, index) => {
+        // Check if this is a renamed assessment (same index, different name)
+        const oldType = config.assessmentTypes[index];
 
-        if (oldData) {
-          // Preserve existing data
-          newAssessments[newType.name] = oldData;
+        if (oldType && oldType.name !== newType.name) {
+          // This is a rename - migrate data from old name to new name
+          console.log(`[App] Migrating data: "${oldType.name}" -> "${newType.name}"`);
+          const oldData = dateObj.assessments[oldType.name];
+          if (oldData) {
+            newAssessments[newType.name] = oldData;
+          } else {
+            // Create empty data if old data doesn't exist
+            newAssessments[newType.name] = {};
+            gridLayout.flat().forEach(plot => {
+              if (!plot.isBlank) {
+                newAssessments[newType.name][plot.id] = { value: '', entered: false };
+              }
+            });
+          }
+        } else if (dateObj.assessments[newType.name]) {
+          // Name hasn't changed, preserve existing data
+          newAssessments[newType.name] = dateObj.assessments[newType.name];
         } else {
-          // Create new empty assessment data for all plots
+          // This is a new assessment type - create empty data
           newAssessments[newType.name] = {};
           gridLayout.flat().forEach(plot => {
             if (!plot.isBlank) {
@@ -348,6 +370,8 @@ const App = () => {
       };
     });
 
+    // Update config
+    setConfig(newConfig);
     setAssessmentDates(migratedDates);
     alert('Trial configuration updated successfully!');
   };
