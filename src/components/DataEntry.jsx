@@ -102,6 +102,25 @@ const DataEntry = ({
 
   // Handle config changes
   const handleConfigSave = (newConfig) => {
+    console.log('[DataEntry] Config saved, updating selectedAssessmentType');
+    console.log('[DataEntry] Old selected:', selectedAssessmentType);
+    console.log('[DataEntry] Old config assessment types:', config.assessmentTypes.map(t => t.name));
+    console.log('[DataEntry] New config assessment types:', newConfig.assessmentTypes.map(t => t.name));
+
+    // Find the index of the currently selected assessment type in the old config
+    const oldIndex = config.assessmentTypes.findIndex(t => t.name === selectedAssessmentType);
+
+    // If we found it, update to the new name at the same index
+    if (oldIndex >= 0 && newConfig.assessmentTypes[oldIndex]) {
+      const newName = newConfig.assessmentTypes[oldIndex].name;
+      console.log('[DataEntry] Updating selected assessment type from', selectedAssessmentType, 'to', newName);
+      setSelectedAssessmentType(newName);
+    } else if (newConfig.assessmentTypes.length > 0) {
+      // Otherwise, just select the first one
+      console.log('[DataEntry] Selecting first assessment type:', newConfig.assessmentTypes[0].name);
+      setSelectedAssessmentType(newConfig.assessmentTypes[0].name);
+    }
+
     if (onConfigChange) {
       onConfigChange(newConfig, assessmentDates);
     }
@@ -111,15 +130,16 @@ const DataEntry = ({
   // Export CSV data
   const exportToCSV = () => {
     if (!selectedAssessmentType) return;
-    
+
     let csv = 'Plot,Block,Treatment';
     assessmentDates.forEach(d => csv += `,${d.date}`);
     csv += '\n';
-    
+
     gridLayout.flat().filter(p => !p.isBlank).forEach(plot => {
       csv += `${plot.id},${plot.block},${plot.treatmentName}`;
       assessmentDates.forEach(dateObj => {
-        const value = dateObj.assessments[selectedAssessmentType][plot.id]?.value || '';
+        const assessmentData = dateObj.assessments[selectedAssessmentType];
+        const value = assessmentData?.[plot.id]?.value || '';
         csv += `,${value}`;
       });
       csv += '\n';
@@ -145,10 +165,15 @@ const DataEntry = ({
     config.treatments.forEach((treatment, treatmentIdx) => {
       csv += treatment;
       assessmentDates.forEach(dateObj => {
+        const assessmentData = dateObj.assessments[selectedAssessmentType];
+        if (!assessmentData) {
+          csv += ',,';
+          return;
+        }
         const treatmentValues = gridLayout.flat()
           .filter(plot => !plot.isBlank && plot.treatment === treatmentIdx)
           .map(plot => {
-            const plotData = dateObj.assessments[selectedAssessmentType][plot.id];
+            const plotData = assessmentData[plot.id];
             return plotData?.entered && plotData.value !== '' ? parseFloat(plotData.value) : null;
           })
           .filter(v => v !== null);
