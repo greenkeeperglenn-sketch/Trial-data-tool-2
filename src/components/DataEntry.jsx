@@ -101,7 +101,7 @@ const DataEntry = ({
   };
 
   // Handle config changes
-  const handleConfigSave = (newConfig) => {
+  const handleConfigSave = (newConfig, newGridLayout, newOrientation) => {
     console.log('[DataEntry] Config saved, updating selectedAssessmentType');
     console.log('[DataEntry] Old selected:', selectedAssessmentType);
     console.log('[DataEntry] Old config assessment types:', config.assessmentTypes.map(t => t.name));
@@ -122,7 +122,7 @@ const DataEntry = ({
     }
 
     if (onConfigChange) {
-      onConfigChange(newConfig, assessmentDates);
+      onConfigChange(newConfig, assessmentDates, newGridLayout, newOrientation);
     }
     setShowConfigEditor(false);
   };
@@ -450,6 +450,8 @@ const DataEntry = ({
       {showConfigEditor && (
         <TrialConfigEditor
           config={config}
+          gridLayout={gridLayout}
+          orientation={orientation}
           onSave={handleConfigSave}
           onCancel={() => setShowConfigEditor(false)}
         />

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { X, Save, Plus, Trash2, Edit2 } from 'lucide-react';
+import { X, Save, Plus, Trash2, Edit2, Grip, RotateCw } from 'lucide-react';
 
-export default function TrialConfigEditor({ config, onSave, onCancel }) {
+export default function TrialConfigEditor({ config, gridLayout, orientation, onSave, onCancel }) {
   // Debug logging
   console.log('[TrialConfigEditor] Received config:', config);
   console.log('[TrialConfigEditor] Has treatments:', config?.treatments);
@@ -56,6 +56,11 @@ export default function TrialConfigEditor({ config, onSave, onCancel }) {
     treatments: getTreatmentsArray(),
     assessmentTypes: config.assessmentTypes ? config.assessmentTypes.map(type => ({ ...type })) : []
   });
+
+  // Field map state
+  const [localGridLayout, setLocalGridLayout] = useState(gridLayout || []);
+  const [localOrientation, setLocalOrientation] = useState(orientation || 0);
+  const [draggedPlot, setDraggedPlot] = useState(null);
 
   const handleTrialNameChange = (value) => {
     setEditedConfig({ ...editedConfig, trialName: value });
@@ -119,6 +124,36 @@ export default function TrialConfigEditor({ config, onSave, onCancel }) {
     setEditedConfig({ ...editedConfig, assessmentTypes: newTypes });
   };
 
+  // Drag and drop handlers
+  const handleDragStart = (rowIdx, colIdx) => {
+    setDraggedPlot({ rowIdx, colIdx });
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+  };
+
+  const handleDrop = (targetRowIdx, targetColIdx) => {
+    if (!draggedPlot) return;
+
+    const newGrid = localGridLayout.map(row => [...row]);
+    const draggedItem = newGrid[draggedPlot.rowIdx][draggedPlot.colIdx];
+    const targetItem = newGrid[targetRowIdx][targetColIdx];
+
+    // Swap plots
+    newGrid[draggedPlot.rowIdx][draggedPlot.colIdx] = targetItem;
+    newGrid[targetRowIdx][targetColIdx] = draggedItem;
+
+    setLocalGridLayout(newGrid);
+    setDraggedPlot(null);
+  };
+
+  // Rotate compass
+  const rotateCompass = (degrees) => {
+    const newOrientation = (localOrientation + degrees + 360) % 360;
+    setLocalOrientation(newOrientation);
+  };
+
   const handleSave = () => {
     // Validation
     if (!editedConfig.trialName || editedConfig.trialName.trim() === '') {
@@ -136,7 +171,7 @@ export default function TrialConfigEditor({ config, onSave, onCancel }) {
       return;
     }
 
-    onSave(editedConfig);
+    onSave(editedConfig, localGridLayout, localOrientation);
   };
 
   return (
@@ -281,6 +316,130 @@ export default function TrialConfigEditor({ config, onSave, onCancel }) {
               ))}
             </div>
           </div>
+
+          {/* Field Map Editor Section */}
+          {localGridLayout && localGridLayout.length > 0 && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-800">Field Map Layout</h3>
+                  <p className="text-sm text-gray-600">Drag and drop plots to rearrange. Useful for odd trial configurations.</p>
+                </div>
+
+                {/* Compass Control */}
+                <div className="flex flex-col items-center gap-2">
+                  <div className="text-xs font-semibold text-gray-600">ORIENTATION</div>
+
+                  {/* Compass Display */}
+                  <div className="relative w-20 h-20 bg-gradient-to-br from-blue-50 to-blue-100 rounded-full shadow-lg border-4 border-blue-300">
+                    <div
+                      className="absolute inset-0 flex items-center justify-center"
+                      style={{ transform: `rotate(${localOrientation}deg)` }}
+                    >
+                      {/* North Arrow */}
+                      <div className="absolute top-0.5 left-1/2 -translate-x-1/2">
+                        <div className="w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-b-[12px] border-b-red-600"></div>
+                        <div className="text-xs font-bold text-red-600 text-center">N</div>
+                      </div>
+                      {/* South Marker */}
+                      <div className="absolute bottom-0.5 left-1/2 -translate-x-1/2">
+                        <div className="text-xs text-gray-500">S</div>
+                      </div>
+                      {/* East Marker */}
+                      <div className="absolute right-0.5 top-1/2 -translate-y-1/2">
+                        <div className="text-xs text-gray-500">E</div>
+                      </div>
+                      {/* West Marker */}
+                      <div className="absolute left-0.5 top-1/2 -translate-y-1/2">
+                        <div className="text-xs text-gray-500">W</div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Rotation Display */}
+                  <div className="text-sm font-mono text-gray-700 bg-gray-100 px-2 py-1 rounded">
+                    {localOrientation}°
+                  </div>
+
+                  {/* Rotation Controls */}
+                  <div className="flex gap-1">
+                    <button
+                      onClick={() => rotateCompass(-5)}
+                      className="px-2 py-1 bg-blue-100 hover:bg-blue-200 text-blue-700 text-xs rounded transition"
+                      title="Rotate -5°"
+                      type="button"
+                    >
+                      ↺ 5°
+                    </button>
+                    <button
+                      onClick={() => rotateCompass(5)}
+                      className="px-2 py-1 bg-blue-100 hover:bg-blue-200 text-blue-700 text-xs rounded transition"
+                      title="Rotate +5°"
+                      type="button"
+                    >
+                      ↻ 5°
+                    </button>
+                  </div>
+                  <button
+                    onClick={() => setLocalOrientation(0)}
+                    className="px-2 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs rounded transition"
+                    type="button"
+                  >
+                    Reset
+                  </button>
+                </div>
+              </div>
+
+              {/* Grid Display */}
+              <div className="border border-gray-300 rounded-lg p-4 bg-gray-50 overflow-x-auto">
+                <div className="space-y-2">
+                  {localGridLayout.map((row, rowIdx) => (
+                    <div key={rowIdx} className="flex gap-2">
+                      {row.map((plot, colIdx) => (
+                        <div
+                          key={colIdx}
+                          draggable={!plot.isBlank}
+                          onDragStart={() => handleDragStart(rowIdx, colIdx)}
+                          onDragOver={handleDragOver}
+                          onDrop={() => handleDrop(rowIdx, colIdx)}
+                          className={`
+                            min-w-[100px] h-20 rounded border-2 flex flex-col items-center justify-center
+                            text-xs transition-all
+                            ${plot.isBlank
+                              ? 'border-dashed border-gray-300 bg-gray-100 text-gray-400'
+                              : 'border-solid border-blue-400 bg-white hover:border-blue-600 cursor-move hover:shadow-lg'
+                            }
+                            ${draggedPlot?.rowIdx === rowIdx && draggedPlot?.colIdx === colIdx ? 'opacity-50' : ''}
+                          `}
+                        >
+                          {plot.isBlank ? (
+                            <span>Blank</span>
+                          ) : (
+                            <>
+                              <div className="flex items-center gap-1 text-gray-600">
+                                <Grip size={12} />
+                                <span className="font-semibold">{plot.id}</span>
+                              </div>
+                              <div className="font-medium text-blue-700">Block {plot.block}</div>
+                              <div className="text-gray-700 truncate max-w-full px-1">
+                                {plot.treatmentName}
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                <p className="text-sm text-blue-800">
+                  <strong>Tip:</strong> Drag and drop plots to rearrange them. The plot ID, block number, and treatment name are shown for easy identification.
+                </p>
+              </div>
+            </div>
+          )}
 
           {/* Warning Message */}
           <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">

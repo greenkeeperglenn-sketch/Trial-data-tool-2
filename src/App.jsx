@@ -315,7 +315,7 @@ const App = () => {
   };
 
   // Handle config changes (for editing trial setup)
-  const handleConfigChange = (newConfig, currentAssessmentDates) => {
+  const handleConfigChange = (newConfig, currentAssessmentDates, newGridLayout, newOrientation) => {
     console.log('[App] handleConfigChange called');
     console.log('[App] Old config assessment types:', config.assessmentTypes.map(t => t.name));
     console.log('[App] New config assessment types:', newConfig.assessmentTypes.map(t => t.name));
@@ -323,8 +323,8 @@ const App = () => {
     console.log('[App] New config treatments:', newConfig.treatments);
     console.log('[App] Grid layout available:', !!gridLayout, 'Plots:', gridLayout?.flat().filter(p => !p.isBlank).length);
 
-    // Update gridLayout with new treatment names
-    const updatedGridLayout = gridLayout.map(row =>
+    // Use provided gridLayout if available, otherwise update current gridLayout with new treatment names
+    const updatedGridLayout = (newGridLayout || gridLayout).map(row =>
       row.map(plot => {
         if (plot.isBlank) return plot;
 
@@ -402,9 +402,12 @@ const App = () => {
 
     console.log('[App] Migration complete, updating state');
 
-    // Update config, grid layout, and assessment dates
+    // Update config, grid layout, orientation, and assessment dates
     setConfig(newConfig);
     setGridLayout(updatedGridLayout);
+    if (newOrientation !== undefined) {
+      setOrientation(newOrientation);
+    }
     setAssessmentDates(migratedDates);
 
     // Save immediately after config change
