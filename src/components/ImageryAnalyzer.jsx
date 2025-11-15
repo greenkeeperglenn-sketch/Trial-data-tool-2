@@ -315,7 +315,7 @@ const ImageryAnalyzer = ({
     setDraggingCorner(null);
   };
 
-  // Fast perspective transformation using larger step size
+  // Perspective transformation with high quality
   const extractPlotWithPerspective = (sourceCanvas, plotCorners, targetSize) => {
     const tempCanvas = document.createElement('canvas');
     tempCanvas.width = targetSize;
@@ -331,8 +331,8 @@ const ImageryAnalyzer = ({
       const srcImageData = srcCtx.getImageData(0, 0, sourceCanvas.width, sourceCanvas.height);
       const dstImageData = tempCtx.createImageData(targetSize, targetSize);
 
-      // Use step size of 2 for much faster processing
-      const step = 2;
+      // Use step size of 1 for best quality (no pixel skipping)
+      const step = 1;
 
       for (let y = 0; y < targetSize; y += step) {
         for (let x = 0; x < targetSize; x += step) {
@@ -451,11 +451,11 @@ const ImageryAnalyzer = ({
 
         if (!layoutPlot?.isBlank) {
           // Extract plot with perspective transformation
-          const targetSize = 300; // Reduced from 400 for faster processing
+          const targetSize = 500; // High resolution for better quality
           const transformedCanvas = extractPlotWithPerspective(canvas, plotCorners, targetSize);
 
-          // Convert to base64
-          const plotImageData = transformedCanvas.toDataURL('image/jpeg', 0.80);
+          // Convert to base64 with high quality
+          const plotImageData = transformedCanvas.toDataURL('image/jpeg', 0.95);
 
           // Store with key format: date_plotId
           const photoKey = `${fileDate}_${plotId}`;

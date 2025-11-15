@@ -735,7 +735,7 @@ const PresentationMode = ({
   const renderPhotos = () => {
     if (Object.keys(currentPhotos).length === 0) return null;
 
-    // Collect all photos with their plot info
+    // Collect all photos with their plot info including treatment index
     const allPhotos = [];
     Object.entries(treatmentGroups)
       .filter(([treatment]) => visibleTreatments[treatment])
@@ -743,28 +743,47 @@ const PresentationMode = ({
         plots.forEach(plot => {
           const plotPhotos = currentPhotos[plot.id];
           if (plotPhotos && plotPhotos.length > 0) {
+            // Find position in gridLayout (including blanks)
+            let rowIdx = -1;
+            let colIdx = -1;
+            for (let r = 0; r < gridLayout.length; r++) {
+              for (let c = 0; c < gridLayout[r].length; c++) {
+                if (gridLayout[r][c].id === plot.id) {
+                  rowIdx = r;
+                  colIdx = c;
+                  break;
+                }
+              }
+              if (rowIdx !== -1) break;
+            }
+
             allPhotos.push({
               plotId: plot.id,
               treatment: treatment,
               treatmentName: plot.treatmentName,
+              treatmentIdx: plot.treatment, // The treatment index (0, 1, 2, etc.)
               block: plot.block,
               color: treatmentColors[treatment],
               image: plotPhotos[0],
-              // For sorting by position
-              rowIdx: gridLayout.findIndex(row => row.some(p => p.id === plot.id)),
-              colIdx: gridLayout.flat().findIndex(p => p.id === plot.id) % (gridLayout[0]?.length || 1)
+              rowIdx,
+              colIdx
             });
           }
         });
       });
 
-    // Sort photos
+    // Sort photos - by treatment index then by block
     const sortedPhotos = sortPhotosByPosition
       ? [...allPhotos].sort((a, b) => {
+          // Sort by actual grid position (row then column)
           if (a.rowIdx !== b.rowIdx) return a.rowIdx - b.rowIdx;
           return a.colIdx - b.colIdx;
         })
-      : allPhotos;
+      : [...allPhotos].sort((a, b) => {
+          // Sort by treatment index, then by block
+          if (a.treatmentIdx !== b.treatmentIdx) return a.treatmentIdx - b.treatmentIdx;
+          return a.block - b.block;
+        });
 
     return (
       <div className="bg-gray-800 rounded-xl p-6 shadow-2xl">
@@ -799,12 +818,11 @@ const PresentationMode = ({
             <div
               key={photo.plotId}
               className="relative group cursor-pointer"
-              onMouseEnter={() => setExpandedPhoto(photo.plotId)}
-              onMouseLeave={() => setExpandedPhoto(null)}
+              onClick={() => setExpandedPhoto(expandedPhoto === photo.plotId ? null : photo.plotId)}
             >
               {/* Thumbnail */}
               <div
-                className="w-24 h-24 rounded-lg overflow-hidden shadow-lg transition-all"
+                className="w-24 h-24 rounded-lg overflow-hidden shadow-lg transition-all hover:scale-105"
                 style={{
                   border: `3px solid ${photo.color}`
                 }}
@@ -824,24 +842,38 @@ const PresentationMode = ({
                 {photo.plotId}
               </div>
 
-              {/* Expanded view on hover */}
+              {/* Expanded view on click */}
               {expandedPhoto === photo.plotId && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-8"
-                  onClick={() => setExpandedPhoto(null)}
+                <div
+                  className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setExpandedPhoto(null);
+                  }}
                 >
-                  <div className="relative max-w-4xl max-h-full">
+                  <div className="relative w-full h-full flex items-center justify-center">
                     <img
                       src={photo.image}
                       alt={photo.plotId}
                       className="max-w-full max-h-full object-contain rounded-lg shadow-2xl"
-                      style={{ border: `6px solid ${photo.color}` }}
+                      style={{ border: `8px solid ${photo.color}` }}
+                      onClick={(e) => e.stopPropagation()}
                     />
                     <div
-                      className="absolute top-0 left-0 right-0 text-center text-2xl font-bold text-white px-4 py-2 rounded-t-lg"
+                      className="absolute top-4 left-1/2 -translate-x-1/2 text-center text-3xl font-bold text-white px-6 py-3 rounded-lg shadow-xl"
                       style={{ backgroundColor: photo.color }}
                     >
                       Plot {photo.plotId} - {photo.treatment}
                     </div>
+                    <button
+                      className="absolute top-4 right-4 bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg font-semibold shadow-xl"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setExpandedPhoto(null);
+                      }}
+                    >
+                      Close (X)
+                    </button>
                   </div>
                 </div>
               )}
