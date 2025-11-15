@@ -1,5 +1,27 @@
 import React, { useState, useEffect } from 'react';
-import { ChevronLeft, ChevronRight, Calendar, Image as ImageIcon, FileText, TrendingUp, Eye, EyeOff, ArrowUp, ArrowDown, Maximize2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Calendar, Image as ImageIcon, FileText, TrendingUp, Eye, EyeOff, ArrowUp, ArrowDown, Maximize2, MapPin } from 'lucide-react';
+
+// Helper function to normalize date format to YYYY-MM-DD
+const normalizeDateFormat = (dateStr) => {
+  if (!dateStr) return '';
+
+  // If already in YYYY-MM-DD format, return as is
+  if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+    return dateStr;
+  }
+
+  // Try to parse and convert to YYYY-MM-DD
+  try {
+    const date = new Date(dateStr);
+    if (!isNaN(date.getTime())) {
+      return date.toISOString().split('T')[0];
+    }
+  } catch (e) {
+    console.warn('Could not parse date:', dateStr);
+  }
+
+  return dateStr;
+};
 
 // Helper function to calculate auto-scale min/max with padding
 const calculateAutoScale = (values) => {
@@ -408,6 +430,8 @@ const PresentationMode = ({
   const [visibleAssessments, setVisibleAssessments] = useState({});
   const [sectionOrder, setSectionOrder] = useState(['barCharts', 'photos', 'notes', 'graphs']);
   const [useAutoScale, setUseAutoScale] = useState(false);
+  const [sortPhotosByPosition, setSortPhotosByPosition] = useState(false);
+  const [expandedPhoto, setExpandedPhoto] = useState(null);
 
   // Get all dates sorted chronologically
   const sortedDates = [...assessmentDates].sort((a, b) =>
@@ -505,15 +529,23 @@ const PresentationMode = ({
     }
   };
 
-  // Get photos for current date
+  // Get photos for current date (with date normalization)
   const getPhotosForDate = (date) => {
+    const normalizedDate = normalizeDateFormat(date);
     const datePhotos = {};
+
     Object.entries(photos).forEach(([key, photoArray]) => {
-      if (key.startsWith(`${date}_`)) {
-        const plotId = key.substring(date.length + 1);
-        datePhotos[plotId] = photoArray;
+      // Extract the date part from the key and normalize it
+      const keyParts = key.split('_');
+      if (keyParts.length >= 2) {
+        const photoDate = normalizeDateFormat(keyParts[0]);
+        if (photoDate === normalizedDate) {
+          const plotId = keyParts.slice(1).join('_'); // In case plot ID has underscores
+          datePhotos[plotId] = photoArray;
+        }
       }
     });
+
     return datePhotos;
   };
 
@@ -703,68 +735,118 @@ const PresentationMode = ({
   const renderPhotos = () => {
     if (Object.keys(currentPhotos).length === 0) return null;
 
+    // Collect all photos with their plot info
+    const allPhotos = [];
+    Object.entries(treatmentGroups)
+      .filter(([treatment]) => visibleTreatments[treatment])
+      .forEach(([treatment, plots]) => {
+        plots.forEach(plot => {
+          const plotPhotos = currentPhotos[plot.id];
+          if (plotPhotos && plotPhotos.length > 0) {
+            allPhotos.push({
+              plotId: plot.id,
+              treatment: treatment,
+              treatmentName: plot.treatmentName,
+              block: plot.block,
+              color: treatmentColors[treatment],
+              image: plotPhotos[0],
+              // For sorting by position
+              rowIdx: gridLayout.findIndex(row => row.some(p => p.id === plot.id)),
+              colIdx: gridLayout.flat().findIndex(p => p.id === plot.id) % (gridLayout[0]?.length || 1)
+            });
+          }
+        });
+      });
+
+    // Sort photos
+    const sortedPhotos = sortPhotosByPosition
+      ? [...allPhotos].sort((a, b) => {
+          if (a.rowIdx !== b.rowIdx) return a.rowIdx - b.rowIdx;
+          return a.colIdx - b.colIdx;
+        })
+      : allPhotos;
+
     return (
       <div className="bg-gray-800 rounded-xl p-6 shadow-2xl">
-        <h3 className="text-2xl font-bold mb-6 flex items-center gap-2">
-          <ImageIcon size={24} className="text-stri-teal" />
-          Plot Images by Treatment
-        </h3>
+        <div className="flex items-center justify-between mb-6">
+          <h3 className="text-2xl font-bold flex items-center gap-2">
+            <ImageIcon size={24} className="text-stri-teal" />
+            Plot Images
+          </h3>
 
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
-          {Object.entries(treatmentGroups)
-            .filter(([treatment]) => visibleTreatments[treatment])
-            .map(([treatment, plots]) => {
-            const treatmentPhotos = plots.filter(plot => currentPhotos[plot.id]);
+          {/* Sort button */}
+          <button
+            onMouseDown={() => setSortPhotosByPosition(true)}
+            onMouseUp={() => setSortPhotosByPosition(false)}
+            onMouseLeave={() => setSortPhotosByPosition(false)}
+            onTouchStart={() => setSortPhotosByPosition(true)}
+            onTouchEnd={() => setSortPhotosByPosition(false)}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg transition shadow-lg ${
+              sortPhotosByPosition
+                ? 'bg-orange-500 hover:bg-orange-600 text-white'
+                : 'bg-purple-600 hover:bg-purple-700 text-white'
+            }`}
+            title="Hold to sort by field position"
+          >
+            <MapPin size={20} />
+            {sortPhotosByPosition ? 'Sorted by Position' : 'Hold to Sort by Position'}
+          </button>
+        </div>
 
-            if (treatmentPhotos.length === 0) return null;
-
-            const treatmentColor = treatmentColors[treatment];
-
-            return (
-              <div key={treatment} className="space-y-4">
-                <div
-                  className="text-center font-bold text-lg py-2 rounded-lg"
-                  style={{
-                    backgroundColor: `${treatmentColor}30`,
-                    borderLeft: `4px solid ${treatmentColor}`,
-                    borderRight: `4px solid ${treatmentColor}`
-                  }}
-                >
-                  {treatment}
-                </div>
-
-                <div className="space-y-4">
-                  {treatmentPhotos.map(plot => {
-                    const plotPhotos = currentPhotos[plot.id];
-                    if (!plotPhotos || plotPhotos.length === 0) return null;
-
-                    return (
-                      <div
-                        key={plot.id}
-                        className="rounded-lg overflow-hidden shadow-lg hover:shadow-2xl transition transform hover:scale-105"
-                        style={{
-                          border: `4px solid ${treatmentColor}`,
-                          backgroundColor: treatmentColor
-                        }}
-                      >
-                        <img
-                          src={plotPhotos[0]}
-                          alt={plot.id}
-                          className="w-full aspect-square object-cover"
-                        />
-                        <div
-                          className="p-2 text-center font-semibold text-white"
-                          style={{ backgroundColor: treatmentColor }}
-                        >
-                          {plot.id}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
+        {/* Photo grid - small thumbnails */}
+        <div className="flex flex-wrap gap-3">
+          {sortedPhotos.map((photo) => (
+            <div
+              key={photo.plotId}
+              className="relative group cursor-pointer"
+              onMouseEnter={() => setExpandedPhoto(photo.plotId)}
+              onMouseLeave={() => setExpandedPhoto(null)}
+            >
+              {/* Thumbnail */}
+              <div
+                className="w-24 h-24 rounded-lg overflow-hidden shadow-lg transition-all"
+                style={{
+                  border: `3px solid ${photo.color}`
+                }}
+              >
+                <img
+                  src={photo.image}
+                  alt={photo.plotId}
+                  className="w-full h-full object-cover"
+                />
               </div>
-            );
-          })}
+
+              {/* Label */}
+              <div
+                className="absolute bottom-0 left-0 right-0 text-center text-xs font-semibold text-white px-1 py-0.5"
+                style={{ backgroundColor: photo.color }}
+              >
+                {photo.plotId}
+              </div>
+
+              {/* Expanded view on hover */}
+              {expandedPhoto === photo.plotId && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-8"
+                  onClick={() => setExpandedPhoto(null)}
+                >
+                  <div className="relative max-w-4xl max-h-full">
+                    <img
+                      src={photo.image}
+                      alt={photo.plotId}
+                      className="max-w-full max-h-full object-contain rounded-lg shadow-2xl"
+                      style={{ border: `6px solid ${photo.color}` }}
+                    />
+                    <div
+                      className="absolute top-0 left-0 right-0 text-center text-2xl font-bold text-white px-4 py-2 rounded-t-lg"
+                      style={{ backgroundColor: photo.color }}
+                    >
+                      Plot {photo.plotId} - {photo.treatment}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
         </div>
       </div>
     );
