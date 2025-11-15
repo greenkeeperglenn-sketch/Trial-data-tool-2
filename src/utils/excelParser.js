@@ -250,8 +250,11 @@ function convertToTrialFormat(parsedSheets) {
     unit: guessUnit(name)
   }));
 
+  // Create treatment names array
+  const treatmentNames = treatments.map((t, i) => `Treatment ${t}`);
+
   // Create grid layout
-  const gridLayout = createGridLayout(allPlots, blocks.length, treatments);
+  const gridLayout = createGridLayout(allPlots, blocks.length, treatments, treatmentNames);
 
   // Process assessment dates - convert to app format
   const assessmentDates = parsedSheets.map(sheet => {
@@ -301,8 +304,8 @@ function convertToTrialFormat(parsedSheets) {
     name: trialName,
     config: {
       blocks: blocks.length,
-      treatments: treatments.length,
-      treatmentNames: treatments.map((t, i) => `Treatment ${t}`),
+      numTreatments: treatments.length,
+      treatments: treatmentNames,  // Array of treatment names, not number
       assessmentTypes
     },
     gridLayout,
@@ -322,11 +325,12 @@ function convertToTrialFormat(parsedSheets) {
 /**
  * Create grid layout from plot data
  */
-function createGridLayout(plots, numBlocks, treatmentsList) {
+function createGridLayout(plots, numBlocks, treatmentsList, treatmentNames) {
   console.log('[createGridLayout] Input:', {
     plotsCount: plots.length,
     numBlocks,
-    treatments: treatmentsList
+    treatments: treatmentsList,
+    treatmentNames
   });
 
   // Create treatment index mapping (Excel treatment number -> 0-based index)
@@ -358,7 +362,7 @@ function createGridLayout(plots, numBlocks, treatmentsList) {
         id: `${plot.block}-${plot.plot}`,
         block: plot.block,
         treatment: treatmentIdx !== undefined ? treatmentIdx : 0,
-        treatmentName: `Treatment ${plot.treatment}`,
+        treatmentName: treatmentNames[treatmentIdx] || `Treatment ${plot.treatment}`,
         isBlank: false,
         plotNumber: plot.plot
       };
