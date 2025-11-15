@@ -222,39 +222,57 @@ export function parseExcelFile(file) {
 
 /**
  * Normalize date string to YYYY-MM-DD format
+ * Handles both UK (DD/MM/YYYY) and US (MM/DD/YYYY) formats
  */
 function normalizeDateFormat(dateStr) {
   if (!dateStr) return new Date().toISOString().split('T')[0];
 
+  const str = String(dateStr).trim();
+
   // If already in YYYY-MM-DD format, return as-is
-  if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
-    return dateStr;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
+    return str;
   }
 
+  // Handle DD/MM/YYYY or DD-MM-YYYY (UK format)
+  const ukMatch = str.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+  if (ukMatch) {
+    const day = parseInt(ukMatch[1], 10);
+    const month = parseInt(ukMatch[2], 10);
+    const year = parseInt(ukMatch[3], 10);
+
+    // If day > 12, it must be UK format (DD/MM/YYYY)
+    // Otherwise, ambiguous - assume UK format for consistency
+    const paddedMonth = String(month).padStart(2, '0');
+    const paddedDay = String(day).padStart(2, '0');
+
+    // Validate the date is reasonable
+    if (month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+      return `${year}-${paddedMonth}-${paddedDay}`;
+    }
+  }
+
+  // Handle YYYY-MM-DD with different separators
+  const isoMatch = str.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})$/);
+  if (isoMatch) {
+    const year = isoMatch[1];
+    const month = String(parseInt(isoMatch[2], 10)).padStart(2, '0');
+    const day = String(parseInt(isoMatch[3], 10)).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+
+  // Try JavaScript Date parser as fallback (handles "March 15, 2024", etc.)
   try {
-    // Try to parse the date string
-    const date = new Date(dateStr);
+    const date = new Date(str);
     if (!isNaN(date.getTime())) {
       return date.toISOString().split('T')[0];
     }
   } catch (e) {
-    console.warn('Could not parse date:', dateStr);
-  }
-
-  // If all else fails, try to extract a date-like pattern
-  // Handle formats like "15/03/2024", "3-15-24", "Mar 15 2024", etc.
-  const cleaned = String(dateStr).replace(/[^\d\/\-]/g, '');
-  try {
-    const date = new Date(cleaned);
-    if (!isNaN(date.getTime())) {
-      return date.toISOString().split('T')[0];
-    }
-  } catch (e) {
-    console.warn('Could not extract date from:', dateStr);
+    console.warn('[excelParser] Could not parse date:', dateStr);
   }
 
   // Last resort: use current date
-  console.warn('Using current date for unparseable date string:', dateStr);
+  console.warn('[excelParser] Using current date for unparseable date string:', dateStr);
   return new Date().toISOString().split('T')[0];
 }
 
