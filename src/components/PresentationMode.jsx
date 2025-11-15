@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ChevronLeft, ChevronRight, Calendar, Image as ImageIcon, FileText, TrendingUp, Eye, EyeOff, ArrowUp, ArrowDown } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Calendar, Image as ImageIcon, FileText, TrendingUp, Eye, EyeOff, ArrowUp, ArrowDown, Maximize2 } from 'lucide-react';
 
 // Helper function to calculate auto-scale min/max with padding
 const calculateAutoScale = (values) => {
@@ -378,6 +378,7 @@ const PresentationMode = ({
   const [visibleTreatments, setVisibleTreatments] = useState({});
   const [visibleAssessments, setVisibleAssessments] = useState({});
   const [sectionOrder, setSectionOrder] = useState(['barCharts', 'photos', 'notes', 'graphs']);
+  const [useAutoScale, setUseAutoScale] = useState(false);
 
   // Get all dates sorted chronologically
   const sortedDates = [...assessmentDates].sort((a, b) =>
@@ -640,8 +641,16 @@ const PresentationMode = ({
             const barData = prepareBarChartDataForType(type.name);
             if (barData.length === 0) return null;
 
-            const values = barData.map(d => d.value);
-            const autoScale = calculateAutoScale(values);
+            // Use config min/max by default, or auto-calculated when button is held
+            let minValue = type.min;
+            let maxValue = type.max;
+
+            if (useAutoScale) {
+              const values = barData.map(d => d.value);
+              const autoScale = calculateAutoScale(values);
+              minValue = autoScale.min;
+              maxValue = autoScale.max;
+            }
 
             return (
               <div key={type.name} className="bg-gray-700 rounded-lg p-4">
@@ -649,8 +658,8 @@ const PresentationMode = ({
                 <div className="flex justify-center">
                   <SimpleBarChart
                     data={barData}
-                    min={autoScale.min}
-                    max={autoScale.max}
+                    min={minValue}
+                    max={maxValue}
                     currentDateColor={currentDateColor}
                   />
                 </div>
@@ -776,10 +785,18 @@ const PresentationMode = ({
 
             const allDates = sortedDates.map(d => d.date);
 
-            const allValues = Object.values(treatmentLineData)
-              .flat()
-              .map(d => d.value);
-            const autoScale = calculateAutoScale(allValues);
+            // Use config min/max by default, or auto-calculated when button is held
+            let minValue = type.min;
+            let maxValue = type.max;
+
+            if (useAutoScale) {
+              const allValues = Object.values(treatmentLineData)
+                .flat()
+                .map(d => d.value);
+              const autoScale = calculateAutoScale(allValues);
+              minValue = autoScale.min;
+              maxValue = autoScale.max;
+            }
 
             return (
               <div key={type.name} className="bg-gray-700 rounded-lg p-6">
@@ -789,8 +806,8 @@ const PresentationMode = ({
                     treatmentData={treatmentLineData}
                     treatmentColors={treatmentColors}
                     currentDate={currentDate?.date}
-                    min={autoScale.min}
-                    max={autoScale.max}
+                    min={minValue}
+                    max={maxValue}
                     allDates={allDates}
                   />
                 </div>
@@ -880,6 +897,22 @@ const PresentationMode = ({
           <div className="text-sm font-bold text-stri-teal">{currentDate?.date}</div>
           <div className="text-xs text-gray-500 mt-1">{currentSlide + 1}/{sortedDates.length}</div>
         </div>
+
+        <button
+          onMouseDown={() => setUseAutoScale(true)}
+          onMouseUp={() => setUseAutoScale(false)}
+          onMouseLeave={() => setUseAutoScale(false)}
+          onTouchStart={() => setUseAutoScale(true)}
+          onTouchEnd={() => setUseAutoScale(false)}
+          className={`p-4 rounded-full transition shadow-2xl hover:scale-110 ${
+            useAutoScale
+              ? 'bg-orange-500 hover:bg-orange-600'
+              : 'bg-purple-600 hover:bg-purple-700'
+          }`}
+          title="Hold to auto-adjust chart axes to data"
+        >
+          <Maximize2 size={28} />
+        </button>
 
         <button
           onClick={nextSlide}
