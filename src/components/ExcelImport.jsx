@@ -57,14 +57,11 @@ export default function ExcelImport({ onImport, onCancel }) {
       setParsing(false);
 
       // Initialize selected dates with detected defaults
-      if (data.dateInterpretations) {
+      if (data.dateInterpretations && data.dateInterpretations.length > 0) {
         setSelectedDates(data.dateInterpretations.map(interp => interp.detected));
 
-        // Check if any dates have multiple options (ambiguous)
-        const hasAmbiguousDates = data.dateInterpretations.some(interp => interp.options.length > 1);
-        if (hasAmbiguousDates) {
-          setShowDateConfirmation(true);
-        }
+        // Always show date confirmation so user can verify all dates
+        setShowDateConfirmation(true);
       }
     } catch (err) {
       console.error('Parse error:', err);
@@ -338,48 +335,65 @@ export default function ExcelImport({ onImport, onCancel }) {
                       <p className="text-lg font-bold text-gray-900">"{interp.original}"</p>
                     </div>
 
-                    {interp.options.length > 1 ? (
-                      <div>
-                        <span className="text-sm font-medium text-gray-600 block mb-2">
-                          Select correct interpretation:
-                        </span>
-                        <div className="space-y-2">
-                          {interp.options.map((option, optIdx) => (
-                            <label
-                              key={optIdx}
-                              className={`flex items-center p-3 rounded-lg cursor-pointer transition ${
-                                selectedDates[index] === option.date
-                                  ? 'bg-blue-100 border-2 border-blue-500'
-                                  : 'bg-gray-50 border-2 border-gray-300 hover:border-gray-400'
-                              }`}
-                            >
-                              <input
-                                type="radio"
-                                name={`date-${index}`}
-                                value={option.date}
-                                checked={selectedDates[index] === option.date}
-                                onChange={(e) => handleDateChange(index, e.target.value)}
-                                className="mr-3"
-                              />
-                              <div className="flex-1">
-                                <div className="font-semibold text-gray-900">{option.format}</div>
-                                <div className="text-sm text-gray-600">{option.readable}</div>
-                                <div className="text-xs text-gray-500 mt-1">ISO: {option.date}</div>
-                              </div>
-                            </label>
-                          ))}
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="flex items-center space-x-2 text-green-700">
-                        <CheckCircle size={18} />
+                    <div>
+                      {interp.options.length > 1 ? (
                         <div>
-                          <span className="font-semibold">{interp.options[0]?.format}:</span>{' '}
-                          {interp.options[0]?.readable}
-                          <div className="text-xs text-gray-600 mt-1">ISO: {interp.options[0]?.date}</div>
+                          <span className="text-sm font-medium text-gray-600 block mb-2">
+                            Select correct interpretation:
+                          </span>
+                          <div className="space-y-2">
+                            {interp.options.map((option, optIdx) => (
+                              <label
+                                key={optIdx}
+                                className={`flex items-center p-3 rounded-lg cursor-pointer transition ${
+                                  selectedDates[index] === option.date
+                                    ? 'bg-blue-100 border-2 border-blue-500'
+                                    : 'bg-gray-50 border-2 border-gray-300 hover:border-gray-400'
+                                }`}
+                              >
+                                <input
+                                  type="radio"
+                                  name={`date-${index}`}
+                                  value={option.date}
+                                  checked={selectedDates[index] === option.date}
+                                  onChange={(e) => handleDateChange(index, e.target.value)}
+                                  className="mr-3"
+                                />
+                                <div className="flex-1">
+                                  <div className="font-semibold text-gray-900">{option.format}</div>
+                                  <div className="text-sm text-gray-600">{option.readable}</div>
+                                  <div className="text-xs text-gray-500 mt-1">ISO: {option.date}</div>
+                                </div>
+                              </label>
+                            ))}
+                          </div>
                         </div>
+                      ) : (
+                        <div className="space-y-2">
+                          <div className="flex items-center space-x-2 text-green-700 p-3 bg-green-50 rounded-lg border-2 border-green-300">
+                            <CheckCircle size={18} />
+                            <div className="flex-1">
+                              <div className="font-semibold">{interp.options[0]?.format}</div>
+                              <div className="text-sm">{interp.options[0]?.readable}</div>
+                              <div className="text-xs text-gray-600 mt-1">ISO: {interp.options[0]?.date}</div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Manual date override */}
+                      <div className="mt-3 pt-3 border-t border-gray-200">
+                        <label className="block text-sm font-medium text-gray-600 mb-2">
+                          Or enter date manually (YYYY-MM-DD):
+                        </label>
+                        <input
+                          type="date"
+                          value={selectedDates[index] || ''}
+                          onChange={(e) => handleDateChange(index, e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        />
                       </div>
-                    )}
+                    </div>
                   </div>
                 ))}
               </div>
