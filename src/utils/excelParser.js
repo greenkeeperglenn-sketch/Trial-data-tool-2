@@ -221,6 +221,107 @@ export function parseExcelFile(file) {
 }
 
 /**
+ * Get all possible date interpretations for user to choose from
+ * @param {string} dateStr - Original date string
+ * @returns {Object} Object with original, ukFormat, usFormat, and isoFormat
+ */
+function getDateInterpretations(dateStr) {
+  if (!dateStr) {
+    return {
+      original: '',
+      detected: new Date().toISOString().split('T')[0],
+      options: []
+    };
+  }
+
+  const str = String(dateStr).trim();
+  const options = [];
+
+  // If already in YYYY-MM-DD format, only one option
+  if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
+    return {
+      original: str,
+      detected: str,
+      options: [{ format: 'ISO', date: str, label: str }]
+    };
+  }
+
+  // Parse DD/MM/YYYY or MM/DD/YYYY format
+  const dateMatch = str.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+  if (dateMatch) {
+    const first = parseInt(dateMatch[1], 10);
+    const second = parseInt(dateMatch[2], 10);
+    const year = parseInt(dateMatch[3], 10);
+
+    // UK Format (DD/MM/YYYY)
+    if (second >= 1 && second <= 12 && first >= 1 && first <= 31) {
+      const ukDate = `${year}-${String(second).padStart(2, '0')}-${String(first).padStart(2, '0')}`;
+      const ukDateObj = new Date(year, second - 1, first);
+      options.push({
+        format: 'UK (DD/MM/YYYY)',
+        date: ukDate,
+        label: `${String(first).padStart(2, '0')}/${String(second).padStart(2, '0')}/${year}`,
+        readable: ukDateObj.toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' })
+      });
+    }
+
+    // US Format (MM/DD/YYYY) - only if different from UK
+    if (first >= 1 && first <= 12 && second >= 1 && second <= 31 && first !== second) {
+      const usDate = `${year}-${String(first).padStart(2, '0')}-${String(second).padStart(2, '0')}`;
+      const usDateObj = new Date(year, first - 1, second);
+      options.push({
+        format: 'US (MM/DD/YYYY)',
+        date: usDate,
+        label: `${String(first).padStart(2, '0')}/${String(second).padStart(2, '0')}/${year}`,
+        readable: usDateObj.toLocaleDateString('en-US', { day: '2-digit', month: 'long', year: 'numeric' })
+      });
+    }
+
+    // If only one valid option, use it as detected
+    const detected = options.length > 0 ? options[0].date : null;
+
+    return {
+      original: str,
+      detected: detected || new Date().toISOString().split('T')[0],
+      options
+    };
+  }
+
+  // Try JavaScript Date parser as fallback
+  try {
+    const date = new Date(str);
+    if (!isNaN(date.getTime())) {
+      const isoDate = date.toISOString().split('T')[0];
+      return {
+        original: str,
+        detected: isoDate,
+        options: [{
+          format: 'Auto-detected',
+          date: isoDate,
+          label: str,
+          readable: date.toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' })
+        }]
+      };
+    }
+  } catch (e) {
+    console.warn('[excelParser] Could not parse date:', dateStr);
+  }
+
+  // Fallback to current date
+  const fallback = new Date().toISOString().split('T')[0];
+  return {
+    original: str,
+    detected: fallback,
+    options: [{
+      format: 'Fallback (today)',
+      date: fallback,
+      label: 'Unable to parse - using today',
+      readable: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' })
+    }]
+  };
+}
+
+/**
  * Normalize date string to YYYY-MM-DD format
  * Handles both UK (DD/MM/YYYY) and US (MM/DD/YYYY) formats
  */
@@ -312,16 +413,25 @@ function convertToTrialFormat(parsedSheets) {
   // Create grid layout
   const gridLayout = createGridLayout(allPlots, blocks.length, treatments, treatmentNames);
 
+  // Collect date interpretations for user confirmation
+  const dateInterpretations = parsedSheets.map(sheet => {
+    let dateStr = sheet.sheetName;
+    if (sheet.metadata.date) {
+      dateStr = sheet.metadata.date;
+    }
+    return getDateInterpretations(dateStr);
+  });
+
   // Process assessment dates - convert to app format
-  const assessmentDates = parsedSheets.map(sheet => {
+  const assessmentDates = parsedSheets.map((sheet, index) => {
     // Try to parse the date from sheet name or metadata
     let dateStr = sheet.sheetName;
     if (sheet.metadata.date) {
       dateStr = sheet.metadata.date;
     }
 
-    // Normalize date to YYYY-MM-DD format
-    const date = normalizeDateFormat(dateStr);
+    // Use the detected date from interpretations
+    const date = dateInterpretations[index].detected;
 
     // Create assessments object in the format the app expects
     const assessments = {};
@@ -369,6 +479,7 @@ function convertToTrialFormat(parsedSheets) {
     },
     gridLayout,
     assessmentDates,
+    dateInterpretations,  // Add date interpretation data for user confirmation
     metadata: {
       area: firstSheet.metadata.area,
       assessor: firstSheet.metadata.assessor,

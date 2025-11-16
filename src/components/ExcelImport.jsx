@@ -8,6 +8,8 @@ export default function ExcelImport({ onImport, onCancel }) {
   const [parsing, setParsing] = useState(false);
   const [parsedData, setParsedData] = useState(null);
   const [error, setError] = useState(null);
+  const [showDateConfirmation, setShowDateConfirmation] = useState(false);
+  const [selectedDates, setSelectedDates] = useState([]);
 
   const handleDrag = (e) => {
     e.preventDefault();
@@ -53,6 +55,17 @@ export default function ExcelImport({ onImport, onCancel }) {
       console.log('Parse successful:', data);
       setParsedData(data);
       setParsing(false);
+
+      // Initialize selected dates with detected defaults
+      if (data.dateInterpretations) {
+        setSelectedDates(data.dateInterpretations.map(interp => interp.detected));
+
+        // Check if any dates have multiple options (ambiguous)
+        const hasAmbiguousDates = data.dateInterpretations.some(interp => interp.options.length > 1);
+        if (hasAmbiguousDates) {
+          setShowDateConfirmation(true);
+        }
+      }
     } catch (err) {
       console.error('Parse error:', err);
       setError(err.message || 'Failed to parse Excel file');
@@ -61,9 +74,30 @@ export default function ExcelImport({ onImport, onCancel }) {
     }
   };
 
+  const handleDateChange = (index, newDate) => {
+    const newSelectedDates = [...selectedDates];
+    newSelectedDates[index] = newDate;
+    setSelectedDates(newSelectedDates);
+  };
+
+  const handleConfirmDates = () => {
+    // Update parsedData with selected dates
+    const updatedData = {
+      ...parsedData,
+      assessmentDates: parsedData.assessmentDates.map((dateObj, index) => ({
+        ...dateObj,
+        date: selectedDates[index]
+      }))
+    };
+    setParsedData(updatedData);
+    setShowDateConfirmation(false);
+  };
+
   const handleImport = () => {
     if (parsedData) {
-      onImport(parsedData);
+      // Remove dateInterpretations before importing (it's only for UI)
+      const { dateInterpretations, ...dataToImport } = parsedData;
+      onImport(dataToImport);
     }
   };
 
@@ -283,6 +317,91 @@ export default function ExcelImport({ onImport, onCancel }) {
             </div>
           )}
 
+          {/* Date Confirmation Modal */}
+          {showDateConfirmation && parsedData?.dateInterpretations && (
+            <div className="border border-yellow-300 rounded-lg p-6 bg-yellow-50">
+              <div className="flex items-start space-x-3 mb-4">
+                <AlertCircle className="h-6 w-6 text-yellow-600 flex-shrink-0 mt-0.5" />
+                <div>
+                  <h3 className="font-bold text-yellow-900 text-lg">Confirm Assessment Dates</h3>
+                  <p className="text-sm text-yellow-700 mt-1">
+                    Some dates could be interpreted multiple ways. Please confirm the correct format:
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                {parsedData.dateInterpretations.map((interp, index) => (
+                  <div key={index} className="bg-white rounded-lg p-4 border border-yellow-200">
+                    <div className="mb-3">
+                      <span className="text-sm font-medium text-gray-600">Original from Excel:</span>
+                      <p className="text-lg font-bold text-gray-900">"{interp.original}"</p>
+                    </div>
+
+                    {interp.options.length > 1 ? (
+                      <div>
+                        <span className="text-sm font-medium text-gray-600 block mb-2">
+                          Select correct interpretation:
+                        </span>
+                        <div className="space-y-2">
+                          {interp.options.map((option, optIdx) => (
+                            <label
+                              key={optIdx}
+                              className={`flex items-center p-3 rounded-lg cursor-pointer transition ${
+                                selectedDates[index] === option.date
+                                  ? 'bg-blue-100 border-2 border-blue-500'
+                                  : 'bg-gray-50 border-2 border-gray-300 hover:border-gray-400'
+                              }`}
+                            >
+                              <input
+                                type="radio"
+                                name={`date-${index}`}
+                                value={option.date}
+                                checked={selectedDates[index] === option.date}
+                                onChange={(e) => handleDateChange(index, e.target.value)}
+                                className="mr-3"
+                              />
+                              <div className="flex-1">
+                                <div className="font-semibold text-gray-900">{option.format}</div>
+                                <div className="text-sm text-gray-600">{option.readable}</div>
+                                <div className="text-xs text-gray-500 mt-1">ISO: {option.date}</div>
+                              </div>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex items-center space-x-2 text-green-700">
+                        <CheckCircle size={18} />
+                        <div>
+                          <span className="font-semibold">{interp.options[0]?.format}:</span>{' '}
+                          {interp.options[0]?.readable}
+                          <div className="text-xs text-gray-600 mt-1">ISO: {interp.options[0]?.date}</div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              <div className="flex justify-end space-x-3 mt-6 pt-4 border-t border-yellow-200">
+                <button
+                  onClick={() => setShowDateConfirmation(false)}
+                  className="px-4 py-2 text-yellow-700 hover:text-yellow-900 transition-colors"
+                >
+                  Skip (Use Defaults)
+                </button>
+                <button
+                  onClick={handleConfirmDates}
+                  className="px-6 py-2 bg-yellow-600 text-white rounded hover:bg-yellow-700 transition-colors flex items-center space-x-2"
+                >
+                  <CheckCircle size={18} />
+                  <span>Confirm Dates</span>
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Action Buttons */}
           <div className="flex justify-end space-x-3 pt-4 border-t">
             <button
@@ -291,7 +410,7 @@ export default function ExcelImport({ onImport, onCancel }) {
             >
               Cancel
             </button>
-            {parsedData && (
+            {parsedData && !showDateConfirmation && (
               <button
                 onClick={handleImport}
                 className="px-6 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors flex items-center space-x-2"
