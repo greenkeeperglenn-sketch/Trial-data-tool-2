@@ -29,53 +29,48 @@ const ImageryAnalyzer = ({
   ]);
   const [draggingCorner, setDraggingCorner] = useState(null);
 
-  // MINIMAL REFS
-  const fileInputRef = useRef(null);
-  const canvasRef = useRef(null);
-  const imageRef = useRef(null);
+  // Cleanup blob URLs on unmount
+  useEffect(() => {
+    return () => {
+      if (imageSrc && imageSrc.startsWith('blob:')) {
+        URL.revokeObjectURL(imageSrc);
+      }
+    };
+  }, [imageSrc]);
 
   // SIMPLE: Just handle image loading
   const handleFileUpload = async (file) => {
     if (!file) return;
 
     try {
-      // Read file as data URL
-      const reader = new FileReader();
+      // FAST: Create blob URL immediately (no need to convert to data URL first)
+      const blobUrl = URL.createObjectURL(file);
       
-      reader.onload = (event) => {
-        // Create image and load it
-        const img = new Image();
+      const img = new Image();
+      img.onload = () => {
+        console.log('Image loaded successfully:', img.width, img.height);
+        imageRef.current = img;
+        // Use blob URL instead of data URL - much faster for large files
+        setImageSrc(blobUrl);
         
-        img.onload = () => {
-          console.log('Image loaded successfully:', img.width, img.height);
-          imageRef.current = img;
-          setImageSrc(event.target.result);
-          
-          // Set corner positions based on image size
-          setCorners([
-            { x: img.width * 0.1, y: img.height * 0.1, label: 'TL' },
-            { x: img.width * 0.9, y: img.height * 0.1, label: 'TR' },
-            { x: img.width * 0.9, y: img.height * 0.9, label: 'BR' },
-            { x: img.width * 0.1, y: img.height * 0.9, label: 'BL' }
-          ]);
-        };
-        
-        img.onerror = (error) => {
-          console.error('Image load error:', error);
-          alert('Failed to load image. Please try another file.');
-        };
-        
-        img.src = event.target.result;
+        // Set corner positions based on image size
+        setCorners([
+          { x: img.width * 0.1, y: img.height * 0.1, label: 'TL' },
+          { x: img.width * 0.9, y: img.height * 0.1, label: 'TR' },
+          { x: img.width * 0.9, y: img.height * 0.9, label: 'BR' },
+          { x: img.width * 0.1, y: img.height * 0.9, label: 'BL' }
+        ]);
       };
       
-      reader.onerror = (error) => {
-        console.error('FileReader error:', error);
-        alert('Failed to read file.');
+      img.onerror = (error) => {
+        console.error('Image load error:', error);
+        URL.revokeObjectURL(blobUrl);
+        alert('Failed to load image. Please try another file.');
       };
       
-      reader.readAsDataURL(file);
+      img.src = blobUrl;
 
-      // Extract date from EXIF (non-blocking)
+      // Extract date from EXIF in parallel (non-blocking)
       let dateStr = null;
       try {
         const arrayBuffer = await file.arrayBuffer();
@@ -329,6 +324,17 @@ const ImageryAnalyzer = ({
                 <p><strong>Size:</strong> {imageRef.current.width} × {imageRef.current.height}px</p>
               </div>
             )}
+
+            {/* Submit Button */}
+            <button
+              onClick={() => {
+                console.log('Grid committed with:', { rows, cols, corners, fileDate });
+                alert(`✓ Grid saved!\n\nRows: ${rows}\nCols: ${cols}\nDate: ${fileDate}\n\nNext: Extract plots (coming soon)`);
+              }}
+              className="w-full px-6 py-3 bg-emerald-600 text-white font-semibold rounded-lg hover:bg-emerald-700 transition"
+            >
+              ✓ Submit Grid Alignment
+            </button>
           </div>
         )}
       </div>
