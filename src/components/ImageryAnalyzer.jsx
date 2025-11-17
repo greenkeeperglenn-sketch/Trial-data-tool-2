@@ -45,9 +45,9 @@ const ImageryAnalyzer = ({
   // Refs (required for canvas, file input, and worker)
   const fileInputRef = useRef(null);
   const canvasRef = useRef(null);
-  const imageRef = useRef(null);
-  const originalImageRef = useRef(null);
+  const imageRef = useRef(null); // Preview image (low-res, max 800px)
   const imageWorkerRef = useRef(null);
+  const fileRef = useRef(null); // Store the original file for later high-res processing
 
   // Initialize Web Worker
   useEffect(() => {
@@ -67,10 +67,6 @@ const ImageryAnalyzer = ({
       if (imageSrc && imageSrc.startsWith('blob:')) {
         URL.revokeObjectURL(imageSrc);
       }
-      if (originalImageRef.current) {
-        originalImageRef.current.src = '';
-        originalImageRef.current = null;
-      }
       if (imageRef.current) {
         imageRef.current.src = '';
         imageRef.current = null;
@@ -78,7 +74,7 @@ const ImageryAnalyzer = ({
     };
   }, [imageSrc]);
 
-  // Handle image loading
+  // Handle image loading - NEW APPROACH: Load low-res preview immediately
   const handleFileUpload = async (file) => {
     if (!file) return;
 
@@ -95,235 +91,129 @@ const ImageryAnalyzer = ({
       return;
     }
 
-    // Warn about very large files
-    if (file.size > 35 * 1024 * 1024) {
-      console.warn(`Large file detected: ${(file.size / 1024 / 1024).toFixed(2)}MB - this may take 1-2 minutes to load`);
-    }
+    // Store the original file for later high-res processing
+    fileRef.current = file;
 
     // Set loading state immediately
     setLoading(true);
     setLoadError(null);
     setCommitted(false);
-    setLoadProgress(10); // Initial progress
+    setLoadProgress(10);
 
-    // Allow UI to update before starting heavy processing
-    await new Promise(resolve => setTimeout(resolve, 100));
+    console.log(`Loading preview: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)}MB)`);
 
     try {
-      console.log(`Loading image: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)}MB)`);
-
-      // Validate file signature (magic bytes) to ensure it's actually an image
-      setLoadProgress(20); // Validating file
+      // Validate file signature (magic bytes)
+      setLoadProgress(20);
       const buffer = await file.slice(0, 12).arrayBuffer();
       const bytes = new Uint8Array(buffer);
 
-      // Check for valid image signatures
       const isJPEG = bytes[0] === 0xFF && bytes[1] === 0xD8 && bytes[2] === 0xFF;
       const isPNG = bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4E && bytes[3] === 0x47;
 
       if (!isJPEG && !isPNG) {
-        console.error('Invalid file signature. First 12 bytes:', Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join(' '));
-        setLoadError(`This file does not appear to be a valid JPEG or PNG image. The file may have the wrong extension or be corrupted. Detected bytes: ${Array.from(bytes.slice(0, 4)).map(b => '0x' + b.toString(16).toUpperCase()).join(' ')}`);
+        setLoadError(`Invalid image file. Detected bytes: ${Array.from(bytes.slice(0, 4)).map(b => '0x' + b.toString(16).toUpperCase()).join(' ')}`);
         setLoadProgress(0);
         setLoading(false);
         return;
       }
 
-      console.log('File signature validated:', isJPEG ? 'JPEG' : 'PNG');
-      setLoadProgress(30); // File validated
+      console.log('File validated:', isJPEG ? 'JPEG' : 'PNG');
+      setLoadProgress(40);
 
-      // FAST: Create blob URL immediately (no need to convert to data URL first)
+      // Create a low-resolution preview for grid alignment (max 800px)
+      // This loads almost instantly, even for 36MB+ files!
+      const previewMaxSize = 800;
+
       const blobUrl = URL.createObjectURL(file);
+      const previewImg = new Image();
 
-      setLoadProgress(40); // Blob URL created
-
-      // Load original high-res image for extraction
-      const originalImg = new Image();
-
-      // Add timeout for image loading (2 minutes for very large files)
-      const timeoutDuration = file.size > 35 * 1024 * 1024 ? 120000 : 60000;
-      console.log(`Setting image load timeout to ${timeoutDuration / 1000} seconds`);
-
-      const loadTimeout = setTimeout(() => {
-        if (!imageRef.current) {
-          console.error(`Image loading timeout after ${timeoutDuration / 1000} seconds`);
-          setLoadError(`Image loading timed out after ${timeoutDuration / 1000} seconds. The file is too large or complex for this browser. Please try:\n\n1. Compress the image to under 25MB\n2. Reduce resolution to 4000px max width\n3. Re-export as standard JPEG with lower quality\n4. Try a different browser (Chrome/Edge handle large images better)`);
-          setLoadProgress(0);
-          setLoading(false);
-          URL.revokeObjectURL(blobUrl);
-        }
-      }, timeoutDuration);
-
-      originalImg.onload = async () => {
-        clearTimeout(loadTimeout);
+      previewImg.onload = async () => {
         try {
-          setLoadProgress(60); // Image loaded
-          console.log('Original image loaded:', originalImg.width, originalImg.height);
-          originalImageRef.current = originalImg;
+          console.log(`Creating preview from ${previewImg.width}x${previewImg.height}`);
+          setLoadProgress(60);
 
-          // Downsample for display if too large
-          const maxDisplaySize = 1200;
+          // Calculate preview size
+          const scale = Math.min(previewMaxSize / previewImg.width, previewMaxSize / previewImg.height, 1);
+          const previewCanvas = document.createElement('canvas');
+          previewCanvas.width = Math.floor(previewImg.width * scale);
+          previewCanvas.height = Math.floor(previewImg.height * scale);
 
-          if (originalImg.width > maxDisplaySize || originalImg.height > maxDisplaySize) {
-            console.log('Downsampling large image for display...');
-            setLoadProgress(70); // Starting downsample
+          console.log(`Preview size: ${previewCanvas.width}x${previewCanvas.height}`);
+          setLoadProgress(70);
 
-            // Use setTimeout to allow UI to update
-            await new Promise(resolve => setTimeout(resolve, 50));
+          const ctx = previewCanvas.getContext('2d');
+          if (!ctx) {
+            throw new Error('Failed to get canvas context');
+          }
 
-            try {
-              const scale = Math.min(maxDisplaySize / originalImg.width, maxDisplaySize / originalImg.height);
-              const displayCanvas = document.createElement('canvas');
-              displayCanvas.width = Math.floor(originalImg.width * scale);
-              displayCanvas.height = Math.floor(originalImg.height * scale);
+          // Draw downsampled preview
+          ctx.drawImage(previewImg, 0, 0, previewCanvas.width, previewCanvas.height);
+          setLoadProgress(85);
 
-              console.log(`Downsampling from ${originalImg.width}x${originalImg.height} to ${displayCanvas.width}x${displayCanvas.height}`);
-
-              const ctx = displayCanvas.getContext('2d');
-              if (!ctx) {
-                throw new Error('Failed to get canvas context');
+          // Convert to blob
+          previewCanvas.toBlob(
+            (blob) => {
+              if (!blob) {
+                throw new Error('Failed to create preview blob');
               }
 
-              setLoadProgress(80); // Drawing to canvas
-              ctx.drawImage(originalImg, 0, 0, displayCanvas.width, displayCanvas.height);
+              const previewBlobUrl = URL.createObjectURL(blob);
+              console.log(`Preview created: ${(blob.size / 1024).toFixed(1)}KB`);
 
-              setLoadProgress(90); // Converting to blob
+              const displayImg = new Image();
+              displayImg.onload = () => {
+                imageRef.current = displayImg;
+                setImageSrc(previewBlobUrl);
 
-              // Convert canvas to blob (MUCH more efficient than data URL for large images)
-              displayCanvas.toBlob(
-                (blob) => {
-                  if (!blob) {
-                    console.warn('Failed to create blob, using original image');
-                    // Fallback: use original image directly
-                    imageRef.current = originalImg;
-                    setImageSrc(blobUrl);
-                    setCorners([
-                      { x: originalImg.width * 0.1, y: originalImg.height * 0.1, label: 'TL' },
-                      { x: originalImg.width * 0.9, y: originalImg.height * 0.1, label: 'TR' },
-                      { x: originalImg.width * 0.9, y: originalImg.height * 0.9, label: 'BR' },
-                      { x: originalImg.width * 0.1, y: originalImg.height * 0.9, label: 'BL' }
-                    ]);
-                    setLoadProgress(100);
-                    setLoading(false);
-                    console.log('Display image ready (using original - blob creation failed)');
-                    return;
-                  }
+                // Set initial corner positions
+                setCorners([
+                  { x: displayImg.width * 0.1, y: displayImg.height * 0.1, label: 'TL' },
+                  { x: displayImg.width * 0.9, y: displayImg.height * 0.1, label: 'TR' },
+                  { x: displayImg.width * 0.9, y: displayImg.height * 0.9, label: 'BR' },
+                  { x: displayImg.width * 0.1, y: displayImg.height * 0.9, label: 'BL' }
+                ]);
 
-                  const downsampledBlobUrl = URL.createObjectURL(blob);
-                  console.log('Created downsampled blob:', (blob.size / 1024 / 1024).toFixed(2), 'MB');
+                setLoadProgress(100);
+                setLoading(false);
+                console.log('✓ Preview ready - align your grid!');
+              };
 
-                  const displayImgObj = new Image();
-                  displayImgObj.onload = () => {
-                    imageRef.current = displayImgObj;
-                    setImageSrc(downsampledBlobUrl);
+              displayImg.onerror = (e) => {
+                console.error('Failed to load preview blob:', e);
+                setLoadError('Failed to create preview image');
+                setLoading(false);
+                URL.revokeObjectURL(previewBlobUrl);
+              };
 
-                    // Set corner positions based on display image size
-                    setCorners([
-                      { x: displayImgObj.width * 0.1, y: displayImgObj.height * 0.1, label: 'TL' },
-                      { x: displayImgObj.width * 0.9, y: displayImgObj.height * 0.1, label: 'TR' },
-                      { x: displayImgObj.width * 0.9, y: displayImgObj.height * 0.9, label: 'BR' },
-                      { x: displayImgObj.width * 0.1, y: displayImgObj.height * 0.9, label: 'BL' }
-                    ]);
+              displayImg.src = previewBlobUrl;
+            },
+            'image/jpeg',
+            0.80
+          );
 
-                    setLoadProgress(100);
-                    setLoading(false);
-                    console.log('Display image ready (downsampled)');
-                  };
-
-                  displayImgObj.onerror = (e) => {
-                    console.error('Failed to load downsampled blob image, using original instead:', e);
-                    URL.revokeObjectURL(downsampledBlobUrl);
-                    // Fallback: use original blob URL
-                    imageRef.current = originalImg;
-                    setImageSrc(blobUrl);
-                    setCorners([
-                      { x: originalImg.width * 0.1, y: originalImg.height * 0.1, label: 'TL' },
-                      { x: originalImg.width * 0.9, y: originalImg.height * 0.1, label: 'TR' },
-                      { x: originalImg.width * 0.9, y: originalImg.height * 0.9, label: 'BR' },
-                      { x: originalImg.width * 0.1, y: originalImg.height * 0.9, label: 'BL' }
-                    ]);
-                    setLoadProgress(100);
-                    setLoading(false);
-                    console.log('Display image ready (using original after blob load error)');
-                  };
-
-                  displayImgObj.src = downsampledBlobUrl;
-                },
-                'image/jpeg',
-                0.85
-              );
-            } catch (downsampleError) {
-              console.error('Downsampling failed, using original image:', downsampleError);
-              // Complete fallback: just use the original image
-              imageRef.current = originalImg;
-              setImageSrc(blobUrl);
-              setCorners([
-                { x: originalImg.width * 0.1, y: originalImg.height * 0.1, label: 'TL' },
-                { x: originalImg.width * 0.9, y: originalImg.height * 0.1, label: 'TR' },
-                { x: originalImg.width * 0.9, y: originalImg.height * 0.9, label: 'BR' },
-                { x: originalImg.width * 0.1, y: originalImg.height * 0.9, label: 'BL' }
-              ]);
-              setLoadProgress(100);
-              setLoading(false);
-              console.log('Image ready (using original after downsample failure)');
-            }
-          } else {
-            // Image is small enough to display directly
-            setLoadProgress(90);
-            imageRef.current = originalImg;
-            setImageSrc(blobUrl);
-
-            // Set corner positions based on image size
-            setCorners([
-              { x: originalImg.width * 0.1, y: originalImg.height * 0.1, label: 'TL' },
-              { x: originalImg.width * 0.9, y: originalImg.height * 0.1, label: 'TR' },
-              { x: originalImg.width * 0.9, y: originalImg.height * 0.9, label: 'BR' },
-              { x: originalImg.width * 0.1, y: originalImg.height * 0.9, label: 'BL' }
-            ]);
-
-            setLoadProgress(100);
-            setLoading(false);
-            console.log('Image ready');
-          }
+          // Clean up temporary blob URL
+          URL.revokeObjectURL(blobUrl);
         } catch (error) {
-          console.error('Error processing image:', error);
-          setLoadError(`Failed to process image: ${error.message}`);
+          console.error('Error creating preview:', error);
+          setLoadError(`Failed to create preview: ${error.message}`);
           setLoadProgress(0);
           setLoading(false);
           URL.revokeObjectURL(blobUrl);
         }
       };
 
-      originalImg.onerror = (error) => {
-        clearTimeout(loadTimeout);
-        console.error('Image load error:', error);
-        console.error('File details:', {
-          name: file.name,
-          type: file.type,
-          size: file.size,
-          lastModified: new Date(file.lastModified).toISOString()
-        });
-
-        // Try to provide more specific error message
-        let errorMsg = 'Failed to load image. ';
-
-        if (file.size > 30 * 1024 * 1024) {
-          errorMsg += 'The file is very large (>30MB). Try compressing it or using a smaller resolution.';
-        } else if (!file.type || file.type === 'application/octet-stream') {
-          errorMsg += 'The file type could not be detected. Make sure it\'s a valid JPEG or PNG image.';
-        } else {
-          errorMsg += 'The file may be corrupted, have an incorrect extension, or use an unsupported encoding. Try re-exporting the image or converting it to standard JPEG format.';
-        }
-
-        setLoadError(errorMsg);
+      previewImg.onerror = (error) => {
+        console.error('Preview load error:', error);
+        setLoadError('Failed to load image preview. The file may be corrupted.');
         setLoadProgress(0);
         setLoading(false);
         URL.revokeObjectURL(blobUrl);
       };
 
-      originalImg.src = blobUrl;
+      previewImg.src = blobUrl;
 
-      // Extract date from EXIF in parallel (non-blocking)
+      // Extract date from EXIF in parallel
       let dateStr = null;
       try {
         const arrayBuffer = await file.arrayBuffer();
@@ -338,7 +228,6 @@ const ImageryAnalyzer = ({
         console.warn('Could not extract EXIF date');
       }
 
-      // Fallback to file date
       if (!dateStr) {
         const modifiedDate = new Date(file.lastModified);
         dateStr = modifiedDate.toISOString().split('T')[0];
@@ -347,7 +236,8 @@ const ImageryAnalyzer = ({
       setFileDate(dateStr);
     } catch (error) {
       console.error('Error handling file upload:', error);
-      alert('Error processing file.');
+      setLoadError('Error processing file.');
+      setLoading(false);
     }
   };
 
@@ -584,7 +474,7 @@ const ImageryAnalyzer = ({
     return errors;
   };
 
-  // Main processing function
+  // Main processing function - NOW loads high-res image when extracting
   const commitGrid = async () => {
     // Validate inputs
     const errors = validateInputs();
@@ -593,7 +483,7 @@ const ImageryAnalyzer = ({
       return;
     }
 
-    if (!originalImageRef.current || !imageRef.current) {
+    if (!fileRef.current || !imageRef.current) {
       alert('Please upload an image first');
       return;
     }
@@ -602,20 +492,59 @@ const ImageryAnalyzer = ({
       setProcessing(true);
       setProgress(0);
 
-      const originalImage = originalImageRef.current;
       const displayImage = imageRef.current;
       const [tl, tr, br, bl] = corners;
-      const scaleFactor = originalImage.width / displayImage.width;
 
-      console.log('Processing with scale factor:', scaleFactor);
+      console.log('Loading high-resolution image from file...');
+      console.log('Original file size:', (fileRef.current.size / 1024 / 1024).toFixed(2), 'MB');
 
-      // Get image data from original high-res image
+      // Load the high-resolution image from the stored file
+      const highResBlobUrl = URL.createObjectURL(fileRef.current);
+      const highResImage = new Image();
+
+      await new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          reject(new Error('High-res image load timeout (60s). File may be too large.'));
+        }, 60000);
+
+        highResImage.onload = () => {
+          clearTimeout(timeout);
+          console.log('✓ High-res image loaded:', highResImage.width, 'x', highResImage.height);
+          resolve();
+        };
+
+        highResImage.onerror = (err) => {
+          clearTimeout(timeout);
+          reject(new Error('Failed to load high-resolution image'));
+        };
+
+        highResImage.src = highResBlobUrl;
+      });
+
+      // Calculate scale factor between preview and high-res
+      const scaleFactor = highResImage.width / displayImage.width;
+      console.log('Scale factor (high-res / preview):', scaleFactor.toFixed(2));
+
+      // Scale corner coordinates from preview to high-res
+      const scaledCorners = {
+        tl: { x: tl.x * scaleFactor, y: tl.y * scaleFactor },
+        tr: { x: tr.x * scaleFactor, y: tr.y * scaleFactor },
+        br: { x: br.x * scaleFactor, y: br.y * scaleFactor },
+        bl: { x: bl.x * scaleFactor, y: bl.y * scaleFactor }
+      };
+
+      console.log('Scaled corners to high-res:', scaledCorners);
+
+      // Get image data from high-res image
       const tempCanvas = document.createElement('canvas');
-      tempCanvas.width = originalImage.width;
-      tempCanvas.height = originalImage.height;
+      tempCanvas.width = highResImage.width;
+      tempCanvas.height = highResImage.height;
       const tempCtx = tempCanvas.getContext('2d');
-      tempCtx.drawImage(originalImage, 0, 0);
-      const fullImageData = tempCtx.getImageData(0, 0, originalImage.width, originalImage.height);
+      tempCtx.drawImage(highResImage, 0, 0);
+      const fullImageData = tempCtx.getImageData(0, 0, highResImage.width, highResImage.height);
+
+      // Clean up blob URL
+      URL.revokeObjectURL(highResBlobUrl);
 
       const plotImages = {};
       const plotProcessingPromises = [];
@@ -630,7 +559,7 @@ const ImageryAnalyzer = ({
 
       let processedPlots = 0;
 
-      // Process each plot
+      // Process each plot using scaled coordinates
       for (let row = 0; row < rows; row++) {
         for (let col = 0; col < cols; col++) {
           const layoutPlot = gridLayout[row]?.[col];
@@ -639,7 +568,11 @@ const ImageryAnalyzer = ({
           const plotId = layoutPlot.id || `${row + 1}-${col + 1}`;
 
           if (!layoutPlot.isBlank) {
-            const plotCorners = calculatePlotCorners(row, col, rows, cols, tl, tr, br, bl);
+            // Calculate plot corners using SCALED coordinates
+            const plotCorners = calculatePlotCorners(
+              row, col, rows, cols,
+              scaledCorners.tl, scaledCorners.tr, scaledCorners.br, scaledCorners.bl
+            );
             const messageId = `${row}-${col}`;
 
             const promise = new Promise((resolve) => {
@@ -662,8 +595,8 @@ const ImageryAnalyzer = ({
               imageWorkerRef.current.addEventListener('message', handleMessage);
               imageWorkerRef.current.postMessage({
                 pixelData: fullImageData.data,
-                width: originalImage.width,
-                height: originalImage.height,
+                width: highResImage.width,
+                height: highResImage.height,
                 plotCorners,
                 targetSize: 600,
                 scaleFactor: 1, // Already scaled in plotCorners
@@ -680,7 +613,7 @@ const ImageryAnalyzer = ({
       // Wait for all plots to be processed
       await Promise.all(plotProcessingPromises);
 
-      console.log(`Extracted ${Object.keys(plotImages).length} plots`);
+      console.log(`✓ Extracted ${Object.keys(plotImages).length} plots from high-res image`);
 
       // Apply results
       createAssessmentDateIfNeeded(fileDate);
@@ -695,7 +628,7 @@ const ImageryAnalyzer = ({
       console.error('Error processing images:', error);
       setProcessing(false);
       setProgress(0);
-      alert('Error processing images. The image may be too large or invalid. Please try again.');
+      alert(`Error processing images: ${error.message}\n\nPlease try again or use a smaller image.`);
     }
   };
 
@@ -890,14 +823,11 @@ const ImageryAnalyzer = ({
                   setLoadError(null);
                   setLoading(false);
                   setLoadProgress(0);
-                  if (originalImageRef.current) {
-                    originalImageRef.current.src = '';
-                    originalImageRef.current = null;
-                  }
                   if (imageRef.current) {
                     imageRef.current.src = '';
                     imageRef.current = null;
                   }
+                  fileRef.current = null;
                 }}
                 className="w-full px-6 py-3 bg-gray-600 text-white font-semibold rounded-lg hover:bg-gray-700 transition"
               >
