@@ -6,6 +6,7 @@ import DataEntryTable from './DataEntryTable';
 import DataEntryNotes from './DataEntryNotes';
 import Analysis from './Analysis';
 import ImageryAnalyzer from './ImageryAnalyzer';
+import ErrorBoundary from './ErrorBoundary';
 import PresentationMode from './PresentationMode';
 import TrialConfigEditor from './TrialConfigEditor';
 
@@ -418,17 +419,19 @@ const DataEntry = ({
 
           {/* Imagery Analyzer - Always available, even without assessment dates */}
           {viewMode === 'imagery' && (
-            <ImageryAnalyzer
-              gridLayout={gridLayout}
-              config={config}
-              assessmentDates={assessmentDates}
-              currentDateObj={currentDateObj}
-              selectedAssessmentType={selectedAssessmentType}
-              onSelectAssessmentType={setSelectedAssessmentType}
-              onBulkUpdateData={handleBulkUpdateData}
-              onPhotosChange={onPhotosChange}
-              onAssessmentDatesChange={onAssessmentDatesChange}
-            />
+            <ErrorBoundary>
+              <ImageryAnalyzer
+                gridLayout={gridLayout}
+                config={config}
+                assessmentDates={assessmentDates}
+                currentDateObj={currentDateObj}
+                selectedAssessmentType={selectedAssessmentType}
+                onSelectAssessmentType={setSelectedAssessmentType}
+                onBulkUpdateData={handleBulkUpdateData}
+                onPhotosChange={onPhotosChange}
+                onAssessmentDatesChange={onAssessmentDatesChange}
+              />
+            </ErrorBoundary>
           )}
 
           {/* Presentation Mode - Show professional timeline-based presentation */}
