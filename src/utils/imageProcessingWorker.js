@@ -3,7 +3,7 @@
 
 self.onmessage = async (event) => {
   const {
-    imageBuffer,
+    pixelData,
     width,
     height,
     plotCorners,
@@ -14,9 +14,9 @@ self.onmessage = async (event) => {
   } = event.data;
 
   try {
-    // Reconstruct ImageData from transferred buffer
+    // Reconstruct ImageData from pixel data
     const imageData = new ImageData(
-      new Uint8ClampedArray(imageBuffer),
+      pixelData,
       width,
       height
     );

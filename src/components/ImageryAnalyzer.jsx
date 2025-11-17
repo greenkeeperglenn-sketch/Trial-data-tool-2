@@ -505,10 +505,10 @@ const ImageryAnalyzer = ({
       // Calculate scale factor between display image and original image
       const scaleFactor = originalImage.width / displayImage.width;
 
-      // CRITICAL: Cap image size VERY aggressively to prevent memory errors
-      // 1600x1600 = 10.24MB raw, worker can handle this
-      const MAX_PROCESS_WIDTH = 1600;
-      const MAX_PROCESS_HEIGHT = 1600;
+      // CRITICAL: Cap image size to prevent memory errors
+      // Use VERY small size - 1200x1200 = 5.76MB (safe for worker)
+      const MAX_PROCESS_WIDTH = 1200;
+      const MAX_PROCESS_HEIGHT = 1200;
       
       let processWidth = originalImage.width;
       let processHeight = originalImage.height;
@@ -530,8 +530,8 @@ const ImageryAnalyzer = ({
       tempCtx.drawImage(originalImage, 0, 0, processWidth, processHeight);
       const imageData = tempCtx.getImageData(0, 0, processWidth, processHeight);
       
-      // Convert to transferable ArrayBuffer to avoid copying
-      const imageBuffer = imageData.data.buffer;
+      // Create a copy of the pixel data (NOT transferable - we use it multiple times)
+      const pixelData = new Uint8ClampedArray(imageData.data);
 
       setProgress(20);
 
@@ -597,7 +597,7 @@ const ImageryAnalyzer = ({
               };
 
               imageWorkerRef.current.postMessage({
-                imageBuffer,
+                pixelData,
                 width: processWidth,
                 height: processHeight,
                 plotCorners: adjustedCorners,
@@ -605,7 +605,7 @@ const ImageryAnalyzer = ({
                 scaleFactor: 1, // Already at target scale
                 plotId,
                 messageId
-              }, [imageBuffer]); // Transfer the buffer, don't copy it
+              }); // Don't transfer - we use this data for all plots
             });
 
             plotProcessingPromises.push(promise);
