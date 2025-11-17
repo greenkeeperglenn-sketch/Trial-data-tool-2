@@ -127,46 +127,53 @@ const ImageryAnalyzer = ({
     if (!file) return;
 
     setUploadedFile(file);
+    setProgress(5); // Show that something is happening
 
     // Start image loading immediately (non-blocking) - show preview ASAP
     const reader = new FileReader();
     reader.onload = (event) => {
       const img = new Image();
       img.onload = () => {
-        // Store the original full-resolution image
-        originalImageRef.current = img;
+        setProgress(15); // Image loaded
 
-        // Downsample for display only to prevent canvas crashes
-        const MAX_WIDTH = 2000;
-        const MAX_HEIGHT = 2000;
+        // Show the image IMMEDIATELY for display (use original or downsampled)
+        const displayWidth = img.width;
+        const displayHeight = img.height;
+        
+        imageRef.current = img;
+        setImageSrc(event.target.result);
+        initializeCorners(displayWidth, displayHeight);
+        
+        setProgress(25); // Image displayed to user
 
-        let width = img.width;
-        let height = img.height;
+        // THEN downsample the original for processing in background
+        // Only downsample if absolutely necessary for processing
+        if (img.width > 4000 || img.height > 4000) {
+          // Downsample for processing to prevent out-of-memory errors
+          setTimeout(() => {
+            const MAX_WIDTH = 4000;
+            const MAX_HEIGHT = 4000;
+            const scale = Math.min(MAX_WIDTH / img.width, MAX_HEIGHT / img.height);
+            const width = Math.floor(img.width * scale);
+            const height = Math.floor(img.height * scale);
 
-        if (width > MAX_WIDTH || height > MAX_HEIGHT) {
-          const scale = Math.min(MAX_WIDTH / width, MAX_HEIGHT / height);
-          width = Math.floor(width * scale);
-          height = Math.floor(height * scale);
+            const processCanvas = document.createElement('canvas');
+            processCanvas.width = width;
+            processCanvas.height = height;
+            const ctx = processCanvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, width, height);
 
-          // Create downsampled version for DISPLAY only
-          const tempCanvas = document.createElement('canvas');
-          tempCanvas.width = width;
-          tempCanvas.height = height;
-          const tempCtx = tempCanvas.getContext('2d');
-          tempCtx.drawImage(img, 0, 0, width, height);
-
-          // Create new image from downsampled canvas for display
-          const downsampledImg = new Image();
-          downsampledImg.onload = () => {
-            imageRef.current = downsampledImg;
-            setImageSrc(tempCanvas.toDataURL('image/jpeg', 0.9));
-            initializeCorners(downsampledImg.width, downsampledImg.height);
-          };
-          downsampledImg.src = tempCanvas.toDataURL('image/jpeg', 0.9);
+            const downsampledImg = new Image();
+            downsampledImg.onload = () => {
+              originalImageRef.current = downsampledImg;
+              setProgress(30);
+            };
+            downsampledImg.src = processCanvas.toDataURL('image/jpeg', 0.95);
+          }, 0); // Non-blocking
         } else {
-          imageRef.current = img;
-          setImageSrc(event.target.result);
-          initializeCorners(width, height);
+          // Image is already reasonable size
+          originalImageRef.current = img;
+          setProgress(30);
         }
       };
       img.src = event.target.result;
@@ -205,6 +212,7 @@ const ImageryAnalyzer = ({
 
     setFileDate(dateStr);
     setShowDateConfirmation(true); // Always show date confirmation for user verification
+    setProgress(0); // Reset progress
   };
 
   const initializeCorners = (w, h) => {
@@ -496,13 +504,32 @@ const ImageryAnalyzer = ({
       // Calculate scale factor between display image and original image
       const scaleFactor = originalImage.width / displayImage.width;
 
-      // Get image data from original for worker processing
+      // CRITICAL: Cap image size to prevent memory errors
+      // Process at max 2500x2500 to avoid worker buffer issues
+      const MAX_PROCESS_WIDTH = 2500;
+      const MAX_PROCESS_HEIGHT = 2500;
+      
+      let processWidth = originalImage.width;
+      let processHeight = originalImage.height;
+      let processingScale = 1;
+
+      if (processWidth > MAX_PROCESS_WIDTH || processHeight > MAX_PROCESS_HEIGHT) {
+        processingScale = Math.min(MAX_PROCESS_WIDTH / processWidth, MAX_PROCESS_HEIGHT / processHeight);
+        processWidth = Math.floor(processWidth * processingScale);
+        processHeight = Math.floor(processHeight * processingScale);
+      }
+
+      setProgress(10);
+
+      // Get downsampled image data for processing
       const tempCanvas = document.createElement('canvas');
-      tempCanvas.width = originalImage.width;
-      tempCanvas.height = originalImage.height;
+      tempCanvas.width = processWidth;
+      tempCanvas.height = processHeight;
       const tempCtx = tempCanvas.getContext('2d');
-      tempCtx.drawImage(originalImage, 0, 0);
-      const imageData = tempCtx.getImageData(0, 0, originalImage.width, originalImage.height);
+      tempCtx.drawImage(originalImage, 0, 0, processWidth, processHeight);
+      const imageData = tempCtx.getImageData(0, 0, processWidth, processHeight);
+
+      setProgress(20);
 
       const extractedPlots = [];
       const plotImages = {};
@@ -556,13 +583,22 @@ const ImageryAnalyzer = ({
               };
 
               imageWorkerRef.current.addEventListener('message', handleMessage);
+              
+              // Adjust plot corners to match downsampled image
+              const adjustedCorners = {
+                tl: { x: plotCorners.tl.x * processingScale, y: plotCorners.tl.y * processingScale },
+                tr: { x: plotCorners.tr.x * processingScale, y: plotCorners.tr.y * processingScale },
+                br: { x: plotCorners.br.x * processingScale, y: plotCorners.br.y * processingScale },
+                bl: { x: plotCorners.bl.x * processingScale, y: plotCorners.bl.y * processingScale }
+              };
+
               imageWorkerRef.current.postMessage({
                 imageData,
-                width: originalImage.width,
-                height: originalImage.height,
-                plotCorners,
+                width: processWidth,
+                height: processHeight,
+                plotCorners: adjustedCorners,
                 targetSize: 800,
-                scaleFactor,
+                scaleFactor: 1, // Already at target scale
                 plotId,
                 messageId
               });
@@ -865,6 +901,22 @@ const ImageryAnalyzer = ({
               onTouchMove={handleTouchMove}
               onTouchEnd={handleTouchEnd}
             />
+
+            {/* Loading Indicator */}
+            {(progress > 0 && progress < 100) && (
+              <div className="bg-blue-50 border border-blue-300 rounded-lg p-4">
+                <p className="text-sm font-medium text-blue-900 mb-2">
+                  {progress < 30 ? '📷 Loading image...' : '⚙️ Processing plots...'}
+                </p>
+                <div className="w-full bg-blue-200 rounded-full h-2 overflow-hidden">
+                  <div 
+                    className="bg-blue-600 h-full transition-all duration-300"
+                    style={{ width: `${progress}%` }}
+                  />
+                </div>
+                <p className="text-xs text-blue-700 mt-2">{progress}% complete</p>
+              </div>
+            )}
 
             {/* File Date and Image Info */}
             {fileDate && imageRef.current && !showDateConfirmation && (
