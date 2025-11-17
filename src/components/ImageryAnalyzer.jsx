@@ -131,17 +131,19 @@ const ImageryAnalyzer = ({
     // Start image loading immediately (non-blocking) - show preview ASAP
     const reader = new FileReader();
     reader.onload = (event) => {
+      // Create an image element to load the dataURL
       const img = new Image();
       img.onload = () => {
-        // Show the image IMMEDIATELY for display (use original or downsampled)
-        const displayWidth = img.width;
-        const displayHeight = img.height;
-        
+        // Store the image in the ref
         imageRef.current = img;
+        
+        // Set the dataURL to trigger re-render with imageSrc state
         setImageSrc(event.target.result);
-        initializeCorners(displayWidth, displayHeight);
+        
+        // Initialize corner positions based on display image size
+        initializeCorners(img.width, img.height);
 
-        // Store original for processing
+        // Store original for processing (downsample if too large)
         if (img.width > 4000 || img.height > 4000) {
           // Downsample for processing to prevent out-of-memory errors
           setTimeout(() => {
@@ -168,7 +170,15 @@ const ImageryAnalyzer = ({
           originalImageRef.current = img;
         }
       };
+      img.onerror = () => {
+        console.error('Failed to load image');
+        alert('Failed to load image. Please try another file.');
+      };
       img.src = event.target.result;
+    };
+    reader.onerror = () => {
+      console.error('Failed to read file');
+      alert('Failed to read file. Please try again.');
     };
     reader.readAsDataURL(file);
 
@@ -895,8 +905,8 @@ const ImageryAnalyzer = ({
               onTouchEnd={handleTouchEnd}
             />
 
-            {/* Loading Indicator - Only show during processing */}
-            {processing && progress > 0 && progress < 100 && (
+            {/* Loading Indicator - Show during processing */}
+            {processing && (
               <div className="bg-blue-50 border border-blue-300 rounded-lg p-4">
                 <p className="text-sm font-medium text-blue-900 mb-2">
                   ⚙️ Processing plots...
@@ -904,7 +914,7 @@ const ImageryAnalyzer = ({
                 <div className="w-full bg-blue-200 rounded-full h-2 overflow-hidden">
                   <div 
                     className="bg-blue-600 h-full transition-all duration-300"
-                    style={{ width: `${progress}%` }}
+                    style={{ width: `${Math.max(5, progress)}%` }}
                   />
                 </div>
                 <p className="text-xs text-blue-700 mt-2">{progress}% complete</p>
