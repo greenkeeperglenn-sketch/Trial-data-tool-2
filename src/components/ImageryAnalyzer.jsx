@@ -127,15 +127,12 @@ const ImageryAnalyzer = ({
     if (!file) return;
 
     setUploadedFile(file);
-    setProgress(5); // Show that something is happening
 
     // Start image loading immediately (non-blocking) - show preview ASAP
     const reader = new FileReader();
     reader.onload = (event) => {
       const img = new Image();
       img.onload = () => {
-        setProgress(15); // Image loaded
-
         // Show the image IMMEDIATELY for display (use original or downsampled)
         const displayWidth = img.width;
         const displayHeight = img.height;
@@ -143,11 +140,8 @@ const ImageryAnalyzer = ({
         imageRef.current = img;
         setImageSrc(event.target.result);
         initializeCorners(displayWidth, displayHeight);
-        
-        setProgress(25); // Image displayed to user
 
-        // THEN downsample the original for processing in background
-        // Only downsample if absolutely necessary for processing
+        // Store original for processing
         if (img.width > 4000 || img.height > 4000) {
           // Downsample for processing to prevent out-of-memory errors
           setTimeout(() => {
@@ -166,14 +160,12 @@ const ImageryAnalyzer = ({
             const downsampledImg = new Image();
             downsampledImg.onload = () => {
               originalImageRef.current = downsampledImg;
-              setProgress(30);
             };
             downsampledImg.src = processCanvas.toDataURL('image/jpeg', 0.95);
           }, 0); // Non-blocking
         } else {
           // Image is already reasonable size
           originalImageRef.current = img;
-          setProgress(30);
         }
       };
       img.src = event.target.result;
@@ -212,7 +204,6 @@ const ImageryAnalyzer = ({
 
     setFileDate(dateStr);
     setShowDateConfirmation(true); // Always show date confirmation for user verification
-    setProgress(0); // Reset progress
   };
 
   const initializeCorners = (w, h) => {
@@ -621,6 +612,7 @@ const ImageryAnalyzer = ({
       setPlots(extractedPlots);
       setCommitted(true);
       setProcessing(false);
+      setProgress(0); // Reset progress bar
 
       // Create assessment date if it doesn't exist
       createAssessmentDateIfNeeded(fileDate);
@@ -630,6 +622,7 @@ const ImageryAnalyzer = ({
     } catch (error) {
       console.error('Error processing images:', error);
       setProcessing(false);
+      setProgress(0); // Reset progress on error too
       alert('Error processing images. The image may be too large. Try a smaller image or contact support.');
     }
   };
@@ -902,11 +895,11 @@ const ImageryAnalyzer = ({
               onTouchEnd={handleTouchEnd}
             />
 
-            {/* Loading Indicator */}
-            {(progress > 0 && progress < 100) && (
+            {/* Loading Indicator - Only show during processing */}
+            {processing && progress > 0 && progress < 100 && (
               <div className="bg-blue-50 border border-blue-300 rounded-lg p-4">
                 <p className="text-sm font-medium text-blue-900 mb-2">
-                  {progress < 30 ? '📷 Loading image...' : '⚙️ Processing plots...'}
+                  ⚙️ Processing plots...
                 </p>
                 <div className="w-full bg-blue-200 rounded-full h-2 overflow-hidden">
                   <div 
