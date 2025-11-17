@@ -36,6 +36,11 @@ const ImageryAnalyzer = ({
   ]);
   const [draggingCorner, setDraggingCorner] = useState(null);
 
+  // Refs (required for canvas and file input)
+  const fileInputRef = useRef(null);
+  const canvasRef = useRef(null);
+  const imageRef = useRef(null);
+
   // Cleanup blob URLs on unmount
   useEffect(() => {
     return () => {
