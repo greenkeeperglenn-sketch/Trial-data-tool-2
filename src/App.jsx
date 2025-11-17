@@ -265,6 +265,28 @@ const App = () => {
     }
   };
 
+  // Update trial metadata
+  const handleUpdateTrialMetadata = async (trialId, metadata) => {
+    try {
+      const trial = trials[trialId];
+      if (!trial) return;
+
+      const updatedTrial = {
+        ...trial,
+        trialistName: metadata.trialistName,
+        clientSponsor: metadata.clientSponsor,
+        contactInfo: metadata.contactInfo,
+        lastModified: new Date().toISOString()
+      };
+
+      await updateTrial(trialId, updatedTrial);
+      setTrials(prev => ({ ...prev, [trialId]: updatedTrial }));
+    } catch (error) {
+      console.error('Error updating trial metadata:', error);
+      alert('Error updating trial information. Please try again.');
+    }
+  };
+
   // Export trial as JSON
   const exportTrialJSON = () => {
     const trial = trials[currentTrialId];
@@ -561,6 +583,7 @@ const App = () => {
           onCreateNew={createNewTrial}
           onLoadTrial={loadTrial}
           onDeleteTrial={handleDeleteTrial}
+          onUpdateTrialMetadata={handleUpdateTrialMetadata}
           onImportTrial={importTrialJSON}
           onImportExcel={() => setShowExcelImport(true)}
           onLoadDemo={loadDemoTrial}
