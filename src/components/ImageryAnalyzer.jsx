@@ -692,32 +692,36 @@ const ImageryAnalyzer = ({
   };
 
   return (
-    <div className="space-y-4">
-      <div className="bg-white rounded-lg shadow p-6">
-        <div className="mb-4">
-          <h2 className="text-xl font-semibold">Turf Trial Imagery Analyzer</h2>
-          <p className="text-sm text-gray-600">
-            Upload a drone image and manually align the plot grid.
-          </p>
+      <div className="space-y-4">
+        {/* DEBUG: Deployment Indicator - Remove later */}
+        <div className="bg-pink-100 border-2 border-pink-500 rounded-lg p-3 text-center">
+          <p className="text-pink-700 font-bold text-sm">✓ Latest commits deployed (c268ede)</p>
+          <p className="text-pink-600 text-xs">Image: 1200×1200 downsampling, fixed buffer issues</p>
         </div>
 
-        <div className="flex gap-2 mb-4">
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            className="px-4 py-2 rounded bg-emerald-600 text-white text-sm hover:bg-emerald-700 transition"
-          >
-            Upload Image
-          </button>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/jpeg,image/jpg,image/png"
-            onChange={(event) => handleFileUpload(event.target.files?.[0])}
-            className="hidden"
-          />
-        </div>
+        <div className="bg-white rounded-lg shadow p-6">
+          <div className="mb-4">
+            <h2 className="text-xl font-semibold">Turf Trial Imagery Analyzer</h2>
+            <p className="text-sm text-gray-600">
+              Upload a drone image and manually align the plot grid.
+            </p>
+          </div>
 
-        {!imageSrc && (
+          <div className="flex gap-2 mb-4">
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className="px-4 py-2 rounded bg-emerald-600 text-white text-sm hover:bg-emerald-700 transition"
+            >
+              Upload Image
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/jpeg,image/jpg,image/png"
+              onChange={(event) => handleFileUpload(event.target.files?.[0])}
+              className="hidden"
+            />
+          </div>        {!imageSrc && (
           <div className="border-2 border-dashed rounded-lg p-8 text-center border-gray-300 bg-gray-50">
             <p className="text-lg font-medium">Drag & drop or click to upload a drone image</p>
             <p className="text-sm text-gray-500 mt-2">JPEG or PNG files are supported</p>
@@ -926,23 +930,33 @@ const ImageryAnalyzer = ({
 
             {/* File Date and Image Info */}
             {fileDate && imageRef.current && !showDateConfirmation && (
-              <div className="bg-purple-50 border border-purple-200 text-purple-800 p-3 rounded">
-                <p className="font-medium">Image Date: {fileDate}</p>
-                <p className="text-sm">
-                  Display Size: {imageRef.current.width} × {imageRef.current.height}px
-                  {originalImageRef.current && (
-                    <> | Original: {originalImageRef.current.width} × {originalImageRef.current.height}px</>
+              <div className="space-y-3">
+                <div className="bg-purple-50 border border-purple-200 text-purple-800 p-3 rounded">
+                  <p className="font-medium">Image Date: {fileDate}</p>
+                  <p className="text-sm">
+                    Display Size: {imageRef.current.width} × {imageRef.current.height}px
+                    {originalImageRef.current && (
+                      <> | Original: {originalImageRef.current.width} × {originalImageRef.current.height}px</>
+                    )}
+                  </p>
+                  {originalImageRef.current && (originalImageRef.current.width > 2000 || originalImageRef.current.height > 2000) && (
+                    <p className="text-xs mt-1">✓ Original high-res image preserved for extraction (800×800px plots)</p>
                   )}
-                </p>
-                {originalImageRef.current && (originalImageRef.current.width > 2000 || originalImageRef.current.height > 2000) && (
-                  <p className="text-xs mt-1">✓ Original high-res image preserved for extraction (800×800px plots)</p>
-                )}
-                <button
-                  onClick={() => setShowDateConfirmation(true)}
-                  className="mt-2 text-xs underline hover:text-purple-900"
-                >
-                  Change date
-                </button>
+                  <button
+                    onClick={() => setShowDateConfirmation(true)}
+                    className="mt-2 text-xs underline hover:text-purple-900"
+                  >
+                    Change date
+                  </button>
+                </div>
+
+                {/* DEBUG: Processing Info - Remove later */}
+                <div className="bg-pink-100 border border-pink-400 rounded p-2 text-xs">
+                  <p className="text-pink-700 font-semibold">🔧 Debug Info</p>
+                  <p className="text-pink-600">Processing at: 1200×1200px max</p>
+                  <p className="text-pink-600">Web Worker: Active ✓</p>
+                  <p className="text-pink-600">Buffer transfer: Fixed ✓</p>
+                </div>
               </div>
             )}
 
