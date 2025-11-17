@@ -1,5 +1,4 @@
 import React, { useState, useRef, useEffect } from 'react';
-import piexif from 'piexifjs';
 
 const ImageryAnalyzer = ({
   gridLayout,
@@ -12,19 +11,12 @@ const ImageryAnalyzer = ({
   onPhotosChange,
   onAssessmentDatesChange
 }) => {
-  // Log mount and props to help debug blank-screen issues
-  try {
-    // eslint-disable-next-line no-console
-    console.log('[ImageryAnalyzer] mount', { gridLayout: !!gridLayout, config: !!config, assessmentDatesLength: assessmentDates?.length });
-  } catch (e) {
-    // swallow logging errors
-  }
   // Auto-detect grid dimensions from trial setup
   const trialRows = gridLayout?.length || 4;
   const trialCols = gridLayout?.[0]?.length || 4;
 
-  // STATE
   const [imageSrc, setImageSrc] = useState(null);
+  const [uploadedFile, setUploadedFile] = useState(null);
   const [fileDate, setFileDate] = useState(null);
   const [rows, setRows] = useState(trialRows);
   const [cols, setCols] = useState(trialCols);
@@ -35,228 +27,88 @@ const ImageryAnalyzer = ({
     { x: 50, y: 550, label: 'BL' }
   ]);
   const [draggingCorner, setDraggingCorner] = useState(null);
+  const [committed, setCommitted] = useState(false);
+  const [plots, setPlots] = useState([]);
+  const [selectedDate, setSelectedDate] = useState(currentDateObj?.date || '');
   const [processing, setProcessing] = useState(false);
   const [progress, setProgress] = useState(0);
-  const [committed, setCommitted] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [loadProgress, setLoadProgress] = useState(0);
-  const [loadError, setLoadError] = useState(null);
 
-  // Refs (required for canvas, file input, and worker)
   const fileInputRef = useRef(null);
   const canvasRef = useRef(null);
-  const imageRef = useRef(null); // Preview image (low-res, max 800px)
-  const imageWorkerRef = useRef(null);
-  const fileRef = useRef(null); // Store the original file for later high-res processing
+  const imageRef = useRef(null);
 
-  // Initialize Web Worker
-  useEffect(() => {
-    imageWorkerRef.current = new Worker(
-      new URL('../utils/imageProcessingWorker.js', import.meta.url),
-      { type: 'module' }
-    );
-
-    return () => {
-      imageWorkerRef.current?.terminate();
-    };
-  }, []);
-
-  // Cleanup blob URLs on unmount
-  useEffect(() => {
-    return () => {
-      if (imageSrc && imageSrc.startsWith('blob:')) {
-        URL.revokeObjectURL(imageSrc);
-      }
-      if (imageRef.current) {
-        imageRef.current.src = '';
-        imageRef.current = null;
-      }
-    };
-  }, [imageSrc]);
-
-  // Handle image loading - NEW APPROACH: Load low-res preview immediately
-  const handleFileUpload = async (file) => {
+  const handleFileUpload = (file) => {
     if (!file) return;
 
-    // Validate file type
-    if (!file.type.match(/^image\/(jpeg|jpg|png)$/i)) {
-      setLoadError('Invalid file type. Please upload a JPEG or PNG image.');
-      return;
-    }
+    // Store the file and extract date from metadata
+    setUploadedFile(file);
 
-    // Validate file size (max 50MB)
-    const maxSize = 50 * 1024 * 1024;
-    if (file.size > maxSize) {
-      setLoadError('File too large. Maximum size is 50MB. Please compress your image and try again.');
-      return;
-    }
+    // Try to get date from file modified date
+    const modifiedDate = new Date(file.lastModified);
+    const dateStr = modifiedDate.toISOString().split('T')[0]; // YYYY-MM-DD
+    setFileDate(dateStr);
 
-    // Store the original file for later high-res processing
-    fileRef.current = file;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const img = new Image();
+      img.onload = () => {
+        // Downsample large images to prevent crashes
+        const MAX_WIDTH = 2000;
+        const MAX_HEIGHT = 2000;
 
-    // Set loading state immediately
-    setLoading(true);
-    setLoadError(null);
-    setCommitted(false);
-    setLoadProgress(10);
+        let width = img.width;
+        let height = img.height;
 
-    console.log(`Loading preview: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)}MB)`);
+        if (width > MAX_WIDTH || height > MAX_HEIGHT) {
+          const scale = Math.min(MAX_WIDTH / width, MAX_HEIGHT / height);
+          width = Math.floor(width * scale);
+          height = Math.floor(height * scale);
 
-    try {
-      // Validate file signature (magic bytes)
-      setLoadProgress(20);
-      const buffer = await file.slice(0, 12).arrayBuffer();
-      const bytes = new Uint8Array(buffer);
+          // Create downsampled version
+          const tempCanvas = document.createElement('canvas');
+          tempCanvas.width = width;
+          tempCanvas.height = height;
+          const tempCtx = tempCanvas.getContext('2d');
+          tempCtx.drawImage(img, 0, 0, width, height);
 
-      const isJPEG = bytes[0] === 0xFF && bytes[1] === 0xD8 && bytes[2] === 0xFF;
-      const isPNG = bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4E && bytes[3] === 0x47;
-
-      if (!isJPEG && !isPNG) {
-        setLoadError(`Invalid image file. Detected bytes: ${Array.from(bytes.slice(0, 4)).map(b => '0x' + b.toString(16).toUpperCase()).join(' ')}`);
-        setLoadProgress(0);
-        setLoading(false);
-        return;
-      }
-
-      console.log('File validated:', isJPEG ? 'JPEG' : 'PNG');
-      setLoadProgress(40);
-
-      // Create a low-resolution preview for grid alignment (max 800px)
-      // This loads almost instantly, even for 36MB+ files!
-      const previewMaxSize = 800;
-
-      const blobUrl = URL.createObjectURL(file);
-      const previewImg = new Image();
-
-      previewImg.onload = async () => {
-        try {
-          console.log(`Creating preview from ${previewImg.width}x${previewImg.height}`);
-          setLoadProgress(60);
-
-          // Calculate preview size
-          const scale = Math.min(previewMaxSize / previewImg.width, previewMaxSize / previewImg.height, 1);
-          const previewCanvas = document.createElement('canvas');
-          previewCanvas.width = Math.floor(previewImg.width * scale);
-          previewCanvas.height = Math.floor(previewImg.height * scale);
-
-          console.log(`Preview size: ${previewCanvas.width}x${previewCanvas.height}`);
-          setLoadProgress(70);
-
-          const ctx = previewCanvas.getContext('2d');
-          if (!ctx) {
-            throw new Error('Failed to get canvas context');
-          }
-
-          // Draw downsampled preview
-          ctx.drawImage(previewImg, 0, 0, previewCanvas.width, previewCanvas.height);
-          setLoadProgress(85);
-
-          // Convert to blob
-          previewCanvas.toBlob(
-            (blob) => {
-              if (!blob) {
-                throw new Error('Failed to create preview blob');
-              }
-
-              const previewBlobUrl = URL.createObjectURL(blob);
-              console.log(`Preview created: ${(blob.size / 1024).toFixed(1)}KB`);
-
-              const displayImg = new Image();
-              displayImg.onload = () => {
-                imageRef.current = displayImg;
-                setImageSrc(previewBlobUrl);
-
-                // Set initial corner positions
-                setCorners([
-                  { x: displayImg.width * 0.1, y: displayImg.height * 0.1, label: 'TL' },
-                  { x: displayImg.width * 0.9, y: displayImg.height * 0.1, label: 'TR' },
-                  { x: displayImg.width * 0.9, y: displayImg.height * 0.9, label: 'BR' },
-                  { x: displayImg.width * 0.1, y: displayImg.height * 0.9, label: 'BL' }
-                ]);
-
-                setLoadProgress(100);
-                setLoading(false);
-                console.log('✓ Preview ready - align your grid!');
-              };
-
-              displayImg.onerror = (e) => {
-                console.error('Failed to load preview blob:', e);
-                setLoadError('Failed to create preview image');
-                setLoading(false);
-                URL.revokeObjectURL(previewBlobUrl);
-              };
-
-              displayImg.src = previewBlobUrl;
-            },
-            'image/jpeg',
-            0.80
-          );
-
-          // Clean up temporary blob URL
-          URL.revokeObjectURL(blobUrl);
-        } catch (error) {
-          console.error('Error creating preview:', error);
-          setLoadError(`Failed to create preview: ${error.message}`);
-          setLoadProgress(0);
-          setLoading(false);
-          URL.revokeObjectURL(blobUrl);
+          // Create new image from downsampled canvas
+          const downsampledImg = new Image();
+          downsampledImg.onload = () => {
+            imageRef.current = downsampledImg;
+            setImageSrc(tempCanvas.toDataURL('image/jpeg', 0.9));
+            initializeCorners(downsampledImg.width, downsampledImg.height);
+          };
+          downsampledImg.src = tempCanvas.toDataURL('image/jpeg', 0.9);
+        } else {
+          imageRef.current = img;
+          setImageSrc(event.target.result);
+          initializeCorners(width, height);
         }
       };
-
-      previewImg.onerror = (error) => {
-        console.error('Preview load error:', error);
-        setLoadError('Failed to load image preview. The file may be corrupted.');
-        setLoadProgress(0);
-        setLoading(false);
-        URL.revokeObjectURL(blobUrl);
-      };
-
-      previewImg.src = blobUrl;
-
-      // Extract date from EXIF in parallel
-      let dateStr = null;
-      try {
-        const arrayBuffer = await file.arrayBuffer();
-        const data = new Uint8Array(arrayBuffer);
-        const exif = piexif.load(data);
-        if (exif.Exif && exif.Exif[piexif.ExifIFD.DateTimeOriginal]) {
-          const exifDate = exif.Exif[piexif.ExifIFD.DateTimeOriginal];
-          const dateArray = String.fromCharCode.apply(null, exifDate).split(' ')[0].split(':');
-          dateStr = `${dateArray[0]}-${dateArray[1]}-${dateArray[2]}`;
-        }
-      } catch (e) {
-        console.warn('Could not extract EXIF date');
-      }
-
-      if (!dateStr) {
-        const modifiedDate = new Date(file.lastModified);
-        dateStr = modifiedDate.toISOString().split('T')[0];
-      }
-
-      setFileDate(dateStr);
-    } catch (error) {
-      console.error('Error handling file upload:', error);
-      setLoadError('Error processing file.');
-      setLoading(false);
-    }
+      img.src = event.target.result;
+    };
+    reader.readAsDataURL(file);
   };
 
-  // Draw image and grid on canvas
+  const initializeCorners = (w, h) => {
+    setCorners([
+      { x: w * 0.1, y: h * 0.1, label: 'TL' },
+      { x: w * 0.9, y: h * 0.1, label: 'TR' },
+      { x: w * 0.9, y: h * 0.9, label: 'BR' },
+      { x: w * 0.1, y: h * 0.9, label: 'BL' }
+    ]);
+
+    // Reset committed state
+    setCommitted(false);
+    setPlots([]);
+  };
+
   useEffect(() => {
-    if (!imageSrc || !canvasRef.current || !imageRef.current) {
-      console.log('Cannot draw yet:', { 
-        imageSrc: !!imageSrc, 
-        canvas: !!canvasRef.current, 
-        image: !!imageRef.current 
-      });
-      return;
-    }
+    if (!imageSrc || !canvasRef.current || !imageRef.current) return;
 
     const canvas = canvasRef.current;
     const ctx = canvas.getContext('2d');
     const img = imageRef.current;
-
-    console.log('Drawing canvas:', img.width, 'x', img.height);
 
     // Set canvas size to match image
     canvas.width = img.width;
@@ -265,11 +117,11 @@ const ImageryAnalyzer = ({
     // Draw image
     ctx.drawImage(img, 0, 0);
 
-    // Draw grid overlay
-    drawGrid(ctx, img.width, img.height);
+    // Draw grid
+    drawGrid(ctx);
   }, [imageSrc, corners, rows, cols]);
 
-  const drawGrid = (ctx, width, height) => {
+  const drawGrid = (ctx) => {
     if (corners.length < 4) return;
 
     const [tl, tr, br, bl] = corners;
@@ -306,50 +158,88 @@ const ImageryAnalyzer = ({
       ctx.stroke();
     }
 
-    // Draw corner markers
+    // Draw corner markers (EXTRA LARGE with visual feedback)
     corners.forEach((corner, idx) => {
       const isActive = draggingCorner === idx;
 
       if (isActive) {
-        // Active state - yellow
-        ctx.fillStyle = 'rgba(255, 255, 0, 0.9)';
-        ctx.beginPath();
-        ctx.arc(corner.x, corner.y, 30, 0, 2 * Math.PI);
-        ctx.fill();
-        
+        // ACTIVE STATE - Pulsing yellow square
+        ctx.save();
+        ctx.translate(corner.x, corner.y);
+        ctx.rotate(Math.PI / 4); // Rotate 45 degrees
+
+        // Outer glow
+        ctx.fillStyle = 'rgba(255, 255, 0, 0.5)';
+        ctx.fillRect(-50, -50, 100, 100);
+
+        // Main square
+        ctx.fillStyle = 'rgba(255, 200, 0, 0.95)';
+        ctx.fillRect(-35, -35, 70, 70);
+
+        // Center
         ctx.fillStyle = 'white';
-        ctx.font = 'bold 16px Arial';
+        ctx.fillRect(-12, -12, 24, 24);
+
+        ctx.restore();
+
+        // Label
+        ctx.fillStyle = 'yellow';
+        ctx.font = 'bold 20px Arial';
         ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(corner.label, corner.x, corner.y);
+        ctx.strokeStyle = 'rgba(0, 0, 0, 0.9)';
+        ctx.lineWidth = 4;
+        ctx.strokeText(corner.label + ' ⬅️', corner.x, corner.y + 60);
+        ctx.fillText(corner.label + ' ⬅️', corner.x, corner.y + 60);
       } else {
-        // Normal state - red
+        // NORMAL STATE - Large red circles
+        // Outer circle (glow effect) - BIGGER
+        ctx.fillStyle = 'rgba(255, 0, 0, 0.3)';
+        ctx.beginPath();
+        ctx.arc(corner.x, corner.y, 50, 0, 2 * Math.PI);
+        ctx.fill();
+
+        // Middle circle
+        ctx.fillStyle = 'rgba(255, 0, 0, 0.6)';
+        ctx.beginPath();
+        ctx.arc(corner.x, corner.y, 35, 0, 2 * Math.PI);
+        ctx.fill();
+
+        // Inner circle (main marker) - BIGGER
         ctx.fillStyle = 'rgba(255, 0, 0, 0.9)';
         ctx.beginPath();
         ctx.arc(corner.x, corner.y, 25, 0, 2 * Math.PI);
         ctx.fill();
-        
+
+        // White center - BIGGER
         ctx.fillStyle = 'white';
-        ctx.font = 'bold 16px Arial';
+        ctx.beginPath();
+        ctx.arc(corner.x, corner.y, 12, 0, 2 * Math.PI);
+        ctx.fill();
+
+        // Label - BIGGER
+        ctx.fillStyle = 'white';
+        ctx.font = 'bold 20px Arial';
         ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(corner.label, corner.x, corner.y);
+        ctx.strokeStyle = 'rgba(0, 0, 0, 0.7)';
+        ctx.lineWidth = 4;
+        ctx.strokeText(corner.label, corner.x, corner.y + 55);
+        ctx.fillText(corner.label, corner.x, corner.y + 55);
       }
     });
   };
 
-  // Mouse handlers for corner dragging
   const handleMouseDown = (e) => {
-    if (!canvasRef.current) return;
-    const rect = canvasRef.current.getBoundingClientRect();
-    const scaleX = canvasRef.current.width / rect.width;
-    const scaleY = canvasRef.current.height / rect.height;
+    const canvas = canvasRef.current;
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
     const x = (e.clientX - rect.left) * scaleX;
     const y = (e.clientY - rect.top) * scaleY;
 
+    // Check if clicking near a corner (even larger hit area for touch)
     const clickedCorner = corners.findIndex(corner => {
       const distance = Math.sqrt(Math.pow(corner.x - x, 2) + Math.pow(corner.y - y, 2));
-      return distance < 40;
+      return distance < 60; // Increased to 60px for better touch support
     });
 
     if (clickedCorner >= 0) {
@@ -358,11 +248,12 @@ const ImageryAnalyzer = ({
   };
 
   const handleMouseMove = (e) => {
-    if (draggingCorner === null || !canvasRef.current) return;
+    if (draggingCorner === null) return;
 
-    const rect = canvasRef.current.getBoundingClientRect();
-    const scaleX = canvasRef.current.width / rect.width;
-    const scaleY = canvasRef.current.height / rect.height;
+    const canvas = canvasRef.current;
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
     const x = (e.clientX - rect.left) * scaleX;
     const y = (e.clientY - rect.top) * scaleY;
 
@@ -377,179 +268,133 @@ const ImageryAnalyzer = ({
     setDraggingCorner(null);
   };
 
-  // Helper: Calculate corner positions for a specific plot in the grid
-  const calculatePlotCorners = (row, col, rows, cols, tl, tr, br, bl) => {
-    const rowT = row / rows;
-    const rowB = (row + 1) / rows;
-    const colL = col / cols;
-    const colR = (col + 1) / cols;
+  // Touch event handlers for iPad/mobile
+  const handleTouchStart = (e) => {
+    e.preventDefault();
+    const canvas = canvasRef.current;
+    const rect = canvas.getBoundingClientRect();
+    const touch = e.touches[0];
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    const x = (touch.clientX - rect.left) * scaleX;
+    const y = (touch.clientY - rect.top) * scaleY;
 
-    const topLeftX = tl.x + (tr.x - tl.x) * colL;
-    const topLeftY = tl.y + (tr.y - tl.y) * colL;
-    const topRightX = tl.x + (tr.x - tl.x) * colR;
-    const topRightY = tl.y + (tr.y - tl.y) * colR;
+    // Check if touching near a corner
+    const clickedCorner = corners.findIndex(corner => {
+      const distance = Math.sqrt(Math.pow(corner.x - x, 2) + Math.pow(corner.y - y, 2));
+      return distance < 60;
+    });
 
-    const bottomLeftX = bl.x + (br.x - bl.x) * colL;
-    const bottomLeftY = bl.y + (br.y - bl.y) * colL;
-    const bottomRightX = bl.x + (br.x - bl.x) * colR;
-    const bottomRightY = bl.y + (br.y - bl.y) * colR;
+    if (clickedCorner >= 0) {
+      setDraggingCorner(clickedCorner);
+    }
+  };
 
-    return {
-      tl: {
-        x: topLeftX + (bottomLeftX - topLeftX) * rowT,
-        y: topLeftY + (bottomLeftY - topLeftY) * rowT
-      },
-      tr: {
-        x: topRightX + (bottomRightX - topRightX) * rowT,
-        y: topRightY + (bottomRightY - topRightY) * rowT
-      },
-      br: {
-        x: topRightX + (bottomRightX - topRightX) * rowB,
-        y: topRightY + (bottomRightY - topRightY) * rowB
-      },
-      bl: {
-        x: topLeftX + (bottomLeftX - topLeftX) * rowB,
-        y: topLeftY + (bottomLeftY - topLeftY) * rowB
+  const handleTouchMove = (e) => {
+    e.preventDefault();
+    if (draggingCorner === null) return;
+
+    const canvas = canvasRef.current;
+    const rect = canvas.getBoundingClientRect();
+    const touch = e.touches[0];
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    const x = (touch.clientX - rect.left) * scaleX;
+    const y = (touch.clientY - rect.top) * scaleY;
+
+    setCorners(prev => {
+      const newCorners = [...prev];
+      newCorners[draggingCorner] = { ...newCorners[draggingCorner], x, y };
+      return newCorners;
+    });
+  };
+
+  const handleTouchEnd = (e) => {
+    e.preventDefault();
+    setDraggingCorner(null);
+  };
+
+  // Fast perspective transformation using larger step size
+  const extractPlotWithPerspective = (sourceCanvas, plotCorners, targetSize) => {
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = targetSize;
+    tempCanvas.height = targetSize;
+    const tempCtx = tempCanvas.getContext('2d');
+
+    // White background
+    tempCtx.fillStyle = 'white';
+    tempCtx.fillRect(0, 0, targetSize, targetSize);
+
+    try {
+      const srcCtx = sourceCanvas.getContext('2d');
+      const srcImageData = srcCtx.getImageData(0, 0, sourceCanvas.width, sourceCanvas.height);
+      const dstImageData = tempCtx.createImageData(targetSize, targetSize);
+
+      // Use step size of 2 for much faster processing
+      const step = 2;
+
+      for (let y = 0; y < targetSize; y += step) {
+        for (let x = 0; x < targetSize; x += step) {
+          // Normalize coordinates (0 to 1)
+          const u = x / (targetSize - 1);
+          const v = y / (targetSize - 1);
+
+          // Bilinear interpolation to map destination to source quad
+          const srcX =
+            plotCorners.tl.x * (1 - u) * (1 - v) +
+            plotCorners.tr.x * u * (1 - v) +
+            plotCorners.br.x * u * v +
+            plotCorners.bl.x * (1 - u) * v;
+
+          const srcY =
+            plotCorners.tl.y * (1 - u) * (1 - v) +
+            plotCorners.tr.y * u * (1 - v) +
+            plotCorners.br.y * u * v +
+            plotCorners.bl.y * (1 - u) * v;
+
+          const sx = Math.floor(srcX);
+          const sy = Math.floor(srcY);
+
+          if (sx >= 0 && sx < sourceCanvas.width && sy >= 0 && sy < sourceCanvas.height) {
+            const srcIdx = (sy * sourceCanvas.width + sx) * 4;
+
+            // Fill the step size area with the same color
+            for (let dy = 0; dy < step && y + dy < targetSize; dy++) {
+              for (let dx = 0; dx < step && x + dx < targetSize; dx++) {
+                const dstIdx = ((y + dy) * targetSize + (x + dx)) * 4;
+                dstImageData.data[dstIdx] = srcImageData.data[srcIdx];
+                dstImageData.data[dstIdx + 1] = srcImageData.data[srcIdx + 1];
+                dstImageData.data[dstIdx + 2] = srcImageData.data[srcIdx + 2];
+                dstImageData.data[dstIdx + 3] = 255;
+              }
+            }
+          }
+        }
       }
-    };
+
+      tempCtx.putImageData(dstImageData, 0, 0);
+    } catch (error) {
+      console.error('Error extracting plot:', error);
+    }
+
+    return tempCanvas;
   };
 
-  // Helper: Create assessment date if it doesn't exist
-  const createAssessmentDateIfNeeded = (dateStr) => {
-    if (!assessmentDates.find(d => d.date === dateStr)) {
-      const newDate = {
-        id: Date.now().toString(),
-        date: dateStr,
-        type: selectedAssessmentType || config.assessmentTypes[0]?.name || 'General'
-      };
-      onAssessmentDatesChange([...assessmentDates, newDate]);
-    }
-  };
-
-  // Helper: Apply extracted plot images to field map
-  const applyImagesToFieldMap = (plotImages) => {
-    // Update photos
-    onPhotosChange(prevPhotos => ({
-      ...prevPhotos,
-      ...plotImages
-    }));
-  };
-
-  // Validate inputs before processing
-  const validateInputs = () => {
-    const errors = [];
-
-    if (!gridLayout || !Array.isArray(gridLayout)) {
-      errors.push('Grid layout is invalid');
-    }
-
-    if (!imageSrc) {
-      errors.push('No image uploaded');
-    }
-
-    if (!fileDate) {
-      errors.push('No date selected');
-    }
-
-    if (rows < 1 || cols < 1) {
-      errors.push('Rows and columns must be at least 1');
-    }
-
-    if (rows > 50 || cols > 50) {
-      errors.push('Grid too large (max 50x50)');
-    }
-
-    // Check corners form a reasonable quadrilateral
-    const [tl, tr, br, bl] = corners;
-    const minDistance = 30;
-    if (
-      Math.hypot(tr.x - tl.x, tr.y - tl.y) < minDistance ||
-      Math.hypot(br.x - bl.x, br.y - bl.y) < minDistance ||
-      Math.hypot(bl.x - tl.x, bl.y - tl.y) < minDistance ||
-      Math.hypot(br.x - tr.x, br.y - tr.y) < minDistance
-    ) {
-      errors.push('Grid corners are too close together - please adjust the corners');
-    }
-
-    return errors;
-  };
-
-  // Main processing function - NOW loads high-res image when extracting
+  // Commit grid and extract plot images with async processing
   const commitGrid = async () => {
-    // Validate inputs
-    const errors = validateInputs();
-    if (errors.length > 0) {
-      alert('Cannot process:\n\n' + errors.join('\n'));
-      return;
-    }
-
-    if (!fileRef.current || !imageRef.current) {
-      alert('Please upload an image first');
-      return;
-    }
+    if (!imageRef.current || !canvasRef.current || !fileDate) return;
 
     try {
       setProcessing(true);
       setProgress(0);
 
-      const displayImage = imageRef.current;
+      const canvas = canvasRef.current;
       const [tl, tr, br, bl] = corners;
 
-      console.log('Loading high-resolution image from file...');
-      console.log('Original file size:', (fileRef.current.size / 1024 / 1024).toFixed(2), 'MB');
-
-      // Load the high-resolution image from the stored file
-      const highResBlobUrl = URL.createObjectURL(fileRef.current);
-      const highResImage = new Image();
-
-      await new Promise((resolve, reject) => {
-        const timeout = setTimeout(() => {
-          reject(new Error('High-res image load timeout (60s). File may be too large.'));
-        }, 60000);
-
-        highResImage.onload = () => {
-          clearTimeout(timeout);
-          console.log('✓ High-res image loaded:', highResImage.width, 'x', highResImage.height);
-          resolve();
-        };
-
-        highResImage.onerror = (err) => {
-          clearTimeout(timeout);
-          reject(new Error('Failed to load high-resolution image'));
-        };
-
-        highResImage.src = highResBlobUrl;
-      });
-
-      // Calculate scale factor between preview and high-res
-      const scaleFactor = highResImage.width / displayImage.width;
-      console.log('Scale factor (high-res / preview):', scaleFactor.toFixed(2));
-
-      // Scale corner coordinates from preview to high-res
-      const scaledCorners = {
-        tl: { x: tl.x * scaleFactor, y: tl.y * scaleFactor },
-        tr: { x: tr.x * scaleFactor, y: tr.y * scaleFactor },
-        br: { x: br.x * scaleFactor, y: br.y * scaleFactor },
-        bl: { x: bl.x * scaleFactor, y: bl.y * scaleFactor }
-      };
-
-      console.log('Scaled corners to high-res:', scaledCorners);
-
-      // Get image data from high-res image
-      const tempCanvas = document.createElement('canvas');
-      tempCanvas.width = highResImage.width;
-      tempCanvas.height = highResImage.height;
-      const tempCtx = tempCanvas.getContext('2d');
-      tempCtx.drawImage(highResImage, 0, 0);
-      const fullImageData = tempCtx.getImageData(0, 0, highResImage.width, highResImage.height);
-
-      // Clean up blob URL
-      URL.revokeObjectURL(highResBlobUrl);
-
+      const extractedPlots = [];
       const plotImages = {};
-      const plotProcessingPromises = [];
 
-      // Count total plots to process
+      // Count total non-blank plots
       let totalPlots = 0;
       gridLayout.forEach(row => {
         row.forEach(plot => {
@@ -559,77 +404,145 @@ const ImageryAnalyzer = ({
 
       let processedPlots = 0;
 
-      // Process each plot using scaled coordinates
-      for (let row = 0; row < rows; row++) {
-        for (let col = 0; col < cols; col++) {
-          const layoutPlot = gridLayout[row]?.[col];
-          if (!layoutPlot) continue;
+    // Extract each plot as an image with perspective correction
+    for (let row = 0; row < rows; row++) {
+      for (let col = 0; col < cols; col++) {
+        // Calculate plot position using perspective transformation
+        const rowT = row / rows;
+        const rowB = (row + 1) / rows;
+        const colL = col / cols;
+        const colR = (col + 1) / cols;
 
-          const plotId = layoutPlot.id || `${row + 1}-${col + 1}`;
+        // Get corners of this plot cell in the grid
+        const topLeftX = tl.x + (tr.x - tl.x) * colL;
+        const topLeftY = tl.y + (tr.y - tl.y) * colL;
+        const topRightX = tl.x + (tr.x - tl.x) * colR;
+        const topRightY = tl.y + (tr.y - tl.y) * colR;
 
-          if (!layoutPlot.isBlank) {
-            // Calculate plot corners using SCALED coordinates
-            const plotCorners = calculatePlotCorners(
-              row, col, rows, cols,
-              scaledCorners.tl, scaledCorners.tr, scaledCorners.br, scaledCorners.bl
-            );
-            const messageId = `${row}-${col}`;
+        const bottomLeftX = bl.x + (br.x - bl.x) * colL;
+        const bottomLeftY = bl.y + (br.y - bl.y) * colL;
+        const bottomRightX = bl.x + (br.x - bl.x) * colR;
+        const bottomRightY = bl.y + (br.y - bl.y) * colR;
 
-            const promise = new Promise((resolve) => {
-              const handleMessage = (event) => {
-                if (event.data.messageId === messageId && event.data.plotId === plotId) {
-                  imageWorkerRef.current.removeEventListener('message', handleMessage);
-
-                  if (event.data.success) {
-                    const photoKey = `${fileDate}_${plotId}`;
-                    plotImages[photoKey] = event.data.imageData;
-                    processedPlots++;
-                    setProgress(Math.round((processedPlots / totalPlots) * 100));
-                  } else {
-                    console.error('Plot extraction failed:', event.data.error);
-                  }
-                  resolve();
-                }
-              };
-
-              imageWorkerRef.current.addEventListener('message', handleMessage);
-              imageWorkerRef.current.postMessage({
-                pixelData: fullImageData.data,
-                width: highResImage.width,
-                height: highResImage.height,
-                plotCorners,
-                targetSize: 600,
-                scaleFactor: 1, // Already scaled in plotCorners
-                plotId,
-                messageId
-              });
-            });
-
-            plotProcessingPromises.push(promise);
+        // Interpolate for this specific plot row to get the 4 corners
+        const plotCorners = {
+          tl: {
+            x: topLeftX + (bottomLeftX - topLeftX) * rowT,
+            y: topLeftY + (bottomLeftY - topLeftY) * rowT
+          },
+          tr: {
+            x: topRightX + (bottomRightX - topRightX) * rowT,
+            y: topRightY + (bottomRightY - topRightY) * rowT
+          },
+          br: {
+            x: topRightX + (bottomRightX - topRightX) * rowB,
+            y: topRightY + (bottomRightY - topRightY) * rowB
+          },
+          bl: {
+            x: topLeftX + (bottomLeftX - topLeftX) * rowB,
+            y: topLeftY + (bottomLeftY - topLeftY) * rowB
           }
+        };
+
+        // Get plot ID from gridLayout
+        const layoutPlot = gridLayout[row]?.[col];
+        const plotId = layoutPlot?.id || `${row + 1}-${col + 1}`;
+
+        if (!layoutPlot?.isBlank) {
+          // Extract plot with perspective transformation
+          const targetSize = 300; // Reduced from 400 for faster processing
+          const transformedCanvas = extractPlotWithPerspective(canvas, plotCorners, targetSize);
+
+          // Convert to base64
+          const plotImageData = transformedCanvas.toDataURL('image/jpeg', 0.80);
+
+          // Store with key format: date_plotId
+          const photoKey = `${fileDate}_${plotId}`;
+          plotImages[photoKey] = plotImageData;
+
+          extractedPlots.push({
+            id: plotId,
+            row: row + 1,
+            col: col + 1,
+            imageData: plotImageData,
+            isBlank: false
+          });
+
+          // Update progress
+          processedPlots++;
+          setProgress(Math.round((processedPlots / totalPlots) * 100));
+
+          // Yield to browser after EVERY plot to prevent freezing
+          await new Promise(resolve => setTimeout(resolve, 0));
         }
       }
+    }
 
-      // Wait for all plots to be processed
-      await Promise.all(plotProcessingPromises);
-
-      console.log(`✓ Extracted ${Object.keys(plotImages).length} plots from high-res image`);
-
-      // Apply results
-      createAssessmentDateIfNeeded(fileDate);
-      applyImagesToFieldMap(plotImages);
-
+      setPlots(extractedPlots);
       setCommitted(true);
       setProcessing(false);
-      setProgress(100);
 
-      alert(`✓ Successfully extracted ${Object.keys(plotImages).length} plot images!\n\nDate: ${fileDate}\nImages have been added to the trial.`);
+      // Create assessment date if it doesn't exist
+      createAssessmentDateIfNeeded(fileDate);
+
+      // Immediately apply images to the field map
+      applyImagesToFieldMap(plotImages);
     } catch (error) {
       console.error('Error processing images:', error);
       setProcessing(false);
-      setProgress(0);
-      alert(`Error processing images: ${error.message}\n\nPlease try again or use a smaller image.`);
+      alert('Error processing images. The image may be too large. Try a smaller image or contact support.');
     }
+  };
+
+  // Create assessment date entry if it doesn't exist
+  const createAssessmentDateIfNeeded = (dateStr) => {
+    if (!onAssessmentDatesChange || !config) return;
+
+    // Check if date already exists
+    const dateExists = assessmentDates?.some(d => d.date === dateStr);
+
+    if (!dateExists) {
+      // Create new date entry with empty assessments
+      const newDate = {
+        date: dateStr,
+        assessments: {}
+      };
+
+      // Initialize each assessment type
+      config.assessmentTypes.forEach(type => {
+        const assessmentData = {};
+        gridLayout.forEach(row => {
+          row.forEach(plot => {
+            if (!plot.isBlank) {
+              assessmentData[plot.id] = { value: '', entered: false };
+            }
+          });
+        });
+        newDate.assessments[type.name] = assessmentData;
+      });
+
+      // Add to assessment dates
+      onAssessmentDatesChange([...(assessmentDates || []), newDate]);
+    }
+  };
+
+  // Apply extracted plot images to field map
+  const applyImagesToFieldMap = (plotImages) => {
+    if (!onPhotosChange || Object.keys(plotImages).length === 0) {
+      return;
+    }
+
+    // Call onPhotosChange - it expects a function that takes current state
+    onPhotosChange(currentPhotos => {
+      const updatedPhotos = { ...currentPhotos };
+
+      Object.entries(plotImages).forEach(([key, imageData]) => {
+        // Each key is "date_plotId", store as array with single image
+        updatedPhotos[key] = [imageData];
+      });
+
+      return updatedPhotos;
+    });
   };
 
   return (
@@ -642,18 +555,12 @@ const ImageryAnalyzer = ({
           </p>
         </div>
 
-        {/* Upload Button */}
         <div className="flex gap-2 mb-4">
           <button
             onClick={() => fileInputRef.current?.click()}
-            disabled={loading}
-            className={`px-4 py-2 rounded text-white text-sm transition ${
-              loading
-                ? 'bg-gray-400 cursor-not-allowed'
-                : 'bg-emerald-600 hover:bg-emerald-700'
-            }`}
+            className="px-4 py-2 rounded bg-emerald-600 text-white text-sm hover:bg-emerald-700 transition"
           >
-            {loading ? 'Loading...' : 'Upload Image'}
+            Upload Image
           </button>
           <input
             ref={fileInputRef}
@@ -664,176 +571,168 @@ const ImageryAnalyzer = ({
           />
         </div>
 
-        {/* Loading State */}
-        {loading && !imageSrc && (
-          <div className="border-2 border-blue-300 rounded-lg p-8 text-center bg-blue-50">
-            <div className="flex flex-col items-center justify-center space-y-4">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600"></div>
-              <p className="text-lg font-medium text-blue-900">Loading image...</p>
-              <p className="text-sm text-blue-700">Please wait while we process your image</p>
-
-              {/* Progress Bar */}
-              <div className="w-full max-w-md">
-                <div className="w-full bg-blue-200 rounded-full h-3 overflow-hidden">
-                  <div
-                    className="bg-emerald-600 h-3 transition-all duration-300"
-                    style={{ width: `${loadProgress}%` }}
-                  />
-                </div>
-                <p className="text-sm text-blue-700 mt-2">
-                  {loadProgress}% complete
-                  {loadProgress === 40 && ' - Decoding image (this may take 30-120 seconds for large files)...'}
-                </p>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Error State */}
-        {loadError && !loading && (
-          <div className="border-2 border-red-300 rounded-lg p-6 bg-red-50">
-            <div className="flex items-start space-x-3">
-              <svg className="h-6 w-6 text-red-600 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              <div className="flex-1">
-                <p className="font-medium text-red-900">Error loading image</p>
-                <p className="text-sm text-red-700 mt-1">{loadError}</p>
-                <button
-                  onClick={() => {
-                    setLoadError(null);
-                    fileInputRef.current?.click();
-                  }}
-                  className="mt-3 px-4 py-2 bg-red-600 text-white text-sm rounded hover:bg-red-700 transition"
-                >
-                  Try Another Image
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* No Image State */}
-        {!imageSrc && !loading && !loadError && (
+        {!imageSrc && (
           <div className="border-2 border-dashed rounded-lg p-8 text-center border-gray-300 bg-gray-50">
             <p className="text-lg font-medium">Drag & drop or click to upload a drone image</p>
-            <p className="text-sm text-gray-500 mt-2">JPEG or PNG files are supported (max 50MB)</p>
+            <p className="text-sm text-gray-500 mt-2">JPEG or PNG files are supported</p>
           </div>
         )}
 
-        {/* Image Loaded State */}
         {imageSrc && (
           <div className="mt-6 space-y-4">
-            {/* Grid size inputs */}
-            <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-              <p className="font-medium text-green-900 mb-3">Grid Configuration</p>
-              <div className="grid grid-cols-2 gap-4">
-                <label className="flex flex-col gap-2 text-sm">
-                  Rows
-                  <input
-                    type="number"
-                    min={1}
-                    value={rows}
-                    onChange={(e) => setRows(Number(e.target.value) || 1)}
-                    className="border rounded px-3 py-2 bg-white"
-                  />
-                </label>
-                <label className="flex flex-col gap-2 text-sm">
-                  Columns
-                  <input
-                    type="number"
-                    min={1}
-                    value={cols}
-                    onChange={(e) => setCols(Number(e.target.value) || 1)}
-                    className="border rounded px-3 py-2 bg-white"
-                  />
-                </label>
-              </div>
-              <p className="text-xs text-green-700 mt-2">From trial setup: {trialRows}×{trialCols}</p>
+            <div className="bg-green-50 border border-green-200 text-green-800 p-3 rounded">
+              <p className="font-medium">Grid Detected from Trial Setup:</p>
+              <p className="text-sm">{rows} rows × {cols} columns (from your trial configuration)</p>
             </div>
 
-            {/* Instructions */}
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm text-blue-800">
-              <p className="font-medium">📍 Alignment Instructions:</p>
-              <p className="mt-1">Drag the red corner circles (TL, TR, BR, BL) to align the grid with your plots.</p>
+            <div className="grid grid-cols-2 gap-4">
+              <label className="flex flex-col gap-2 text-sm">
+                Rows
+                <input
+                  type="number"
+                  min={1}
+                  value={rows}
+                  onChange={(e) => setRows(Number(e.target.value) || 1)}
+                  className="border rounded px-3 py-2 bg-gray-50"
+                  title="Auto-detected from trial setup. Override if needed."
+                />
+              </label>
+
+              <label className="flex flex-col gap-2 text-sm">
+                Columns
+                <input
+                  type="number"
+                  min={1}
+                  value={cols}
+                  onChange={(e) => setCols(Number(e.target.value) || 1)}
+                  className="border rounded px-3 py-2 bg-gray-50"
+                  title="Auto-detected from trial setup. Override if needed."
+                />
+              </label>
             </div>
 
-            {/* Canvas */}
+            <div className="bg-blue-50 text-blue-700 p-3 rounded text-sm">
+              <p className="font-medium">Grid Alignment:</p>
+              <p>Drag the red corner markers (TL, TR, BR, BL) to align the grid with your plots.</p>
+            </div>
+
             <canvas
               ref={canvasRef}
-              className="w-full border-2 border-gray-300 rounded cursor-crosshair bg-white"
+              className="w-full border rounded cursor-crosshair"
               style={{ touchAction: 'none' }}
               onMouseDown={handleMouseDown}
               onMouseMove={handleMouseMove}
               onMouseUp={handleMouseUp}
               onMouseLeave={handleMouseUp}
+              onTouchStart={handleTouchStart}
+              onTouchMove={handleTouchMove}
+              onTouchEnd={handleTouchEnd}
             />
 
-            {/* Image info */}
+            {/* File Date and Image Info */}
             {fileDate && imageRef.current && (
-              <div className="bg-purple-50 border border-purple-200 rounded-lg p-3 text-sm text-purple-800">
-                <p><strong>Image Date:</strong> {fileDate}</p>
-                <p><strong>Size:</strong> {imageRef.current.width} × {imageRef.current.height}px</p>
+              <div className="bg-purple-50 border border-purple-200 text-purple-800 p-3 rounded">
+                <p className="font-medium">Image File Date: {fileDate}</p>
+                <p className="text-sm">Image Size: {imageRef.current.width} × {imageRef.current.height}px</p>
+                {(imageRef.current.width > 2000 || imageRef.current.height > 2000) && (
+                  <p className="text-xs mt-1">⚠️ Image was downsampled for performance</p>
+                )}
               </div>
             )}
 
-            {/* Processing Progress */}
+            {/* Commit Button */}
+            {!committed && !processing && (
+              <button
+                onClick={commitGrid}
+                className="w-full px-6 py-4 bg-emerald-600 text-white text-lg font-semibold rounded-lg hover:bg-emerald-700 transition"
+              >
+                🚀 Commit Images to Field Map
+              </button>
+            )}
+
+            {/* Processing Indicator */}
             {processing && (
-              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                <p className="font-medium text-yellow-900 mb-2">Processing plots...</p>
-                <div className="w-full bg-gray-200 rounded-full h-4 overflow-hidden">
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="font-semibold text-blue-800">Processing images with perspective correction...</p>
+                  <span className="text-blue-600 font-bold">{progress}%</span>
+                </div>
+                <div className="w-full bg-blue-200 rounded-full h-4 overflow-hidden">
                   <div
-                    className="bg-emerald-600 h-4 transition-all duration-300"
+                    className="bg-blue-600 h-full transition-all duration-300"
                     style={{ width: `${progress}%` }}
                   />
                 </div>
-                <p className="text-sm text-yellow-700 mt-2 text-center">{progress}% complete</p>
+                <p className="text-xs text-blue-600 mt-2">Applying perspective transformation to straighten each plot...</p>
               </div>
             )}
 
-            {/* Success Message */}
-            {committed && !processing && (
-              <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                <p className="font-medium text-green-900">✓ Processing complete!</p>
-                <p className="text-sm text-green-700 mt-1">Plot images have been added to the trial.</p>
+            {/* Results after committing */}
+            {committed && plots.length > 0 && (
+              <div className="space-y-4 mt-6">
+                <div className="bg-green-50 border border-green-200 text-green-800 p-4 rounded">
+                  <p className="font-bold text-lg">✅ Images Extracted & Stored!</p>
+                  <p className="text-sm">Extracted {plots.filter(p => !p.isBlank).length} plot images for date: {fileDate}</p>
+                  <p className="text-xs mt-2">✓ Images have been automatically added to the field map</p>
+                </div>
+
+                {/* Extracted Plot Images Preview */}
+                <div className="bg-white border rounded-lg p-4">
+                  <h3 className="font-semibold mb-3">Extracted Plot Images ({plots.length} plots)</h3>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+                    {plots.filter(p => !p.isBlank).slice(0, 20).map(plot => (
+                      <div key={plot.id} className="bg-gray-50 rounded border overflow-hidden">
+                        <img
+                          src={plot.imageData}
+                          alt={plot.id}
+                          className="w-full aspect-square object-cover"
+                        />
+                        <div className="p-2 text-center">
+                          <div className="font-medium text-sm">{plot.id}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  {plots.filter(p => !p.isBlank).length > 20 && (
+                    <p className="text-xs text-gray-500 mt-3">
+                      Showing first 20 of {plots.filter(p => !p.isBlank).length} plots...
+                    </p>
+                  )}
+                </div>
+
+                <div className="bg-blue-50 border border-blue-200 text-blue-800 p-4 rounded">
+                  <p className="font-medium">📸 Next Steps:</p>
+                  <ol className="text-sm mt-2 space-y-1 list-decimal list-inside">
+                    <li>Go to the Field Map view</li>
+                    <li>Navigate to date: {fileDate}</li>
+                    <li>Click the camera icon on any plot to see the extracted image</li>
+                  </ol>
+                </div>
+
+                {/* Reset Button */}
+                <button
+                  onClick={() => {
+                    setCommitted(false);
+                    setPlots([]);
+                  }}
+                  className="w-full px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition"
+                >
+                  ↺ Process Another Image
+                </button>
               </div>
             )}
+          </div>
+        )}
 
-            {/* Submit Button */}
-            <button
-              onClick={commitGrid}
-              disabled={processing || committed}
-              className={`w-full px-6 py-3 font-semibold rounded-lg transition ${
-                processing || committed
-                  ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                  : 'bg-emerald-600 text-white hover:bg-emerald-700'
-              }`}
-            >
-              {processing ? 'Processing...' : committed ? '✓ Completed' : '✓ Extract Plot Images'}
-            </button>
-
-            {/* Reset Button */}
-            {committed && (
-              <button
-                onClick={() => {
-                  setCommitted(false);
-                  setProgress(0);
-                  setImageSrc(null);
-                  setFileDate(null);
-                  setLoadError(null);
-                  setLoading(false);
-                  setLoadProgress(0);
-                  if (imageRef.current) {
-                    imageRef.current.src = '';
-                    imageRef.current = null;
-                  }
-                  fileRef.current = null;
-                }}
-                className="w-full px-6 py-3 bg-gray-600 text-white font-semibold rounded-lg hover:bg-gray-700 transition"
-              >
-                Process Another Image
-              </button>
-            )}
+        {!imageSrc && (
+          <div className="mt-6 p-4 bg-gray-50 rounded">
+            <h3 className="font-semibold mb-2">How to use:</h3>
+            <ol className="list-decimal list-inside text-sm text-gray-700 space-y-1">
+              <li>Upload an aerial/drone image of your trial plots</li>
+              <li>Adjust the number of rows and columns to match your trial layout</li>
+              <li>Drag the corner markers to align the grid with your plots</li>
+              <li>The green grid will overlay your plots for visual verification</li>
+            </ol>
           </div>
         )}
       </div>
