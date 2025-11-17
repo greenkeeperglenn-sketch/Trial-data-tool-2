@@ -1,13 +1,15 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, lazy, Suspense } from 'react';
 import { Loader } from 'lucide-react';
 
-// Import components
+// Import critical components (needed immediately)
 import Auth from './components/Auth';
 import TrialLibrary from './components/TrialLibrary';
-import TrialSetup from './components/TrialSetup';
-import TrialLayoutEditor from './components/TrialLayoutEditor';
-import DataEntry from './components/DataEntry';
-import ExcelImport from './components/ExcelImport';
+
+// Lazy load heavy components (only loaded when needed)
+const TrialSetup = lazy(() => import('./components/TrialSetup'));
+const TrialLayoutEditor = lazy(() => import('./components/TrialLayoutEditor'));
+const DataEntry = lazy(() => import('./components/DataEntry'));
+const ExcelImport = lazy(() => import('./components/ExcelImport'));
 
 // Import Supabase services
 import { supabase, hasValidCredentials } from './services/supabase';
@@ -18,6 +20,16 @@ import {
   deleteTrial as deleteTrialDB,
   migrateFromLocalStorage
 } from './services/database';
+
+// Loading fallback component for lazy-loaded routes
+const LoadingFallback = () => (
+  <div className="min-h-screen bg-gray-100 flex items-center justify-center">
+    <div className="text-center">
+      <Loader size={48} className="animate-spin text-stri-teal mx-auto mb-4" />
+      <p className="text-gray-600">Loading...</p>
+    </div>
+  </div>
+);
 
 const App = () => {
   // Authentication state
@@ -64,7 +76,8 @@ const App = () => {
       (_event, session) => {
         setUser(session?.user ?? null);
         if (session?.user) {
-          loadTrialsFromDatabase();
+          // Load trials in background (non-blocking)
+          setTimeout(() => loadTrialsFromDatabase(), 0);
         } else {
           setTrials({});
         }
@@ -78,14 +91,18 @@ const App = () => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       setUser(session?.user ?? null);
+      setAuthLoading(false);
 
+      // Load trials in background after UI renders (non-blocking)
       if (session?.user) {
-        await loadTrialsFromDatabase();
-        await checkForLocalStorageMigration();
+        // Defer to next tick to allow UI to render first
+        setTimeout(async () => {
+          await loadTrialsFromDatabase();
+          await checkForLocalStorageMigration();
+        }, 0);
       }
     } catch (error) {
       console.error('Error checking user:', error);
-    } finally {
       setAuthLoading(false);
     }
   };
@@ -551,10 +568,12 @@ const App = () => {
         />
 
         {showExcelImport && (
-          <ExcelImport
-            onImport={handleExcelImport}
-            onCancel={() => setShowExcelImport(false)}
-          />
+          <Suspense fallback={<LoadingFallback />}>
+            <ExcelImport
+              onImport={handleExcelImport}
+              onCancel={() => setShowExcelImport(false)}
+            />
+          </Suspense>
         )}
       </>
     );
@@ -562,78 +581,84 @@ const App = () => {
 
   if (step === 'setup') {
     return (
-      <TrialSetup
-        config={config}
-        onConfigChange={setConfig}
-        onNext={() => setStep('layoutBuilder')}
-        onBack={() => setStep('library')}
-      />
+      <Suspense fallback={<LoadingFallback />}>
+        <TrialSetup
+          config={config}
+          onConfigChange={setConfig}
+          onNext={() => setStep('layoutBuilder')}
+          onBack={() => setStep('library')}
+        />
+      </Suspense>
     );
   }
 
   if (step === 'layoutBuilder') {
     return (
-      <TrialLayoutEditor
-        config={config}
-        gridLayout={gridLayout}
-        orientation={orientation}
-        onLayoutChange={setGridLayout}
-        onOrientationChange={setOrientation}
-        onFinalize={async () => {
-          console.log('[App] Finalizing trial layout');
-          console.log('[App] Current trial ID:', currentTrialId);
-          console.log('[App] Grid layout:', gridLayout);
-          console.log('[App] Config:', config);
+      <Suspense fallback={<LoadingFallback />}>
+        <TrialLayoutEditor
+          config={config}
+          gridLayout={gridLayout}
+          orientation={orientation}
+          onLayoutChange={setGridLayout}
+          onOrientationChange={setOrientation}
+          onFinalize={async () => {
+            console.log('[App] Finalizing trial layout');
+            console.log('[App] Current trial ID:', currentTrialId);
+            console.log('[App] Grid layout:', gridLayout);
+            console.log('[App] Config:', config);
 
-          setLayoutLocked(true);
+            setLayoutLocked(true);
 
-          // If this is a new trial (temp ID), create it in database
-          if (currentTrialId.startsWith('temp-')) {
-            console.log('[App] Creating new trial in database');
-            try {
-              await finalizeNewTrial();
-              console.log('[App] Trial created successfully');
-            } catch (error) {
-              console.error('[App] Error creating trial:', error);
-              alert('Error saving trial: ' + error.message);
-              return; // Don't proceed to entry if save failed
+            // If this is a new trial (temp ID), create it in database
+            if (currentTrialId.startsWith('temp-')) {
+              console.log('[App] Creating new trial in database');
+              try {
+                await finalizeNewTrial();
+                console.log('[App] Trial created successfully');
+              } catch (error) {
+                console.error('[App] Error creating trial:', error);
+                alert('Error saving trial: ' + error.message);
+                return; // Don't proceed to entry if save failed
+              }
             }
-          }
 
-          console.log('[App] Navigating to entry screen');
-          setStep('entry');
-        }}
-        onBack={() => setStep('setup')}
-      />
+            console.log('[App] Navigating to entry screen');
+            setStep('entry');
+          }}
+          onBack={() => setStep('setup')}
+        />
+      </Suspense>
     );
   }
 
   if (step === 'entry') {
     return (
-      <DataEntry
-        config={config}
-        gridLayout={gridLayout}
-        orientation={orientation}
-        layoutLocked={layoutLocked}
-        assessmentDates={assessmentDates}
-        photos={photos}
-        notes={notes}
-        onAssessmentDatesChange={setAssessmentDates}
-        onPhotosChange={setPhotos}
-        onNotesChange={setNotes}
-        onConfigChange={handleConfigChange}
-        onUnlockLayout={() => {
-          if (confirm('⚠️ Unlocking layout may affect existing data. Continue?')) {
-            setLayoutLocked(false);
-            setStep('layoutBuilder');
-          }
-        }}
-        onExportJSON={exportTrialJSON}
-        onBackToLibrary={async () => {
-          await saveCurrentTrial();
-          setStep('library');
-        }}
-      />
+      <Suspense fallback={<LoadingFallback />}>
+        <DataEntry
+          config={config}
+          gridLayout={gridLayout}
+          orientation={orientation}
+          layoutLocked={layoutLocked}
+          assessmentDates={assessmentDates}
+          photos={photos}
+          notes={notes}
+          onAssessmentDatesChange={setAssessmentDates}
+          onPhotosChange={setPhotos}
+          onNotesChange={setNotes}
+          onConfigChange={handleConfigChange}
+          onUnlockLayout={() => {
+            if (confirm('⚠️ Unlocking layout may affect existing data. Continue?')) {
+              setLayoutLocked(false);
+              setStep('layoutBuilder');
+            }
+          }}
+          onExportJSON={exportTrialJSON}
+          onBackToLibrary={async () => {
+            await saveCurrentTrial();
+            setStep('library');
+          }}
+        />
+      </Suspense>
     );
   }
 
