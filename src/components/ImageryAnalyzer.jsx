@@ -32,62 +32,142 @@ const ImageryAnalyzer = ({
   const [selectedDate, setSelectedDate] = useState(currentDateObj?.date || '');
   const [processing, setProcessing] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const [loadProgress, setLoadProgress] = useState(0);
+  const [loadError, setLoadError] = useState(null);
 
   const fileInputRef = useRef(null);
   const canvasRef = useRef(null);
   const imageRef = useRef(null);
 
-  const handleFileUpload = (file) => {
+  const handleFileUpload = async (file) => {
     if (!file) return;
 
-    // Store the file and extract date from metadata
-    setUploadedFile(file);
+    // Validate file type
+    if (!file.type.match(/^image\/(jpeg|jpg|png)$/i)) {
+      setLoadError('Invalid file type. Please upload a JPEG or PNG image.');
+      return;
+    }
 
-    // Try to get date from file modified date
-    const modifiedDate = new Date(file.lastModified);
-    const dateStr = modifiedDate.toISOString().split('T')[0]; // YYYY-MM-DD
-    setFileDate(dateStr);
+    // Validate file size (max 50MB)
+    const maxSize = 50 * 1024 * 1024;
+    if (file.size > maxSize) {
+      setLoadError('File too large. Maximum size is 50MB. Please compress your image and try again.');
+      return;
+    }
 
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const img = new Image();
-      img.onload = () => {
-        // Downsample large images to prevent crashes
-        const MAX_WIDTH = 2000;
-        const MAX_HEIGHT = 2000;
+    // Start loading
+    setLoading(true);
+    setLoadError(null);
+    setCommitted(false);
+    setLoadProgress(10);
 
-        let width = img.width;
-        let height = img.height;
+    console.log(`Loading image: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)}MB)`);
 
-        if (width > MAX_WIDTH || height > MAX_HEIGHT) {
-          const scale = Math.min(MAX_WIDTH / width, MAX_HEIGHT / height);
-          width = Math.floor(width * scale);
-          height = Math.floor(height * scale);
+    try {
+      // Store the file and extract date from metadata
+      setUploadedFile(file);
 
-          // Create downsampled version
-          const tempCanvas = document.createElement('canvas');
-          tempCanvas.width = width;
-          tempCanvas.height = height;
-          const tempCtx = tempCanvas.getContext('2d');
-          tempCtx.drawImage(img, 0, 0, width, height);
+      // Try to get date from file modified date
+      const modifiedDate = new Date(file.lastModified);
+      const dateStr = modifiedDate.toISOString().split('T')[0]; // YYYY-MM-DD
+      setFileDate(dateStr);
 
-          // Create new image from downsampled canvas
-          const downsampledImg = new Image();
-          downsampledImg.onload = () => {
-            imageRef.current = downsampledImg;
-            setImageSrc(tempCanvas.toDataURL('image/jpeg', 0.9));
-            initializeCorners(downsampledImg.width, downsampledImg.height);
-          };
-          downsampledImg.src = tempCanvas.toDataURL('image/jpeg', 0.9);
-        } else {
-          imageRef.current = img;
-          setImageSrc(event.target.result);
-          initializeCorners(width, height);
-        }
+      setLoadProgress(30); // File info extracted
+
+      const reader = new FileReader();
+
+      reader.onerror = () => {
+        setLoadError('Failed to read file. Please try again.');
+        setLoading(false);
+        setLoadProgress(0);
       };
-      img.src = event.target.result;
-    };
-    reader.readAsDataURL(file);
+
+      reader.onload = (event) => {
+        setLoadProgress(50); // File read complete
+
+        const img = new Image();
+
+        img.onerror = () => {
+          setLoadError('Failed to load image. The file may be corrupted or in an unsupported format.');
+          setLoading(false);
+          setLoadProgress(0);
+        };
+
+        img.onload = () => {
+          setLoadProgress(70); // Image decoded
+
+          try {
+            // Downsample large images to prevent crashes
+            const MAX_WIDTH = 2000;
+            const MAX_HEIGHT = 2000;
+
+            let width = img.width;
+            let height = img.height;
+
+            console.log(`Original image size: ${width}x${height}`);
+
+            if (width > MAX_WIDTH || height > MAX_HEIGHT) {
+              setLoadProgress(80); // Starting downsample
+
+              const scale = Math.min(MAX_WIDTH / width, MAX_HEIGHT / height);
+              width = Math.floor(width * scale);
+              height = Math.floor(height * scale);
+
+              console.log(`Downsampling to: ${width}x${height}`);
+
+              // Create downsampled version
+              const tempCanvas = document.createElement('canvas');
+              tempCanvas.width = width;
+              tempCanvas.height = height;
+              const tempCtx = tempCanvas.getContext('2d');
+              tempCtx.drawImage(img, 0, 0, width, height);
+
+              setLoadProgress(90); // Downsample complete
+
+              // Create new image from downsampled canvas
+              const downsampledImg = new Image();
+              downsampledImg.onload = () => {
+                imageRef.current = downsampledImg;
+                setImageSrc(tempCanvas.toDataURL('image/jpeg', 0.9));
+                initializeCorners(downsampledImg.width, downsampledImg.height);
+                setLoadProgress(100);
+                setLoading(false);
+                console.log('✓ Image ready (downsampled)');
+              };
+              downsampledImg.onerror = () => {
+                setLoadError('Failed to process downsampled image. Please try a smaller image.');
+                setLoading(false);
+                setLoadProgress(0);
+              };
+              downsampledImg.src = tempCanvas.toDataURL('image/jpeg', 0.9);
+            } else {
+              setLoadProgress(90);
+              imageRef.current = img;
+              setImageSrc(event.target.result);
+              initializeCorners(width, height);
+              setLoadProgress(100);
+              setLoading(false);
+              console.log('✓ Image ready');
+            }
+          } catch (error) {
+            console.error('Error processing image:', error);
+            setLoadError(`Failed to process image: ${error.message}`);
+            setLoading(false);
+            setLoadProgress(0);
+          }
+        };
+
+        img.src = event.target.result;
+      };
+
+      reader.readAsDataURL(file);
+    } catch (error) {
+      console.error('Error handling file upload:', error);
+      setLoadError('Error processing file. Please try again.');
+      setLoading(false);
+      setLoadProgress(0);
+    }
   };
 
   const initializeCorners = (w, h) => {
@@ -558,9 +638,14 @@ const ImageryAnalyzer = ({
         <div className="flex gap-2 mb-4">
           <button
             onClick={() => fileInputRef.current?.click()}
-            className="px-4 py-2 rounded bg-emerald-600 text-white text-sm hover:bg-emerald-700 transition"
+            disabled={loading}
+            className={`px-4 py-2 rounded text-white text-sm transition ${
+              loading
+                ? 'bg-gray-400 cursor-not-allowed'
+                : 'bg-emerald-600 hover:bg-emerald-700'
+            }`}
           >
-            Upload Image
+            {loading ? 'Loading...' : 'Upload Image'}
           </button>
           <input
             ref={fileInputRef}
@@ -571,10 +656,57 @@ const ImageryAnalyzer = ({
           />
         </div>
 
-        {!imageSrc && (
+        {/* Loading State */}
+        {loading && !imageSrc && (
+          <div className="border-2 border-blue-300 rounded-lg p-8 text-center bg-blue-50">
+            <div className="flex flex-col items-center justify-center space-y-4">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600"></div>
+              <p className="text-lg font-medium text-blue-900">Loading image...</p>
+              <p className="text-sm text-blue-700">Please wait while we process your image</p>
+
+              {/* Progress Bar */}
+              <div className="w-full max-w-md">
+                <div className="w-full bg-blue-200 rounded-full h-3 overflow-hidden">
+                  <div
+                    className="bg-emerald-600 h-3 transition-all duration-300"
+                    style={{ width: `${loadProgress}%` }}
+                  />
+                </div>
+                <p className="text-sm text-blue-700 mt-2">{loadProgress}% complete</p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Error State */}
+        {loadError && !loading && (
+          <div className="border-2 border-red-300 rounded-lg p-6 bg-red-50">
+            <div className="flex items-start space-x-3">
+              <svg className="h-6 w-6 text-red-600 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <div className="flex-1">
+                <p className="font-medium text-red-900">Error loading image</p>
+                <p className="text-sm text-red-700 mt-1">{loadError}</p>
+                <button
+                  onClick={() => {
+                    setLoadError(null);
+                    fileInputRef.current?.click();
+                  }}
+                  className="mt-3 px-4 py-2 bg-red-600 text-white text-sm rounded hover:bg-red-700 transition"
+                >
+                  Try Another Image
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* No Image State */}
+        {!imageSrc && !loading && !loadError && (
           <div className="border-2 border-dashed rounded-lg p-8 text-center border-gray-300 bg-gray-50">
             <p className="text-lg font-medium">Drag & drop or click to upload a drone image</p>
-            <p className="text-sm text-gray-500 mt-2">JPEG or PNG files are supported</p>
+            <p className="text-sm text-gray-500 mt-2">JPEG or PNG files are supported (max 50MB)</p>
           </div>
         )}
 
@@ -714,6 +846,10 @@ const ImageryAnalyzer = ({
                   onClick={() => {
                     setCommitted(false);
                     setPlots([]);
+                    setImageSrc(null);
+                    setLoading(false);
+                    setLoadProgress(0);
+                    setLoadError(null);
                   }}
                   className="w-full px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition"
                 >
