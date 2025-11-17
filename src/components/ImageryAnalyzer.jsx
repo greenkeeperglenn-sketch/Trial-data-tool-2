@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import piexif from 'piexifjs';
 
 const ImageryAnalyzer = ({
   gridLayout,
@@ -39,18 +40,126 @@ const ImageryAnalyzer = ({
   const canvasRef = useRef(null);
   const imageRef = useRef(null);
   const originalImageRef = useRef(null); // Store original high-res image
+  const imageWorkerRef = useRef(null);
 
-  const handleFileUpload = (file) => {
+  // Cleanup memory on unmount
+  useEffect(() => {
+    return () => {
+      // Clear image references to allow garbage collection
+      if (originalImageRef.current) {
+        originalImageRef.current.src = '';
+        originalImageRef.current = null;
+      }
+      if (imageRef.current) {
+        imageRef.current.src = '';
+        imageRef.current = null;
+      }
+      // Revoke blob URLs if used
+      if (imageSrc && typeof imageSrc === 'string' && imageSrc.startsWith('blob:')) {
+        URL.revokeObjectURL(imageSrc);
+      }
+      // Terminate worker
+      if (imageWorkerRef.current) {
+        imageWorkerRef.current.terminate();
+      }
+    };
+  }, [imageSrc]);
+
+  // Initialize Web Worker
+  useEffect(() => {
+    try {
+      imageWorkerRef.current = new Worker(
+        new URL('../utils/imageProcessingWorker.js', import.meta.url)
+      );
+    } catch (error) {
+      console.error('Failed to create Web Worker:', error);
+    }
+
+    return () => {
+      if (imageWorkerRef.current) {
+        imageWorkerRef.current.terminate();
+      }
+    };
+  }, []);
+
+  // Input validation
+  const validateInputs = () => {
+    const errors = [];
+
+    if (!gridLayout || !Array.isArray(gridLayout)) {
+      errors.push('Grid layout is invalid');
+    }
+
+    if (!imageSrc) {
+      errors.push('No image uploaded');
+    }
+
+    if (!fileDate) {
+      errors.push('No date selected');
+    }
+
+    if (rows < 1 || cols < 1) {
+      errors.push('Rows and columns must be at least 1');
+    }
+
+    if (rows > 50 || cols > 50) {
+      errors.push('Grid too large (max 50×50)');
+    }
+
+    // Check corners form a reasonable quadrilateral
+    if (corners.length === 4) {
+      const [tl, tr, br, bl] = corners;
+      const minDistance = 50;
+      if (
+        Math.hypot(tr.x - tl.x, tr.y - tl.y) < minDistance ||
+        Math.hypot(br.x - bl.x, br.y - bl.y) < minDistance ||
+        Math.hypot(bl.x - tl.x, bl.y - tl.y) < minDistance ||
+        Math.hypot(br.x - tr.x, br.y - tr.y) < minDistance
+      ) {
+        errors.push('Grid corners are too close together (minimum 50px apart)');
+      }
+    }
+
+    return errors;
+  };
+
+  const handleFileUpload = async (file) => {
     if (!file) return;
 
-    // Store the file and extract date from metadata
     setUploadedFile(file);
 
-    // Try to get date from file modified date
-    const modifiedDate = new Date(file.lastModified);
-    const dateStr = modifiedDate.toISOString().split('T')[0]; // YYYY-MM-DD
+    // Try to extract date from EXIF metadata first (drone images have this)
+    let dateStr = null;
+
+    try {
+      if (file.type.includes('image')) {
+        const arrayBuffer = await file.arrayBuffer();
+        const data = new Uint8Array(arrayBuffer);
+
+        try {
+          const exif = piexif.load(data);
+          if (exif.Exif && exif.Exif[piexif.ExifIFD.DateTimeOriginal]) {
+            const exifDate = exif.Exif[piexif.ExifIFD.DateTimeOriginal];
+            const dateArray = String.fromCharCode.apply(null, exifDate).split(' ')[0].split(':');
+            dateStr = `${dateArray[0]}-${dateArray[1]}-${dateArray[2]}`;
+          }
+        } catch (exifError) {
+          // EXIF extraction failed, fall back to file date
+          console.warn('Could not extract EXIF date:', exifError);
+        }
+      }
+    } catch (e) {
+      console.warn('Could not read file for EXIF extraction');
+    }
+
+    // Fallback to file modified date if EXIF not found
+    if (!dateStr) {
+      const modifiedDate = new Date(file.lastModified);
+      dateStr = modifiedDate.toISOString().split('T')[0]; // YYYY-MM-DD
+    }
+
     setFileDate(dateStr);
-    setShowDateConfirmation(true); // Always show date confirmation
+    setShowDateConfirmation(true); // Always show date confirmation for user verification
 
     const reader = new FileReader();
     reader.onload = (event) => {
@@ -321,83 +430,57 @@ const ImageryAnalyzer = ({
     setDraggingCorner(null);
   };
 
-  // Perspective transformation with high quality - extract from ORIGINAL image
-  const extractPlotWithPerspective = (sourceImage, plotCorners, targetSize, scaleFactor = 1) => {
-    const tempCanvas = document.createElement('canvas');
-    tempCanvas.width = targetSize;
-    tempCanvas.height = targetSize;
-    const tempCtx = tempCanvas.getContext('2d');
+  // Perspective transformation moved to Web Worker (imageProcessingWorker.js)
+  // This was previously synchronous and blocked the main thread
 
-    // White background
-    tempCtx.fillStyle = 'white';
-    tempCtx.fillRect(0, 0, targetSize, targetSize);
+  // Calculate plot corners helper function
+  const calculatePlotCorners = (row, col, rows, cols, tl, tr, br, bl) => {
+    const rowT = row / rows;
+    const rowB = (row + 1) / rows;
+    const colL = col / cols;
+    const colR = (col + 1) / cols;
 
-    try {
-      // Draw source image to a temporary canvas to get pixel data
-      const srcCanvas = document.createElement('canvas');
-      srcCanvas.width = sourceImage.width;
-      srcCanvas.height = sourceImage.height;
-      const srcCtx = srcCanvas.getContext('2d');
-      srcCtx.drawImage(sourceImage, 0, 0);
+    const topLeftX = tl.x + (tr.x - tl.x) * colL;
+    const topLeftY = tl.y + (tr.y - tl.y) * colL;
+    const topRightX = tl.x + (tr.x - tl.x) * colR;
+    const topRightY = tl.y + (tr.y - tl.y) * colR;
 
-      const srcImageData = srcCtx.getImageData(0, 0, sourceImage.width, sourceImage.height);
-      const dstImageData = tempCtx.createImageData(targetSize, targetSize);
+    const bottomLeftX = bl.x + (br.x - bl.x) * colL;
+    const bottomLeftY = bl.y + (br.y - bl.y) * colL;
+    const bottomRightX = bl.x + (br.x - bl.x) * colR;
+    const bottomRightY = bl.y + (br.y - bl.y) * colR;
 
-      // Use step size of 1 for best quality (no pixel skipping)
-      const step = 1;
-
-      for (let y = 0; y < targetSize; y += step) {
-        for (let x = 0; x < targetSize; x += step) {
-          // Normalize coordinates (0 to 1)
-          const u = x / (targetSize - 1);
-          const v = y / (targetSize - 1);
-
-          // Bilinear interpolation to map destination to source quad
-          // Scale corners back to original image coordinates
-          const srcX =
-            (plotCorners.tl.x * scaleFactor) * (1 - u) * (1 - v) +
-            (plotCorners.tr.x * scaleFactor) * u * (1 - v) +
-            (plotCorners.br.x * scaleFactor) * u * v +
-            (plotCorners.bl.x * scaleFactor) * (1 - u) * v;
-
-          const srcY =
-            (plotCorners.tl.y * scaleFactor) * (1 - u) * (1 - v) +
-            (plotCorners.tr.y * scaleFactor) * u * (1 - v) +
-            (plotCorners.br.y * scaleFactor) * u * v +
-            (plotCorners.bl.y * scaleFactor) * (1 - u) * v;
-
-          const sx = Math.floor(srcX);
-          const sy = Math.floor(srcY);
-
-          if (sx >= 0 && sx < sourceImage.width && sy >= 0 && sy < sourceImage.height) {
-            const srcIdx = (sy * sourceImage.width + sx) * 4;
-
-            // Fill the step size area with the same color
-            for (let dy = 0; dy < step && y + dy < targetSize; dy++) {
-              for (let dx = 0; dx < step && x + dx < targetSize; dx++) {
-                const dstIdx = ((y + dy) * targetSize + (x + dx)) * 4;
-                dstImageData.data[dstIdx] = srcImageData.data[srcIdx];
-                dstImageData.data[dstIdx + 1] = srcImageData.data[srcIdx + 1];
-                dstImageData.data[dstIdx + 2] = srcImageData.data[srcIdx + 2];
-                dstImageData.data[dstIdx + 3] = 255;
-              }
-            }
-          }
-        }
+    return {
+      tl: {
+        x: topLeftX + (bottomLeftX - topLeftX) * rowT,
+        y: topLeftY + (bottomLeftY - topLeftY) * rowT
+      },
+      tr: {
+        x: topRightX + (bottomRightX - topRightX) * rowT,
+        y: topRightY + (bottomRightY - topRightY) * rowT
+      },
+      br: {
+        x: topRightX + (bottomRightX - topRightX) * rowB,
+        y: topRightY + (bottomRightY - topRightY) * rowB
+      },
+      bl: {
+        x: topLeftX + (bottomLeftX - topLeftX) * rowB,
+        y: topLeftY + (bottomLeftY - topLeftY) * rowB
       }
-
-      tempCtx.putImageData(dstImageData, 0, 0);
-    } catch (error) {
-      console.error('Error extracting plot:', error);
-    }
-
-    return tempCanvas;
+    };
   };
 
-  // Commit grid and extract plot images with async processing
+  // Commit grid and extract plot images with async processing using Web Worker
   const commitGrid = async () => {
-    if (!originalImageRef.current || !canvasRef.current || !fileDate) {
-      alert('Please upload an image and confirm the date first');
+    // Validate inputs first
+    const errors = validateInputs();
+    if (errors.length > 0) {
+      alert('Cannot process image:\n\n' + errors.join('\n'));
+      return;
+    }
+
+    if (!imageWorkerRef.current) {
+      alert('Image processor not ready. Please refresh the page.');
       return;
     }
 
@@ -412,8 +495,17 @@ const ImageryAnalyzer = ({
       // Calculate scale factor between display image and original image
       const scaleFactor = originalImage.width / displayImage.width;
 
+      // Get image data from original for worker processing
+      const tempCanvas = document.createElement('canvas');
+      tempCanvas.width = originalImage.width;
+      tempCanvas.height = originalImage.height;
+      const tempCtx = tempCanvas.getContext('2d');
+      tempCtx.drawImage(originalImage, 0, 0);
+      const imageData = tempCtx.getImageData(0, 0, originalImage.width, originalImage.height);
+
       const extractedPlots = [];
       const plotImages = {};
+      const plotProcessingPromises = [];
 
       // Count total non-blank plots
       let totalPlots = 0;
@@ -425,79 +517,69 @@ const ImageryAnalyzer = ({
 
       let processedPlots = 0;
 
-    // Extract each plot as an image with perspective correction from ORIGINAL image
-    for (let row = 0; row < rows; row++) {
-      for (let col = 0; col < cols; col++) {
-        // Calculate plot position using perspective transformation
-        const rowT = row / rows;
-        const rowB = (row + 1) / rows;
-        const colL = col / cols;
-        const colR = (col + 1) / cols;
+      // Queue all plot extractions to worker
+      for (let row = 0; row < rows; row++) {
+        for (let col = 0; col < cols; col++) {
+          const layoutPlot = gridLayout[row]?.[col];
+          const plotId = layoutPlot?.id || `${row + 1}-${col + 1}`;
 
-        // Get corners of this plot cell in the grid (in display coordinates)
-        const topLeftX = tl.x + (tr.x - tl.x) * colL;
-        const topLeftY = tl.y + (tr.y - tl.y) * colL;
-        const topRightX = tl.x + (tr.x - tl.x) * colR;
-        const topRightY = tl.y + (tr.y - tl.y) * colR;
+          if (!layoutPlot?.isBlank) {
+            const plotCorners = calculatePlotCorners(row, col, rows, cols, tl, tr, br, bl);
+            const messageId = `${row}-${col}`;
 
-        const bottomLeftX = bl.x + (br.x - bl.x) * colL;
-        const bottomLeftY = bl.y + (br.y - bl.y) * colL;
-        const bottomRightX = bl.x + (br.x - bl.x) * colR;
-        const bottomRightY = bl.y + (br.y - bl.y) * colR;
+            const promise = new Promise((resolve) => {
+              const handleMessage = (event) => {
+                if (event.data.messageId === messageId && event.data.plotId === plotId) {
+                  imageWorkerRef.current.removeEventListener('message', handleMessage);
 
-        // Interpolate for this specific plot row to get the 4 corners (in display coordinates)
-        const plotCorners = {
-          tl: {
-            x: topLeftX + (bottomLeftX - topLeftX) * rowT,
-            y: topLeftY + (bottomLeftY - topLeftY) * rowT
-          },
-          tr: {
-            x: topRightX + (bottomRightX - topRightX) * rowT,
-            y: topRightY + (bottomRightY - topRightY) * rowT
-          },
-          br: {
-            x: topRightX + (bottomRightX - topRightX) * rowB,
-            y: topRightY + (bottomRightY - topRightY) * rowB
-          },
-          bl: {
-            x: topLeftX + (bottomLeftX - topLeftX) * rowB,
-            y: topLeftY + (bottomLeftY - topLeftY) * rowB
+                  if (event.data.success) {
+                    const photoKey = `${fileDate}_${plotId}`;
+                    plotImages[photoKey] = event.data.imageData;
+
+                    extractedPlots.push({
+                      id: plotId,
+                      row: row + 1,
+                      col: col + 1,
+                      imageData: event.data.imageData,
+                      isBlank: false
+                    });
+
+                    processedPlots++;
+                    setProgress(Math.round((processedPlots / totalPlots) * 100));
+                  } else {
+                    console.error(`Failed to process plot ${plotId}:`, event.data.error);
+                  }
+
+                  resolve();
+                }
+              };
+
+              imageWorkerRef.current.addEventListener('message', handleMessage);
+              imageWorkerRef.current.postMessage({
+                imageData,
+                width: originalImage.width,
+                height: originalImage.height,
+                plotCorners,
+                targetSize: 800,
+                scaleFactor,
+                plotId,
+                messageId
+              });
+            });
+
+            plotProcessingPromises.push(promise);
           }
-        };
-
-        // Get plot ID from gridLayout
-        const layoutPlot = gridLayout[row]?.[col];
-        const plotId = layoutPlot?.id || `${row + 1}-${col + 1}`;
-
-        if (!layoutPlot?.isBlank) {
-          // Extract plot with perspective transformation from ORIGINAL high-res image
-          const targetSize = 800; // Increased from 500 for better quality
-          const transformedCanvas = extractPlotWithPerspective(originalImage, plotCorners, targetSize, scaleFactor);
-
-          // Convert to base64 with high quality (98% instead of 95%)
-          const plotImageData = transformedCanvas.toDataURL('image/jpeg', 0.98);
-
-          // Store with key format: date_plotId
-          const photoKey = `${fileDate}_${plotId}`;
-          plotImages[photoKey] = plotImageData;
-
-          extractedPlots.push({
-            id: plotId,
-            row: row + 1,
-            col: col + 1,
-            imageData: plotImageData,
-            isBlank: false
-          });
-
-          // Update progress
-          processedPlots++;
-          setProgress(Math.round((processedPlots / totalPlots) * 100));
-
-          // Yield to browser after EVERY plot to prevent freezing
-          await new Promise(resolve => setTimeout(resolve, 0));
         }
       }
-    }
+
+      // Wait for all plots to be processed
+      await Promise.all(plotProcessingPromises);
+
+      // Sort extracted plots by row and column for consistent order
+      extractedPlots.sort((a, b) => {
+        if (a.row !== b.row) return a.row - b.row;
+        return a.col - b.col;
+      });
 
       setPlots(extractedPlots);
       setCommitted(true);
