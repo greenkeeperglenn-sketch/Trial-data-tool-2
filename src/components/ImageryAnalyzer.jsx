@@ -23,7 +23,7 @@ const ImageryAnalyzer = ({
   const trialRows = gridLayout?.length || 4;
   const trialCols = gridLayout?.[0]?.length || 4;
 
-  // MINIMAL STATE - JUST WHAT WE NEED
+  // STATE
   const [imageSrc, setImageSrc] = useState(null);
   const [fileDate, setFileDate] = useState(null);
   const [rows, setRows] = useState(trialRows);
@@ -35,11 +35,28 @@ const ImageryAnalyzer = ({
     { x: 50, y: 550, label: 'BL' }
   ]);
   const [draggingCorner, setDraggingCorner] = useState(null);
+  const [processing, setProcessing] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [committed, setCommitted] = useState(false);
 
-  // Refs (required for canvas and file input)
+  // Refs (required for canvas, file input, and worker)
   const fileInputRef = useRef(null);
   const canvasRef = useRef(null);
   const imageRef = useRef(null);
+  const originalImageRef = useRef(null);
+  const imageWorkerRef = useRef(null);
+
+  // Initialize Web Worker
+  useEffect(() => {
+    imageWorkerRef.current = new Worker(
+      new URL('../utils/imageProcessingWorker.js', import.meta.url),
+      { type: 'module' }
+    );
+
+    return () => {
+      imageWorkerRef.current?.terminate();
+    };
+  }, []);
 
   // Cleanup blob URLs on unmount
   useEffect(() => {
@@ -47,40 +64,78 @@ const ImageryAnalyzer = ({
       if (imageSrc && imageSrc.startsWith('blob:')) {
         URL.revokeObjectURL(imageSrc);
       }
+      if (originalImageRef.current) {
+        originalImageRef.current.src = '';
+        originalImageRef.current = null;
+      }
+      if (imageRef.current) {
+        imageRef.current.src = '';
+        imageRef.current = null;
+      }
     };
   }, [imageSrc]);
 
-  // SIMPLE: Just handle image loading
+  // Handle image loading
   const handleFileUpload = async (file) => {
     if (!file) return;
 
     try {
       // FAST: Create blob URL immediately (no need to convert to data URL first)
       const blobUrl = URL.createObjectURL(file);
-      
-      const img = new Image();
-      img.onload = () => {
-        console.log('Image loaded successfully:', img.width, img.height);
-        imageRef.current = img;
-        // Use blob URL instead of data URL - much faster for large files
-        setImageSrc(blobUrl);
-        
-        // Set corner positions based on image size
-        setCorners([
-          { x: img.width * 0.1, y: img.height * 0.1, label: 'TL' },
-          { x: img.width * 0.9, y: img.height * 0.1, label: 'TR' },
-          { x: img.width * 0.9, y: img.height * 0.9, label: 'BR' },
-          { x: img.width * 0.1, y: img.height * 0.9, label: 'BL' }
-        ]);
+
+      // Load original high-res image for extraction
+      const originalImg = new Image();
+      originalImg.onload = () => {
+        console.log('Original image loaded:', originalImg.width, originalImg.height);
+        originalImageRef.current = originalImg;
+
+        // Downsample for display if too large
+        const maxDisplaySize = 1200;
+        let displayImg = originalImg;
+
+        if (originalImg.width > maxDisplaySize || originalImg.height > maxDisplaySize) {
+          const scale = Math.min(maxDisplaySize / originalImg.width, maxDisplaySize / originalImg.height);
+          const displayCanvas = document.createElement('canvas');
+          displayCanvas.width = originalImg.width * scale;
+          displayCanvas.height = originalImg.height * scale;
+          const ctx = displayCanvas.getContext('2d');
+          ctx.drawImage(originalImg, 0, 0, displayCanvas.width, displayCanvas.height);
+
+          const displayImgObj = new Image();
+          displayImgObj.src = displayCanvas.toDataURL('image/jpeg', 0.9);
+          displayImgObj.onload = () => {
+            imageRef.current = displayImgObj;
+            setImageSrc(displayImgObj.src);
+
+            // Set corner positions based on display image size
+            setCorners([
+              { x: displayImgObj.width * 0.1, y: displayImgObj.height * 0.1, label: 'TL' },
+              { x: displayImgObj.width * 0.9, y: displayImgObj.height * 0.1, label: 'TR' },
+              { x: displayImgObj.width * 0.9, y: displayImgObj.height * 0.9, label: 'BR' },
+              { x: displayImgObj.width * 0.1, y: displayImgObj.height * 0.9, label: 'BL' }
+            ]);
+          };
+        } else {
+          imageRef.current = originalImg;
+          setImageSrc(blobUrl);
+
+          // Set corner positions based on image size
+          setCorners([
+            { x: originalImg.width * 0.1, y: originalImg.height * 0.1, label: 'TL' },
+            { x: originalImg.width * 0.9, y: originalImg.height * 0.1, label: 'TR' },
+            { x: originalImg.width * 0.9, y: originalImg.height * 0.9, label: 'BR' },
+            { x: originalImg.width * 0.1, y: originalImg.height * 0.9, label: 'BL' }
+          ]);
+        }
       };
-      
-      img.onerror = (error) => {
+
+      originalImg.onerror = (error) => {
         console.error('Image load error:', error);
         URL.revokeObjectURL(blobUrl);
         alert('Failed to load image. Please try another file.');
       };
-      
-      img.src = blobUrl;
+
+      originalImg.src = blobUrl;
 
       // Extract date from EXIF in parallel (non-blocking)
       let dateStr = null;
@@ -246,6 +301,218 @@ const ImageryAnalyzer = ({
     setDraggingCorner(null);
   };
 
+  // Helper: Calculate corner positions for a specific plot in the grid
+  const calculatePlotCorners = (row, col, rows, cols, tl, tr, br, bl) => {
+    const rowT = row / rows;
+    const rowB = (row + 1) / rows;
+    const colL = col / cols;
+    const colR = (col + 1) / cols;
+
+    const topLeftX = tl.x + (tr.x - tl.x) * colL;
+    const topLeftY = tl.y + (tr.y - tl.y) * colL;
+    const topRightX = tl.x + (tr.x - tl.x) * colR;
+    const topRightY = tl.y + (tr.y - tl.y) * colR;
+
+    const bottomLeftX = bl.x + (br.x - bl.x) * colL;
+    const bottomLeftY = bl.y + (br.y - bl.y) * colL;
+    const bottomRightX = bl.x + (br.x - bl.x) * colR;
+    const bottomRightY = bl.y + (br.y - bl.y) * colR;
+
+    return {
+      tl: {
+        x: topLeftX + (bottomLeftX - topLeftX) * rowT,
+        y: topLeftY + (bottomLeftY - topLeftY) * rowT
+      },
+      tr: {
+        x: topRightX + (bottomRightX - topRightX) * rowT,
+        y: topRightY + (bottomRightY - topRightY) * rowT
+      },
+      br: {
+        x: topRightX + (bottomRightX - topRightX) * rowB,
+        y: topRightY + (bottomRightY - topRightY) * rowB
+      },
+      bl: {
+        x: topLeftX + (bottomLeftX - topLeftX) * rowB,
+        y: topLeftY + (bottomLeftY - topLeftY) * rowB
+      }
+    };
+  };
+
+  // Helper: Create assessment date if it doesn't exist
+  const createAssessmentDateIfNeeded = (dateStr) => {
+    if (!assessmentDates.find(d => d.date === dateStr)) {
+      const newDate = {
+        id: Date.now().toString(),
+        date: dateStr,
+        type: selectedAssessmentType || config.assessmentTypes[0]?.name || 'General'
+      };
+      onAssessmentDatesChange([...assessmentDates, newDate]);
+    }
+  };
+
+  // Helper: Apply extracted plot images to field map
+  const applyImagesToFieldMap = (plotImages) => {
+    // Update photos
+    onPhotosChange(prevPhotos => ({
+      ...prevPhotos,
+      ...plotImages
+    }));
+  };
+
+  // Validate inputs before processing
+  const validateInputs = () => {
+    const errors = [];
+
+    if (!gridLayout || !Array.isArray(gridLayout)) {
+      errors.push('Grid layout is invalid');
+    }
+
+    if (!imageSrc) {
+      errors.push('No image uploaded');
+    }
+
+    if (!fileDate) {
+      errors.push('No date selected');
+    }
+
+    if (rows < 1 || cols < 1) {
+      errors.push('Rows and columns must be at least 1');
+    }
+
+    if (rows > 50 || cols > 50) {
+      errors.push('Grid too large (max 50x50)');
+    }
+
+    // Check corners form a reasonable quadrilateral
+    const [tl, tr, br, bl] = corners;
+    const minDistance = 30;
+    if (
+      Math.hypot(tr.x - tl.x, tr.y - tl.y) < minDistance ||
+      Math.hypot(br.x - bl.x, br.y - bl.y) < minDistance ||
+      Math.hypot(bl.x - tl.x, bl.y - tl.y) < minDistance ||
+      Math.hypot(br.x - tr.x, br.y - tr.y) < minDistance
+    ) {
+      errors.push('Grid corners are too close together - please adjust the corners');
+    }
+
+    return errors;
+  };
+
+  // Main processing function
+  const commitGrid = async () => {
+    // Validate inputs
+    const errors = validateInputs();
+    if (errors.length > 0) {
+      alert('Cannot process:\n\n' + errors.join('\n'));
+      return;
+    }
+
+    if (!originalImageRef.current || !imageRef.current) {
+      alert('Please upload an image first');
+      return;
+    }
+
+    try {
+      setProcessing(true);
+      setProgress(0);
+
+      const originalImage = originalImageRef.current;
+      const displayImage = imageRef.current;
+      const [tl, tr, br, bl] = corners;
+      const scaleFactor = originalImage.width / displayImage.width;
+
+      console.log('Processing with scale factor:', scaleFactor);
+
+      // Get image data from original high-res image
+      const tempCanvas = document.createElement('canvas');
+      tempCanvas.width = originalImage.width;
+      tempCanvas.height = originalImage.height;
+      const tempCtx = tempCanvas.getContext('2d');
+      tempCtx.drawImage(originalImage, 0, 0);
+      const fullImageData = tempCtx.getImageData(0, 0, originalImage.width, originalImage.height);
+
+      const plotImages = {};
+      const plotProcessingPromises = [];
+
+      // Count total plots to process
+      let totalPlots = 0;
+      gridLayout.forEach(row => {
+        row.forEach(plot => {
+          if (!plot.isBlank) totalPlots++;
+        });
+      });
+
+      let processedPlots = 0;
+
+      // Process each plot
+      for (let row = 0; row < rows; row++) {
+        for (let col = 0; col < cols; col++) {
+          const layoutPlot = gridLayout[row]?.[col];
+          if (!layoutPlot) continue;
+
+          const plotId = layoutPlot.id || `${row + 1}-${col + 1}`;
+
+          if (!layoutPlot.isBlank) {
+            const plotCorners = calculatePlotCorners(row, col, rows, cols, tl, tr, br, bl);
+            const messageId = `${row}-${col}`;
+
+            const promise = new Promise((resolve) => {
+              const handleMessage = (event) => {
+                if (event.data.messageId === messageId && event.data.plotId === plotId) {
+                  imageWorkerRef.current.removeEventListener('message', handleMessage);
+
+                  if (event.data.success) {
+                    const photoKey = `${fileDate}_${plotId}`;
+                    plotImages[photoKey] = event.data.imageData;
+                    processedPlots++;
+                    setProgress(Math.round((processedPlots / totalPlots) * 100));
+                  } else {
+                    console.error('Plot extraction failed:', event.data.error);
+                  }
+                  resolve();
+                }
+              };
+
+              imageWorkerRef.current.addEventListener('message', handleMessage);
+              imageWorkerRef.current.postMessage({
+                pixelData: fullImageData.data,
+                width: originalImage.width,
+                height: originalImage.height,
+                plotCorners,
+                targetSize: 600,
+                scaleFactor: 1, // Already scaled in plotCorners
+                plotId,
+                messageId
+              });
+            });
+
+            plotProcessingPromises.push(promise);
+          }
+        }
+      }
+
+      // Wait for all plots to be processed
+      await Promise.all(plotProcessingPromises);
+
+      console.log(`Extracted ${Object.keys(plotImages).length} plots`);
+
+      // Apply results
+      createAssessmentDateIfNeeded(fileDate);
+      applyImagesToFieldMap(plotImages);
+
+      setCommitted(true);
+      setProcessing(false);
+      setProgress(100);
+
+      alert(`✓ Successfully extracted ${Object.keys(plotImages).length} plot images!\n\nDate: ${fileDate}\nImages have been added to the trial.`);
+    } catch (error) {
+      console.error('Error processing images:', error);
+      setProcessing(false);
+      setProgress(0);
+      alert('Error processing images. The image may be too large or invalid. Please try again.');
+    }
+  };
+
   return (
     <div className="space-y-4">
       <div className="bg-white rounded-lg shadow p-6">
@@ -337,16 +604,63 @@ const ImageryAnalyzer = ({
               </div>
             )}
 
+            {/* Processing Progress */}
+            {processing && (
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                <p className="font-medium text-yellow-900 mb-2">Processing plots...</p>
+                <div className="w-full bg-gray-200 rounded-full h-4 overflow-hidden">
+                  <div
+                    className="bg-emerald-600 h-4 transition-all duration-300"
+                    style={{ width: `${progress}%` }}
+                  />
+                </div>
+                <p className="text-sm text-yellow-700 mt-2 text-center">{progress}% complete</p>
+              </div>
+            )}
+
+            {/* Success Message */}
+            {committed && !processing && (
+              <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                <p className="font-medium text-green-900">✓ Processing complete!</p>
+                <p className="text-sm text-green-700 mt-1">Plot images have been added to the trial.</p>
+              </div>
+            )}
+
             {/* Submit Button */}
             <button
-              onClick={() => {
-                console.log('Grid committed with:', { rows, cols, corners, fileDate });
-                alert(`✓ Grid saved!\n\nRows: ${rows}\nCols: ${cols}\nDate: ${fileDate}\n\nNext: Extract plots (coming soon)`);
-              }}
-              className="w-full px-6 py-3 bg-emerald-600 text-white font-semibold rounded-lg hover:bg-emerald-700 transition"
+              onClick={commitGrid}
+              disabled={processing || committed}
+              className={`w-full px-6 py-3 font-semibold rounded-lg transition ${
+                processing || committed
+                  ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                  : 'bg-emerald-600 text-white hover:bg-emerald-700'
+              }`}
             >
-              ✓ Submit Grid Alignment
+              {processing ? 'Processing...' : committed ? '✓ Completed' : '✓ Extract Plot Images'}
             </button>
+
+            {/* Reset Button */}
+            {committed && (
+              <button
+                onClick={() => {
+                  setCommitted(false);
+                  setProgress(0);
+                  setImageSrc(null);
+                  setFileDate(null);
+                  if (originalImageRef.current) {
+                    originalImageRef.current.src = '';
+                    originalImageRef.current = null;
+                  }
+                  if (imageRef.current) {
+                    imageRef.current.src = '';
+                    imageRef.current = null;
+                  }
+                }}
+                className="w-full px-6 py-3 bg-gray-600 text-white font-semibold rounded-lg hover:bg-gray-700 transition"
+              >
+                Process Another Image
+              </button>
+            )}
           </div>
         )}
       </div>
