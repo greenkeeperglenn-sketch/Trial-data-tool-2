@@ -128,39 +128,7 @@ const ImageryAnalyzer = ({
 
     setUploadedFile(file);
 
-    // Try to extract date from EXIF metadata first (drone images have this)
-    let dateStr = null;
-
-    try {
-      if (file.type.includes('image')) {
-        const arrayBuffer = await file.arrayBuffer();
-        const data = new Uint8Array(arrayBuffer);
-
-        try {
-          const exif = piexif.load(data);
-          if (exif.Exif && exif.Exif[piexif.ExifIFD.DateTimeOriginal]) {
-            const exifDate = exif.Exif[piexif.ExifIFD.DateTimeOriginal];
-            const dateArray = String.fromCharCode.apply(null, exifDate).split(' ')[0].split(':');
-            dateStr = `${dateArray[0]}-${dateArray[1]}-${dateArray[2]}`;
-          }
-        } catch (exifError) {
-          // EXIF extraction failed, fall back to file date
-          console.warn('Could not extract EXIF date:', exifError);
-        }
-      }
-    } catch (e) {
-      console.warn('Could not read file for EXIF extraction');
-    }
-
-    // Fallback to file modified date if EXIF not found
-    if (!dateStr) {
-      const modifiedDate = new Date(file.lastModified);
-      dateStr = modifiedDate.toISOString().split('T')[0]; // YYYY-MM-DD
-    }
-
-    setFileDate(dateStr);
-    setShowDateConfirmation(true); // Always show date confirmation for user verification
-
+    // Start image loading immediately (non-blocking) - show preview ASAP
     const reader = new FileReader();
     reader.onload = (event) => {
       const img = new Image();
@@ -204,6 +172,39 @@ const ImageryAnalyzer = ({
       img.src = event.target.result;
     };
     reader.readAsDataURL(file);
+
+    // Extract EXIF date in parallel (doesn't block image display)
+    let dateStr = null;
+
+    try {
+      if (file.type.includes('image')) {
+        const arrayBuffer = await file.arrayBuffer();
+        const data = new Uint8Array(arrayBuffer);
+
+        try {
+          const exif = piexif.load(data);
+          if (exif.Exif && exif.Exif[piexif.ExifIFD.DateTimeOriginal]) {
+            const exifDate = exif.Exif[piexif.ExifIFD.DateTimeOriginal];
+            const dateArray = String.fromCharCode.apply(null, exifDate).split(' ')[0].split(':');
+            dateStr = `${dateArray[0]}-${dateArray[1]}-${dateArray[2]}`;
+          }
+        } catch (exifError) {
+          // EXIF extraction failed, fall back to file date
+          console.warn('Could not extract EXIF date:', exifError);
+        }
+      }
+    } catch (e) {
+      console.warn('Could not read file for EXIF extraction');
+    }
+
+    // Fallback to file modified date if EXIF not found
+    if (!dateStr) {
+      const modifiedDate = new Date(file.lastModified);
+      dateStr = modifiedDate.toISOString().split('T')[0]; // YYYY-MM-DD
+    }
+
+    setFileDate(dateStr);
+    setShowDateConfirmation(true); // Always show date confirmation for user verification
   };
 
   const initializeCorners = (w, h) => {
