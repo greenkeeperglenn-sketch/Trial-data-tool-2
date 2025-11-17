@@ -38,6 +38,8 @@ const ImageryAnalyzer = ({
   const [processing, setProcessing] = useState(false);
   const [progress, setProgress] = useState(0);
   const [committed, setCommitted] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState(null);
 
   // Refs (required for canvas, file input, and worker)
   const fileInputRef = useRef(null);
@@ -79,60 +81,110 @@ const ImageryAnalyzer = ({
   const handleFileUpload = async (file) => {
     if (!file) return;
 
+    // Validate file type
+    if (!file.type.match(/^image\/(jpeg|jpg|png)$/i)) {
+      setLoadError('Invalid file type. Please upload a JPEG or PNG image.');
+      return;
+    }
+
+    // Validate file size (max 50MB)
+    const maxSize = 50 * 1024 * 1024;
+    if (file.size > maxSize) {
+      setLoadError('File too large. Maximum size is 50MB. Please compress your image and try again.');
+      return;
+    }
+
+    // Set loading state immediately
+    setLoading(true);
+    setLoadError(null);
+    setCommitted(false);
+
+    // Allow UI to update before starting heavy processing
+    await new Promise(resolve => setTimeout(resolve, 100));
+
     try {
+      console.log(`Loading image: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)}MB)`);
+
       // FAST: Create blob URL immediately (no need to convert to data URL first)
       const blobUrl = URL.createObjectURL(file);
 
       // Load original high-res image for extraction
       const originalImg = new Image();
-      originalImg.onload = () => {
-        console.log('Original image loaded:', originalImg.width, originalImg.height);
-        originalImageRef.current = originalImg;
 
-        // Downsample for display if too large
-        const maxDisplaySize = 1200;
-        let displayImg = originalImg;
+      originalImg.onload = async () => {
+        try {
+          console.log('Original image loaded:', originalImg.width, originalImg.height);
+          originalImageRef.current = originalImg;
 
-        if (originalImg.width > maxDisplaySize || originalImg.height > maxDisplaySize) {
-          const scale = Math.min(maxDisplaySize / originalImg.width, maxDisplaySize / originalImg.height);
-          const displayCanvas = document.createElement('canvas');
-          displayCanvas.width = originalImg.width * scale;
-          displayCanvas.height = originalImg.height * scale;
-          const ctx = displayCanvas.getContext('2d');
-          ctx.drawImage(originalImg, 0, 0, displayCanvas.width, displayCanvas.height);
+          // Downsample for display if too large
+          const maxDisplaySize = 1200;
 
-          const displayImgObj = new Image();
-          displayImgObj.src = displayCanvas.toDataURL('image/jpeg', 0.9);
-          displayImgObj.onload = () => {
-            imageRef.current = displayImgObj;
-            setImageSrc(displayImgObj.src);
+          if (originalImg.width > maxDisplaySize || originalImg.height > maxDisplaySize) {
+            console.log('Downsampling large image for display...');
 
-            // Set corner positions based on display image size
+            // Use setTimeout to allow UI to update
+            await new Promise(resolve => setTimeout(resolve, 50));
+
+            const scale = Math.min(maxDisplaySize / originalImg.width, maxDisplaySize / originalImg.height);
+            const displayCanvas = document.createElement('canvas');
+            displayCanvas.width = Math.floor(originalImg.width * scale);
+            displayCanvas.height = Math.floor(originalImg.height * scale);
+            const ctx = displayCanvas.getContext('2d');
+            ctx.drawImage(originalImg, 0, 0, displayCanvas.width, displayCanvas.height);
+
+            const displayImgObj = new Image();
+            displayImgObj.onload = () => {
+              imageRef.current = displayImgObj;
+              setImageSrc(displayImgObj.src);
+
+              // Set corner positions based on display image size
+              setCorners([
+                { x: displayImgObj.width * 0.1, y: displayImgObj.height * 0.1, label: 'TL' },
+                { x: displayImgObj.width * 0.9, y: displayImgObj.height * 0.1, label: 'TR' },
+                { x: displayImgObj.width * 0.9, y: displayImgObj.height * 0.9, label: 'BR' },
+                { x: displayImgObj.width * 0.1, y: displayImgObj.height * 0.9, label: 'BL' }
+              ]);
+
+              setLoading(false);
+              console.log('Display image ready');
+            };
+
+            displayImgObj.onerror = () => {
+              setLoadError('Failed to process downsampled image. Please try a smaller image.');
+              setLoading(false);
+              URL.revokeObjectURL(blobUrl);
+            };
+
+            displayImgObj.src = displayCanvas.toDataURL('image/jpeg', 0.9);
+          } else {
+            // Image is small enough to display directly
+            imageRef.current = originalImg;
+            setImageSrc(blobUrl);
+
+            // Set corner positions based on image size
             setCorners([
-              { x: displayImgObj.width * 0.1, y: displayImgObj.height * 0.1, label: 'TL' },
-              { x: displayImgObj.width * 0.9, y: displayImgObj.height * 0.1, label: 'TR' },
-              { x: displayImgObj.width * 0.9, y: displayImgObj.height * 0.9, label: 'BR' },
-              { x: displayImgObj.width * 0.1, y: displayImgObj.height * 0.9, label: 'BL' }
+              { x: originalImg.width * 0.1, y: originalImg.height * 0.1, label: 'TL' },
+              { x: originalImg.width * 0.9, y: originalImg.height * 0.1, label: 'TR' },
+              { x: originalImg.width * 0.9, y: originalImg.height * 0.9, label: 'BR' },
+              { x: originalImg.width * 0.1, y: originalImg.height * 0.9, label: 'BL' }
             ]);
-          };
-        } else {
-          imageRef.current = originalImg;
-          setImageSrc(blobUrl);
 
-          // Set corner positions based on image size
-          setCorners([
-            { x: originalImg.width * 0.1, y: originalImg.height * 0.1, label: 'TL' },
-            { x: originalImg.width * 0.9, y: originalImg.height * 0.1, label: 'TR' },
-            { x: originalImg.width * 0.9, y: originalImg.height * 0.9, label: 'BR' },
-            { x: originalImg.width * 0.1, y: originalImg.height * 0.9, label: 'BL' }
-          ]);
+            setLoading(false);
+            console.log('Image ready');
+          }
+        } catch (error) {
+          console.error('Error processing image:', error);
+          setLoadError(`Failed to process image: ${error.message}`);
+          setLoading(false);
+          URL.revokeObjectURL(blobUrl);
         }
       };
 
       originalImg.onerror = (error) => {
         console.error('Image load error:', error);
+        setLoadError('Failed to load image. The file may be corrupted or in an unsupported format.');
+        setLoading(false);
         URL.revokeObjectURL(blobUrl);
-        alert('Failed to load image. Please try another file.');
       };
 
       originalImg.src = blobUrl;
@@ -527,9 +579,14 @@ const ImageryAnalyzer = ({
         <div className="flex gap-2 mb-4">
           <button
             onClick={() => fileInputRef.current?.click()}
-            className="px-4 py-2 rounded bg-emerald-600 text-white text-sm hover:bg-emerald-700 transition"
+            disabled={loading}
+            className={`px-4 py-2 rounded text-white text-sm transition ${
+              loading
+                ? 'bg-gray-400 cursor-not-allowed'
+                : 'bg-emerald-600 hover:bg-emerald-700'
+            }`}
           >
-            Upload Image
+            {loading ? 'Loading...' : 'Upload Image'}
           </button>
           <input
             ref={fileInputRef}
@@ -540,11 +597,46 @@ const ImageryAnalyzer = ({
           />
         </div>
 
+        {/* Loading State */}
+        {loading && !imageSrc && (
+          <div className="border-2 border-blue-300 rounded-lg p-8 text-center bg-blue-50">
+            <div className="flex flex-col items-center justify-center space-y-4">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600"></div>
+              <p className="text-lg font-medium text-blue-900">Loading image...</p>
+              <p className="text-sm text-blue-700">Please wait while we process your image</p>
+            </div>
+          </div>
+        )}
+
+        {/* Error State */}
+        {loadError && !loading && (
+          <div className="border-2 border-red-300 rounded-lg p-6 bg-red-50">
+            <div className="flex items-start space-x-3">
+              <svg className="h-6 w-6 text-red-600 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <div className="flex-1">
+                <p className="font-medium text-red-900">Error loading image</p>
+                <p className="text-sm text-red-700 mt-1">{loadError}</p>
+                <button
+                  onClick={() => {
+                    setLoadError(null);
+                    fileInputRef.current?.click();
+                  }}
+                  className="mt-3 px-4 py-2 bg-red-600 text-white text-sm rounded hover:bg-red-700 transition"
+                >
+                  Try Another Image
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* No Image State */}
-        {!imageSrc && (
+        {!imageSrc && !loading && !loadError && (
           <div className="border-2 border-dashed rounded-lg p-8 text-center border-gray-300 bg-gray-50">
             <p className="text-lg font-medium">Drag & drop or click to upload a drone image</p>
-            <p className="text-sm text-gray-500 mt-2">JPEG or PNG files are supported</p>
+            <p className="text-sm text-gray-500 mt-2">JPEG or PNG files are supported (max 50MB)</p>
           </div>
         )}
 
@@ -647,6 +739,8 @@ const ImageryAnalyzer = ({
                   setProgress(0);
                   setImageSrc(null);
                   setFileDate(null);
+                  setLoadError(null);
+                  setLoading(false);
                   if (originalImageRef.current) {
                     originalImageRef.current.src = '';
                     originalImageRef.current = null;
