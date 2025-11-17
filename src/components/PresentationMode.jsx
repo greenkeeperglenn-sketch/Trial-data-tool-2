@@ -1,13 +1,69 @@
-import React, { useState } from 'react';
-import { ChevronLeft, ChevronRight, Calendar, Image as ImageIcon, FileText, TrendingUp } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { ChevronLeft, ChevronRight, Calendar, Image as ImageIcon, FileText, TrendingUp, Eye, EyeOff, ArrowUp, ArrowDown, Maximize2, MapPin } from 'lucide-react';
+
+// Helper function to normalize date format to YYYY-MM-DD
+const normalizeDateFormat = (dateStr) => {
+  if (!dateStr) return '';
+
+  // If already in YYYY-MM-DD format, return as is
+  if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+    return dateStr;
+  }
+
+  // Try to parse and convert to YYYY-MM-DD
+  try {
+    const date = new Date(dateStr);
+    if (!isNaN(date.getTime())) {
+      return date.toISOString().split('T')[0];
+    }
+  } catch (e) {
+    console.warn('Could not parse date:', dateStr);
+  }
+
+  return dateStr;
+};
+
+// Helper function to calculate auto-scale min/max with padding
+const calculateAutoScale = (values) => {
+  if (!values || values.length === 0) {
+    return { min: 0, max: 100 };
+  }
+
+  const numericValues = values.map(v => parseFloat(v)).filter(v => !isNaN(v));
+  if (numericValues.length === 0) {
+    return { min: 0, max: 100 };
+  }
+
+  const dataMin = Math.min(...numericValues);
+  const dataMax = Math.max(...numericValues);
+
+  // If all values are the same, add padding above and below
+  if (dataMin === dataMax) {
+    const padding = Math.abs(dataMax * 0.1) || 1; // 10% padding or 1 if value is 0
+    return {
+      min: Math.max(0, dataMin - padding),
+      max: dataMax + padding
+    };
+  }
+
+  // Add 10% padding to the range
+  const range = dataMax - dataMin;
+  const padding = range * 0.1;
+
+  return {
+    min: Math.max(0, dataMin - padding), // Don't go below 0
+    max: dataMax + padding
+  };
+};
 
 // Simple SVG Bar Chart Component by Treatment
 const SimpleBarChart = ({ data, min, max, currentDateColor }) => {
   const width = 600;
-  const height = 300;
+  const height = 350;  // Increased to accommodate rotated labels
   const padding = 60;
+  const bottomPadding = 80;  // Extra space for rotated labels
   const chartWidth = width - padding * 2;
-  const chartHeight = height - padding * 2;
+  const chartHeight = height - padding - bottomPadding;
 
   if (!data || data.length === 0) return null;
 
@@ -22,7 +78,7 @@ const SimpleBarChart = ({ data, min, max, currentDateColor }) => {
     <svg width="100%" height={height} viewBox={`0 0 ${width} ${height}`}>
       {/* Grid lines */}
       {[0, 0.25, 0.5, 0.75, 1].map(pct => {
-        const y = height - padding - pct * chartHeight;
+        const y = height - bottomPadding - pct * chartHeight;
         const value = (dataMin + pct * range).toFixed(1);
         return (
           <g key={pct}>
@@ -45,7 +101,7 @@ const SimpleBarChart = ({ data, min, max, currentDateColor }) => {
       {data.map((item, idx) => {
         const x = padding + idx * barSpacing + (barSpacing - barWidth) / 2;
         const barHeight = (parseFloat(item.value) - dataMin) / range * chartHeight;
-        const y = height - padding - barHeight;
+        const y = height - bottomPadding - barHeight;
 
         return (
           <g key={idx}>
@@ -57,6 +113,7 @@ const SimpleBarChart = ({ data, min, max, currentDateColor }) => {
               fill={item.color}
               className="hover:opacity-80 transition-opacity"
             />
+            {/* Value label above bar */}
             <text
               x={x + barWidth / 2}
               y={y - 5}
@@ -67,22 +124,29 @@ const SimpleBarChart = ({ data, min, max, currentDateColor }) => {
             >
               {item.value}
             </text>
+
+            {/* Treatment name - rotated for better readability */}
             <text
               x={x + barWidth / 2}
-              y={height - padding + 20}
-              fontSize="11"
-              fill="#9ca3af"
-              textAnchor="middle"
-              className="max-w-20"
+              y={height - bottomPadding + 15}
+              fontSize="13"
+              fontWeight="500"
+              fill="#d1d5db"
+              textAnchor="end"
+              transform={`rotate(-45, ${x + barWidth / 2}, ${height - bottomPadding + 15})`}
+              className="cursor-pointer hover:fill-white transition-colors"
             >
               {item.treatment}
             </text>
+
+            {/* Sample count */}
             <text
               x={x + barWidth / 2}
-              y={height - padding + 35}
-              fontSize="9"
+              y={height - bottomPadding + 35}
+              fontSize="10"
               fill="#6b7280"
-              textAnchor="middle"
+              textAnchor="end"
+              transform={`rotate(-45, ${x + barWidth / 2}, ${height - bottomPadding + 35})`}
             >
               (n={item.count})
             </text>
@@ -95,11 +159,13 @@ const SimpleBarChart = ({ data, min, max, currentDateColor }) => {
 
 // Multi-Line Chart Component - One line per treatment
 const MultiLineChart = ({ treatmentData, treatmentColors, currentDate, min, max, allDates }) => {
-  const width = 800;
-  const height = 350;
+  const width = 1000;  // Increased to make room for legend on right
+  const height = 400;  // Increased to accommodate rotated labels
   const padding = 60;
-  const chartWidth = width - padding * 2;
-  const chartHeight = height - padding * 2 - 50; // Extra space for legend
+  const bottomPadding = 80;  // Extra space for rotated labels
+  const legendWidth = 200;  // Space reserved for legend on right
+  const chartWidth = width - padding * 2 - legendWidth;  // Chart area excludes legend space
+  const chartHeight = height - padding - bottomPadding;
 
   if (!treatmentData || Object.keys(treatmentData).length === 0) return null;
 
@@ -113,7 +179,7 @@ const MultiLineChart = ({ treatmentData, treatmentColors, currentDate, min, max,
   const scaleX = (dateIndex) => padding + (dateIndex / (numDates - 1)) * chartWidth;
   const scaleY = (value) => {
     if (isNaN(value)) return null;
-    return height - padding - 50 - ((value - dataMin) / range) * chartHeight;
+    return height - bottomPadding - ((value - dataMin) / range) * chartHeight;
   };
 
   // Calculate position for current date (interpolate if between assessment dates)
@@ -158,14 +224,14 @@ const MultiLineChart = ({ treatmentData, treatmentColors, currentDate, min, max,
     <svg width="100%" height={height} viewBox={`0 0 ${width} ${height}`} className="text-gray-300">
       {/* Grid lines */}
       {[0, 0.25, 0.5, 0.75, 1].map(pct => {
-        const y = height - padding - 50 - pct * chartHeight;
+        const y = height - bottomPadding - pct * chartHeight;
         const value = (dataMin + pct * range).toFixed(1);
         return (
           <g key={pct}>
             <line
               x1={padding}
               y1={y}
-              x2={width - padding}
+              x2={padding + chartWidth}
               y2={y}
               stroke="#374151"
               strokeDasharray="3 3"
@@ -177,17 +243,21 @@ const MultiLineChart = ({ treatmentData, treatmentColors, currentDate, min, max,
         );
       })}
 
-      {/* X-axis labels */}
+      {/* X-axis labels - rotated for better readability */}
       {allDates.map((date, i) => {
         const x = scaleX(i);
+        const labelY = height - bottomPadding + 20;
         return (
           <text
             key={i}
             x={x}
-            y={height - padding - 30}
-            fontSize="11"
+            y={labelY}
+            fontSize="13"
+            fontWeight="500"
             fill="#9ca3af"
-            textAnchor="middle"
+            textAnchor="end"
+            transform={`rotate(-45, ${x}, ${labelY})`}
+            className="cursor-pointer hover:fill-white transition-colors"
           >
             {date}
           </text>
@@ -201,7 +271,7 @@ const MultiLineChart = ({ treatmentData, treatmentColors, currentDate, min, max,
             x1={currentDateX}
             y1={padding}
             x2={currentDateX}
-            y2={height - padding - 50}
+            y2={height - bottomPadding}
             stroke="#00BFB8"
             strokeWidth="3"
           />
@@ -267,41 +337,84 @@ const MultiLineChart = ({ treatmentData, treatmentColors, currentDate, min, max,
         );
       })}
 
-      {/* Legend - show all treatments */}
+      {/* Legend - show all treatments vertically on the right, sorted by current date value */}
       <g>
-        {Object.entries(treatmentColors).map(([treatment, color], idx) => {
-          const x = padding + (idx * 150);
-          const y = height - 25;
+        {(() => {
+          // Get current date values for each treatment to sort by
+          const treatmentValuesAtCurrentDate = Object.entries(treatmentData).map(([treatment, dataPoints]) => {
+            const currentDataPoint = dataPoints.find(d => d.date === currentDate);
+            const value = currentDataPoint ? parseFloat(currentDataPoint.value) : -Infinity;
+            return { treatment, value };
+          });
 
-          return (
-            <g key={treatment}>
-              <line
-                x1={x}
-                y1={y}
-                x2={x + 20}
-                y2={y}
-                stroke={color}
-                strokeWidth="3"
-              />
-              <circle
-                cx={x + 10}
-                cy={y}
-                r="4"
-                fill={color}
-              />
-              <text
-                x={x + 25}
-                y={y + 4}
-                fontSize="12"
-                fill="#9ca3af"
-              >
-                {treatment}
-              </text>
-            </g>
-          );
-        })}
+          // Sort by value (highest to lowest)
+          const sortedTreatments = treatmentValuesAtCurrentDate
+            .sort((a, b) => b.value - a.value)
+            .map(item => item.treatment);
+
+          return sortedTreatments.map((treatment, idx) => {
+            const color = treatmentColors[treatment];
+            const x = padding + chartWidth + 30;  // Legend starts 30px after chart
+            const y = padding + (idx * 25);  // 25px spacing between items
+
+            return (
+              <g key={treatment}>
+                <line
+                  x1={x}
+                  y1={y}
+                  x2={x + 20}
+                  y2={y}
+                  stroke={color}
+                  strokeWidth="3"
+                />
+                <circle
+                  cx={x + 10}
+                  cy={y}
+                  r="4"
+                  fill={color}
+                />
+                <text
+                  x={x + 25}
+                  y={y + 4}
+                  fontSize="12"
+                  fill="#9ca3af"
+                >
+                  {treatment}
+                </text>
+              </g>
+            );
+          });
+        })()}
       </g>
     </svg>
+  );
+};
+
+// Section Wrapper with Reorder Controls
+const SectionWithControls = ({ sectionId, children, onMoveUp, onMoveDown, canMoveUp, canMoveDown }) => {
+  return (
+    <div className="relative">
+      {/* Reorder Controls */}
+      <div className="absolute -right-16 top-8 flex flex-col gap-2 z-10">
+        <button
+          onClick={() => onMoveUp(sectionId)}
+          disabled={!canMoveUp}
+          className="p-2 rounded-lg bg-stri-teal hover:bg-stri-blue-info disabled:opacity-20 disabled:cursor-not-allowed transition shadow-lg hover:scale-110"
+          title="Move section up"
+        >
+          <ArrowUp size={20} />
+        </button>
+        <button
+          onClick={() => onMoveDown(sectionId)}
+          disabled={!canMoveDown}
+          className="p-2 rounded-lg bg-stri-teal hover:bg-stri-blue-info disabled:opacity-20 disabled:cursor-not-allowed transition shadow-lg hover:scale-110"
+          title="Move section down"
+        >
+          <ArrowDown size={20} />
+        </button>
+      </div>
+      {children}
+    </div>
   );
 };
 
@@ -313,6 +426,12 @@ const PresentationMode = ({
   notes
 }) => {
   const [currentSlide, setCurrentSlide] = useState(0);
+  const [visibleTreatments, setVisibleTreatments] = useState({});
+  const [visibleAssessments, setVisibleAssessments] = useState({});
+  const [sectionOrder, setSectionOrder] = useState(['barCharts', 'photos', 'notes', 'graphs']);
+  const [useAutoScale, setUseAutoScale] = useState(false);
+  const [sortPhotosByPosition, setSortPhotosByPosition] = useState(false);
+  const [expandedPhoto, setExpandedPhoto] = useState(null);
 
   // Get all dates sorted chronologically
   const sortedDates = [...assessmentDates].sort((a, b) =>
@@ -342,6 +461,21 @@ const PresentationMode = ({
 
   // Create consistent color mapping for treatments using STRI brand colors
   const treatmentNames = Object.keys(treatmentGroups).sort();
+
+  // Initialize visibility states - all visible by default
+  useEffect(() => {
+    const treatments = {};
+    treatmentNames.forEach(name => {
+      treatments[name] = true;
+    });
+    setVisibleTreatments(treatments);
+
+    const assessments = {};
+    config.assessmentTypes.forEach(type => {
+      assessments[type.name] = true;
+    });
+    setVisibleAssessments(assessments);
+  }, [treatmentNames.join(','), config.assessmentTypes.map(t => t.name).join(',')]);
   const treatmentColors = {};
   // STRI Brand Color Palette for treatments
   const colorPalette = [
@@ -361,15 +495,57 @@ const PresentationMode = ({
   // Color for current date across all charts - STRI Teal
   const currentDateColor = '#00BFB8'; // STRI Primary Teal
 
-  // Get photos for current date
+  // Toggle functions
+  const toggleTreatment = (treatment) => {
+    setVisibleTreatments(prev => ({
+      ...prev,
+      [treatment]: !prev[treatment]
+    }));
+  };
+
+  const toggleAssessment = (assessmentName) => {
+    setVisibleAssessments(prev => ({
+      ...prev,
+      [assessmentName]: !prev[assessmentName]
+    }));
+  };
+
+  // Section reordering handlers
+  const moveSectionUp = (sectionId) => {
+    const index = sectionOrder.indexOf(sectionId);
+    if (index > 0) {
+      const newOrder = [...sectionOrder];
+      [newOrder[index - 1], newOrder[index]] = [newOrder[index], newOrder[index - 1]];
+      setSectionOrder(newOrder);
+    }
+  };
+
+  const moveSectionDown = (sectionId) => {
+    const index = sectionOrder.indexOf(sectionId);
+    if (index < sectionOrder.length - 1) {
+      const newOrder = [...sectionOrder];
+      [newOrder[index], newOrder[index + 1]] = [newOrder[index + 1], newOrder[index]];
+      setSectionOrder(newOrder);
+    }
+  };
+
+  // Get photos for current date (with date normalization)
   const getPhotosForDate = (date) => {
+    const normalizedDate = normalizeDateFormat(date);
     const datePhotos = {};
+
     Object.entries(photos).forEach(([key, photoArray]) => {
-      if (key.startsWith(`${date}_`)) {
-        const plotId = key.substring(date.length + 1);
-        datePhotos[plotId] = photoArray;
+      // Extract the date part from the key and normalize it
+      const keyParts = key.split('_');
+      if (keyParts.length >= 2) {
+        const photoDate = normalizeDateFormat(keyParts[0]);
+        if (photoDate === normalizedDate) {
+          const plotId = keyParts.slice(1).join('_'); // In case plot ID has underscores
+          datePhotos[plotId] = photoArray;
+        }
       }
     });
+
     return datePhotos;
   };
 
@@ -393,7 +569,8 @@ const PresentationMode = ({
   const prepareLineChartDataByTreatment = (typeName) => {
     const treatmentData = {};
 
-    // Initialize data structure for each treatment
+    // Initialize data structure for each treatment (visible or not initially)
+    // We'll filter by visibility when rendering
     treatmentNames.forEach(treatment => {
       treatmentData[treatment] = [];
     });
@@ -415,6 +592,7 @@ const PresentationMode = ({
         row.forEach(plot => {
           if (!plot.isBlank) {
             const treatment = plot.treatmentName || 'Untreated';
+
             const plotData = assessment[plot.id];
 
             if (plotData?.entered && plotData.value !== '') {
@@ -433,6 +611,10 @@ const PresentationMode = ({
       // Add data point for each treatment
       Object.entries(treatmentStats).forEach(([treatment, stats]) => {
         const avg = stats.values.reduce((sum, val) => sum + val, 0) / stats.values.length;
+        // Ensure the array exists before pushing
+        if (!treatmentData[treatment]) {
+          treatmentData[treatment] = [];
+        }
         treatmentData[treatment].push({
           date: dateObj.date,
           value: avg.toFixed(1)
@@ -442,7 +624,15 @@ const PresentationMode = ({
 
     console.log('Final treatment data:', Object.keys(treatmentData).map(t => `${t}: ${treatmentData[t].length} points`));
 
-    return treatmentData;
+    // Filter by visible treatments before returning
+    const filteredData = {};
+    Object.entries(treatmentData).forEach(([treatment, data]) => {
+      if (visibleTreatments[treatment] !== false) {  // Include if true or undefined (default visible)
+        filteredData[treatment] = data;
+      }
+    });
+
+    return filteredData;
   };
 
   // Prepare bar chart data by treatment for current date
@@ -459,6 +649,9 @@ const PresentationMode = ({
       row.forEach(plot => {
         if (!plot.isBlank) {
           const treatment = plot.treatmentName || 'Untreated';
+          // Only include visible treatments
+          if (!visibleTreatments[treatment]) return;
+
           const plotData = assessment[plot.id];
 
           if (plotData?.entered && plotData.value !== '') {
@@ -472,7 +665,7 @@ const PresentationMode = ({
       });
     });
 
-    // Convert to array with averages
+    // Convert to array with averages, sorted by value (highest to lowest)
     return Object.entries(treatmentStats).map(([treatment, stats]) => {
       const avg = stats.values.reduce((sum, val) => sum + val, 0) / stats.values.length;
       return {
@@ -481,7 +674,7 @@ const PresentationMode = ({
         count: stats.count,
         color: treatmentColors[treatment]
       };
-    }).sort((a, b) => a.treatment.localeCompare(b.treatment));
+    }).sort((a, b) => parseFloat(b.value) - parseFloat(a.value)); // Sort by value descending
   };
 
   const nextSlide = () => {
@@ -494,6 +687,412 @@ const PresentationMode = ({
     if (currentSlide > 0) {
       setCurrentSlide(currentSlide - 1);
     }
+  };
+
+  // Section rendering functions
+  const renderBarCharts = () => {
+    const hasData = config.assessmentTypes.some(type => {
+      if (!visibleAssessments[type.name]) return false;
+      const barData = prepareBarChartDataForType(type.name);
+      return barData.length > 0;
+    });
+
+    if (!hasData) return null;
+
+    return (
+      <div className="bg-gray-800 rounded-xl p-6 shadow-2xl">
+        <h3 className="text-2xl font-bold mb-6 flex items-center gap-2">
+          <TrendingUp size={24} className="text-stri-teal" />
+          Results by Treatment (Current Date)
+        </h3>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {config.assessmentTypes.filter(type => visibleAssessments[type.name]).map((type) => {
+            const barData = prepareBarChartDataForType(type.name);
+            if (barData.length === 0) return null;
+
+            // Use config min/max by default, or auto-calculated when button is held
+            let minValue = type.min;
+            let maxValue = type.max;
+
+            if (useAutoScale) {
+              const values = barData.map(d => d.value);
+              const autoScale = calculateAutoScale(values);
+              minValue = autoScale.min;
+              maxValue = autoScale.max;
+            }
+
+            return (
+              <div key={type.name} className="bg-gray-700 rounded-lg p-4">
+                <h4 className="text-lg font-semibold mb-3 text-center text-gray-200">{type.name}</h4>
+                <div className="flex justify-center">
+                  <SimpleBarChart
+                    data={barData}
+                    min={minValue}
+                    max={maxValue}
+                    currentDateColor={currentDateColor}
+                  />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
+  const renderPhotos = () => {
+    if (Object.keys(currentPhotos).length === 0) return null;
+
+    // Collect all photos with their plot info including treatment index
+    const allPhotos = [];
+    Object.entries(treatmentGroups)
+      .filter(([treatment]) => visibleTreatments[treatment])
+      .forEach(([treatment, plots]) => {
+        plots.forEach(plot => {
+          const plotPhotos = currentPhotos[plot.id];
+          if (plotPhotos && plotPhotos.length > 0) {
+            // Find position in gridLayout (including blanks)
+            let rowIdx = -1;
+            let colIdx = -1;
+            for (let r = 0; r < gridLayout.length; r++) {
+              for (let c = 0; c < gridLayout[r].length; c++) {
+                if (gridLayout[r][c].id === plot.id) {
+                  rowIdx = r;
+                  colIdx = c;
+                  break;
+                }
+              }
+              if (rowIdx !== -1) break;
+            }
+
+            allPhotos.push({
+              plotId: plot.id,
+              treatment: treatment,
+              treatmentName: plot.treatmentName,
+              treatmentIdx: plot.treatment, // The treatment index (0, 1, 2, etc.)
+              block: plot.block,
+              color: treatmentColors[treatment],
+              image: plotPhotos[0],
+              rowIdx,
+              colIdx
+            });
+          }
+        });
+      });
+
+    return (
+      <div className="bg-gray-800 rounded-xl p-6 shadow-2xl">
+        <div className="flex items-center justify-between mb-6">
+          <h3 className="text-2xl font-bold flex items-center gap-2">
+            <ImageIcon size={24} className="text-stri-teal" />
+            Plot Images
+          </h3>
+
+          {/* Sort button */}
+          <button
+            onMouseDown={() => setSortPhotosByPosition(true)}
+            onMouseUp={() => setSortPhotosByPosition(false)}
+            onMouseLeave={() => setSortPhotosByPosition(false)}
+            onTouchStart={() => setSortPhotosByPosition(true)}
+            onTouchEnd={() => setSortPhotosByPosition(false)}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg transition shadow-lg ${
+              sortPhotosByPosition
+                ? 'bg-orange-500 hover:bg-orange-600 text-white'
+                : 'bg-purple-600 hover:bg-purple-700 text-white'
+            }`}
+            title="Hold to show field map layout"
+          >
+            <MapPin size={20} />
+            {sortPhotosByPosition ? 'Field Map View' : 'Hold for Field Map View'}
+          </button>
+        </div>
+
+        {sortPhotosByPosition ? (
+          // Field Map Layout - Show grid with blanks
+          <div className="space-y-2">
+            {gridLayout.map((row, rowIdx) => (
+              <div key={rowIdx} className="flex gap-2 justify-center">
+                {row.map((plot, colIdx) => {
+                  const photo = allPhotos.find(p => p.plotId === plot.id);
+
+                  if (plot.isBlank) {
+                    // Grey square for blank plots
+                    return (
+                      <div
+                        key={colIdx}
+                        className="w-24 h-24 rounded-lg border-2 border-dashed border-gray-600 bg-gray-700 flex items-center justify-center"
+                      >
+                        <span className="text-gray-500 text-xs">Blank</span>
+                      </div>
+                    );
+                  }
+
+                  if (!photo) {
+                    // No photo for this plot
+                    return (
+                      <div
+                        key={colIdx}
+                        className="w-24 h-24 rounded-lg border-2 border-gray-600 bg-gray-700 flex items-center justify-center"
+                      >
+                        <span className="text-gray-400 text-xs">{plot.id}</span>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div
+                      key={colIdx}
+                      className="relative group cursor-pointer"
+                      onClick={() => setExpandedPhoto(expandedPhoto === photo.plotId ? null : photo.plotId)}
+                    >
+                      {/* Thumbnail */}
+                      <div
+                        className="w-24 h-24 rounded-lg overflow-hidden shadow-lg transition-all hover:scale-105"
+                        style={{
+                          border: `3px solid ${photo.color}`
+                        }}
+                      >
+                        <img
+                          src={photo.image}
+                          alt={photo.plotId}
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+
+                      {/* Label */}
+                      <div
+                        className="absolute bottom-0 left-0 right-0 text-center text-xs font-semibold text-white px-1 py-0.5"
+                        style={{ backgroundColor: photo.color }}
+                      >
+                        {photo.plotId}
+                      </div>
+
+                      {/* Expanded view on click */}
+                      {expandedPhoto === photo.plotId && (
+                        <div
+                          className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setExpandedPhoto(null);
+                          }}
+                        >
+                          <div className="relative w-full h-full flex items-center justify-center">
+                            <img
+                              src={photo.image}
+                              alt={photo.plotId}
+                              className="max-w-full max-h-full object-contain rounded-lg shadow-2xl"
+                              style={{ border: `8px solid ${photo.color}` }}
+                              onClick={(e) => e.stopPropagation()}
+                            />
+                            <div
+                              className="absolute top-4 left-1/2 -translate-x-1/2 text-center text-3xl font-bold text-white px-6 py-3 rounded-lg shadow-xl"
+                              style={{ backgroundColor: photo.color }}
+                            >
+                              Plot {photo.plotId} - {photo.treatment}
+                            </div>
+                            <button
+                              className="absolute top-4 right-4 bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg font-semibold shadow-xl"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setExpandedPhoto(null);
+                              }}
+                            >
+                              Close (X)
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            ))}
+          </div>
+        ) : (
+          // Treatment Column Layout
+          <div className="grid gap-6" style={{ gridTemplateColumns: `repeat(${config.treatments.length}, minmax(0, 1fr))` }}>
+            {config.treatments.map((treatment, treatmentIdx) => {
+              const color = treatmentColors[treatment];
+              const treatmentPhotos = allPhotos
+                .filter(p => p.treatmentIdx === treatmentIdx)
+                .sort((a, b) => a.block - b.block);
+
+              if (treatmentPhotos.length === 0) return null;
+
+              return (
+                <div key={treatmentIdx} className="space-y-3">
+                  {/* Treatment Header */}
+                  <div
+                    className="text-center font-bold text-lg py-3 rounded-lg shadow-lg"
+                    style={{
+                      backgroundColor: color,
+                      color: 'white'
+                    }}
+                  >
+                    {treatment}
+                  </div>
+
+                  {/* Photos for this treatment */}
+                  <div className="space-y-3">
+                    {treatmentPhotos.map((photo) => (
+                      <div
+                        key={photo.plotId}
+                        className="relative group cursor-pointer"
+                        onClick={() => setExpandedPhoto(expandedPhoto === photo.plotId ? null : photo.plotId)}
+                      >
+                        {/* Thumbnail */}
+                        <div
+                          className="w-full aspect-square rounded-lg overflow-hidden shadow-lg transition-all hover:scale-105"
+                          style={{
+                            border: `3px solid ${photo.color}`
+                          }}
+                        >
+                          <img
+                            src={photo.image}
+                            alt={photo.plotId}
+                            className="w-full h-full object-cover"
+                          />
+                        </div>
+
+                        {/* Label */}
+                        <div
+                          className="absolute bottom-0 left-0 right-0 text-center text-sm font-semibold text-white px-2 py-1"
+                          style={{ backgroundColor: photo.color }}
+                        >
+                          {photo.plotId}
+                        </div>
+
+                        {/* Expanded view on click */}
+                        {expandedPhoto === photo.plotId && (
+                          <div
+                            className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setExpandedPhoto(null);
+                            }}
+                          >
+                            <div className="relative w-full h-full flex items-center justify-center">
+                              <img
+                                src={photo.image}
+                                alt={photo.plotId}
+                                className="max-w-full max-h-full object-contain rounded-lg shadow-2xl"
+                                style={{ border: `8px solid ${photo.color}` }}
+                                onClick={(e) => e.stopPropagation()}
+                              />
+                              <div
+                                className="absolute top-4 left-1/2 -translate-x-1/2 text-center text-3xl font-bold text-white px-6 py-3 rounded-lg shadow-xl"
+                                style={{ backgroundColor: photo.color }}
+                              >
+                                Plot {photo.plotId} - {photo.treatment}
+                              </div>
+                              <button
+                                className="absolute top-4 right-4 bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg font-semibold shadow-xl"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setExpandedPhoto(null);
+                                }}
+                              >
+                                Close (X)
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const renderNotes = () => {
+    if (currentNotes.length === 0) return null;
+
+    return (
+      <div className="bg-gray-800 rounded-xl p-6 shadow-2xl">
+        <h3 className="text-2xl font-bold mb-6 flex items-center gap-2">
+          <FileText size={24} className="text-stri-green-success" />
+          Notes
+        </h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {currentNotes.map(({ plotId, note }) => (
+            <div key={plotId} className="bg-gray-700 rounded-lg p-4">
+              <div className="font-semibold text-stri-teal mb-2">Plot {plotId}</div>
+              <p className="text-gray-300 text-sm">{note}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
+  const renderGraphs = () => {
+    const hasData = config.assessmentTypes.some(type => {
+      if (!visibleAssessments[type.name]) return false;
+      const treatmentLineData = prepareLineChartDataByTreatment(type.name);
+      return Object.keys(treatmentLineData).length > 0;
+    });
+
+    if (!hasData) return null;
+
+    return (
+      <div className="bg-gray-800 rounded-xl p-6 shadow-2xl">
+        <h3 className="text-2xl font-bold mb-6 flex items-center gap-2">
+          <TrendingUp size={24} className="text-stri-blue-info" />
+          Treatment Trends Over Time
+        </h3>
+
+        <div className="space-y-8">
+          {config.assessmentTypes.filter(type => visibleAssessments[type.name]).map((type) => {
+            const treatmentLineData = prepareLineChartDataByTreatment(type.name);
+            if (Object.keys(treatmentLineData).length === 0) return null;
+
+            const allDates = sortedDates.map(d => d.date);
+
+            // Use config min/max by default, or auto-calculated when button is held
+            let minValue = type.min;
+            let maxValue = type.max;
+
+            if (useAutoScale) {
+              const allValues = Object.values(treatmentLineData)
+                .flat()
+                .map(d => d.value);
+              const autoScale = calculateAutoScale(allValues);
+              minValue = autoScale.min;
+              maxValue = autoScale.max;
+            }
+
+            return (
+              <div key={type.name} className="bg-gray-700 rounded-lg p-6">
+                <h4 className="text-xl font-semibold mb-4 text-center text-gray-200">{type.name}</h4>
+                <div className="flex justify-center">
+                  <MultiLineChart
+                    treatmentData={treatmentLineData}
+                    treatmentColors={treatmentColors}
+                    currentDate={currentDate?.date}
+                    min={minValue}
+                    max={maxValue}
+                    allDates={allDates}
+                  />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
+  const sectionRenderers = {
+    barCharts: renderBarCharts,
+    photos: renderPhotos,
+    notes: renderNotes,
+    graphs: renderGraphs
   };
 
   return (
@@ -551,183 +1150,151 @@ const PresentationMode = ({
         </div>
       </div>
 
+      {/* Fixed Side Navigation */}
+      <div className="fixed right-8 top-1/2 -translate-y-1/2 z-20 flex flex-col gap-4">
+        <button
+          onClick={prevSlide}
+          disabled={currentSlide === 0}
+          className="p-4 rounded-full bg-stri-teal hover:bg-stri-blue-info disabled:opacity-30 disabled:cursor-not-allowed transition shadow-2xl hover:scale-110"
+          title="Previous date"
+        >
+          <ChevronLeft size={28} />
+        </button>
+
+        <div className="bg-gray-800 rounded-lg px-3 py-2 text-center shadow-2xl min-w-[100px]">
+          <div className="text-xs text-gray-400 mb-1">Current</div>
+          <div className="text-sm font-bold text-stri-teal">{currentDate?.date}</div>
+          <div className="text-xs text-gray-500 mt-1">{currentSlide + 1}/{sortedDates.length}</div>
+        </div>
+
+        <button
+          onMouseDown={() => setUseAutoScale(true)}
+          onMouseUp={() => setUseAutoScale(false)}
+          onMouseLeave={() => setUseAutoScale(false)}
+          onTouchStart={() => setUseAutoScale(true)}
+          onTouchEnd={() => setUseAutoScale(false)}
+          className={`p-4 rounded-full transition shadow-2xl hover:scale-110 ${
+            useAutoScale
+              ? 'bg-orange-500 hover:bg-orange-600'
+              : 'bg-purple-600 hover:bg-purple-700'
+          }`}
+          title="Hold to auto-adjust chart axes to data"
+        >
+          <Maximize2 size={28} />
+        </button>
+
+        <button
+          onClick={nextSlide}
+          disabled={currentSlide === sortedDates.length - 1}
+          className="p-4 rounded-full bg-stri-teal hover:bg-stri-blue-info disabled:opacity-30 disabled:cursor-not-allowed transition shadow-2xl hover:scale-110"
+          title="Next date"
+        >
+          <ChevronRight size={28} />
+        </button>
+      </div>
+
       {/* Main Content */}
-      <div className="max-w-7xl mx-auto p-8 space-y-8">
+      <div className="max-w-7xl mx-auto p-8 pl-16 space-y-8">
         {/* Date Title */}
         <div className="text-center">
           <h2 className="text-5xl font-bold mb-2">{currentDate?.date}</h2>
           <p className="text-gray-400">Assessment Data</p>
         </div>
 
-        {/* Bar Charts by Treatment - Current Date */}
+        {/* Filter Controls */}
         <div className="bg-gray-800 rounded-xl p-6 shadow-2xl">
-          <h3 className="text-2xl font-bold mb-6 flex items-center gap-2">
-            <TrendingUp size={24} className="text-stri-teal" />
-            Results by Treatment (Current Date)
-          </h3>
+          <h3 className="text-xl font-bold mb-4 text-stri-teal">Display Filters</h3>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {config.assessmentTypes.map((type) => {
-              const barData = prepareBarChartDataForType(type.name);
-              if (barData.length === 0) return null;
-
-              return (
-                <div key={type.name} className="bg-gray-700 rounded-lg p-4">
-                  <h4 className="text-lg font-semibold mb-3 text-center text-gray-200">{type.name}</h4>
-                  <div className="flex justify-center">
-                    <SimpleBarChart
-                      data={barData}
-                      min={type.min}
-                      max={type.max}
-                      currentDateColor={currentDateColor}
-                    />
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Photos Section - Grouped by Treatment */}
-        {Object.keys(currentPhotos).length > 0 && (
-          <div className="bg-gray-800 rounded-xl p-6 shadow-2xl">
-            <h3 className="text-2xl font-bold mb-6 flex items-center gap-2">
-              <ImageIcon size={24} className="text-stri-teal" />
-              Plot Images by Treatment
-            </h3>
-
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
-              {Object.entries(treatmentGroups).map(([treatment, plots]) => {
-                const treatmentPhotos = plots.filter(plot => currentPhotos[plot.id]);
-
-                if (treatmentPhotos.length === 0) return null;
-
-                const treatmentColor = treatmentColors[treatment];
-
-                return (
-                  <div key={treatment} className="space-y-4">
-                    <div
-                      className="text-center font-bold text-lg py-2 rounded-lg"
-                      style={{
-                        backgroundColor: `${treatmentColor}30`,
-                        borderLeft: `4px solid ${treatmentColor}`,
-                        borderRight: `4px solid ${treatmentColor}`
-                      }}
-                    >
-                      {treatment}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Treatment Toggles */}
+            <div>
+              <h4 className="text-lg font-semibold mb-3 text-gray-300">Treatments</h4>
+              <div className="space-y-2">
+                {treatmentNames.map(treatment => (
+                  <button
+                    key={treatment}
+                    onClick={() => toggleTreatment(treatment)}
+                    className={`w-full flex items-center gap-3 px-4 py-2 rounded-lg transition ${
+                      visibleTreatments[treatment]
+                        ? 'bg-gray-700 hover:bg-gray-600'
+                        : 'bg-gray-900 opacity-50 hover:opacity-70'
+                    }`}
+                  >
+                    {visibleTreatments[treatment] ? (
+                      <Eye size={20} className="text-stri-teal flex-shrink-0" />
+                    ) : (
+                      <EyeOff size={20} className="text-gray-500 flex-shrink-0" />
+                    )}
+                    <div className="flex items-center gap-2 flex-1">
+                      <div
+                        className="w-4 h-4 rounded-full flex-shrink-0"
+                        style={{ backgroundColor: treatmentColors[treatment] }}
+                      />
+                      <span className={visibleTreatments[treatment] ? 'text-white' : 'text-gray-500'}>
+                        {treatment}
+                      </span>
                     </div>
+                  </button>
+                ))}
+              </div>
+            </div>
 
-                    <div className="space-y-4">
-                      {treatmentPhotos.map(plot => {
-                        const plotPhotos = currentPhotos[plot.id];
-                        if (!plotPhotos || plotPhotos.length === 0) return null;
-
-                        return (
-                          <div
-                            key={plot.id}
-                            className="rounded-lg overflow-hidden shadow-lg hover:shadow-2xl transition transform hover:scale-105"
-                            style={{
-                              border: `4px solid ${treatmentColor}`,
-                              backgroundColor: treatmentColor
-                            }}
-                          >
-                            <img
-                              src={plotPhotos[0]}
-                              alt={plot.id}
-                              className="w-full aspect-square object-cover"
-                            />
-                            <div
-                              className="p-2 text-center font-semibold text-white"
-                              style={{ backgroundColor: treatmentColor }}
-                            >
-                              {plot.id}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                );
-              })}
+            {/* Assessment Type Toggles */}
+            <div>
+              <h4 className="text-lg font-semibold mb-3 text-gray-300">Assessment Types</h4>
+              <div className="space-y-2">
+                {config.assessmentTypes.map(type => (
+                  <button
+                    key={type.name}
+                    onClick={() => toggleAssessment(type.name)}
+                    className={`w-full flex items-center gap-3 px-4 py-2 rounded-lg transition ${
+                      visibleAssessments[type.name]
+                        ? 'bg-gray-700 hover:bg-gray-600'
+                        : 'bg-gray-900 opacity-50 hover:opacity-70'
+                    }`}
+                  >
+                    {visibleAssessments[type.name] ? (
+                      <Eye size={20} className="text-stri-blue-info flex-shrink-0" />
+                    ) : (
+                      <EyeOff size={20} className="text-gray-500 flex-shrink-0" />
+                    )}
+                    <span className={visibleAssessments[type.name] ? 'text-white' : 'text-gray-500'}>
+                      {type.name}
+                    </span>
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
-        )}
-
-        {/* Notes Section */}
-        {currentNotes.length > 0 && (
-          <div className="bg-gray-800 rounded-xl p-6 shadow-2xl">
-            <h3 className="text-2xl font-bold mb-6 flex items-center gap-2">
-              <FileText size={24} className="text-stri-green-success" />
-              Notes
-            </h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {currentNotes.map(({ plotId, note }) => (
-                <div key={plotId} className="bg-gray-700 rounded-lg p-4">
-                  <div className="font-semibold text-stri-teal mb-2">Plot {plotId}</div>
-                  <p className="text-gray-300 text-sm">{note}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Graphs Section - One per Assessment Type */}
-        <div className="bg-gray-800 rounded-xl p-6 shadow-2xl">
-          <h3 className="text-2xl font-bold mb-6 flex items-center gap-2">
-            <TrendingUp size={24} className="text-stri-blue-info" />
-            Treatment Trends Over Time
-          </h3>
-
-          <div className="space-y-8">
-            {config.assessmentTypes.map((type) => {
-              const treatmentLineData = prepareLineChartDataByTreatment(type.name);
-              if (Object.keys(treatmentLineData).length === 0) return null;
-
-              const allDates = sortedDates.map(d => d.date);
-
-              return (
-                <div key={type.name} className="bg-gray-700 rounded-lg p-6">
-                  <h4 className="text-xl font-semibold mb-4 text-center text-gray-200">{type.name}</h4>
-                  <div className="flex justify-center">
-                    <MultiLineChart
-                      treatmentData={treatmentLineData}
-                      treatmentColors={treatmentColors}
-                      currentDate={currentDate?.date}
-                      min={type.min}
-                      max={type.max}
-                      allDates={allDates}
-                    />
-                  </div>
-                </div>
-              );
-            })}
-          </div>
         </div>
 
-        {/* Navigation Footer */}
-        <div className="flex justify-between items-center pt-8">
-          <button
-            onClick={prevSlide}
-            disabled={currentSlide === 0}
-            className="px-6 py-3 rounded-lg bg-stri-blue-deep hover:bg-stri-blue-research disabled:opacity-30 disabled:cursor-not-allowed transition flex items-center gap-2"
-          >
-            <ChevronLeft size={20} />
-            Previous
-          </button>
-
-          <div className="text-gray-400">
-            {currentSlide + 1} / {sortedDates.length}
-          </div>
-
-          <button
-            onClick={nextSlide}
-            disabled={currentSlide === sortedDates.length - 1}
-            className="px-6 py-3 rounded-lg bg-stri-blue-deep hover:bg-stri-blue-research disabled:opacity-30 disabled:cursor-not-allowed transition flex items-center gap-2"
-          >
-            Next
-            <ChevronRight size={20} />
-          </button>
+        {/* Reorder Hint */}
+        <div className="bg-stri-teal bg-opacity-10 border border-stri-teal rounded-lg p-4 text-center">
+          <p className="text-stri-teal text-sm">
+            <ArrowUp size={16} className="inline mr-1" />
+            <ArrowDown size={16} className="inline mr-2" />
+            Use the arrow buttons to reorder sections
+          </p>
         </div>
+
+        {/* Dynamic Content Sections - Reorderable */}
+        {sectionOrder.map((sectionId, index) => {
+          const content = sectionRenderers[sectionId]();
+          if (!content) return null;
+
+          return (
+            <SectionWithControls
+              key={sectionId}
+              sectionId={sectionId}
+              onMoveUp={moveSectionUp}
+              onMoveDown={moveSectionDown}
+              canMoveUp={index > 0}
+              canMoveDown={index < sectionOrder.length - 1}
+            >
+              {content}
+            </SectionWithControls>
+          );
+        })}
       </div>
     </div>
   );

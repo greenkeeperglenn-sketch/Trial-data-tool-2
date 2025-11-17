@@ -221,6 +221,163 @@ export function parseExcelFile(file) {
 }
 
 /**
+ * Get all possible date interpretations for user to choose from
+ * @param {string} dateStr - Original date string
+ * @returns {Object} Object with original, ukFormat, usFormat, and isoFormat
+ */
+function getDateInterpretations(dateStr) {
+  if (!dateStr) {
+    return {
+      original: '',
+      detected: new Date().toISOString().split('T')[0],
+      options: []
+    };
+  }
+
+  const str = String(dateStr).trim();
+  const options = [];
+
+  // If already in YYYY-MM-DD format, only one option
+  if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
+    return {
+      original: str,
+      detected: str,
+      options: [{ format: 'ISO', date: str, label: str }]
+    };
+  }
+
+  // Parse DD/MM/YYYY or MM/DD/YYYY format
+  const dateMatch = str.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+  if (dateMatch) {
+    const first = parseInt(dateMatch[1], 10);
+    const second = parseInt(dateMatch[2], 10);
+    const year = parseInt(dateMatch[3], 10);
+
+    // UK Format (DD/MM/YYYY)
+    if (second >= 1 && second <= 12 && first >= 1 && first <= 31) {
+      const ukDate = `${year}-${String(second).padStart(2, '0')}-${String(first).padStart(2, '0')}`;
+      const ukDateObj = new Date(year, second - 1, first);
+      options.push({
+        format: 'UK (DD/MM/YYYY)',
+        date: ukDate,
+        label: `${String(first).padStart(2, '0')}/${String(second).padStart(2, '0')}/${year}`,
+        readable: ukDateObj.toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' })
+      });
+    }
+
+    // US Format (MM/DD/YYYY) - only if different from UK
+    if (first >= 1 && first <= 12 && second >= 1 && second <= 31 && first !== second) {
+      const usDate = `${year}-${String(first).padStart(2, '0')}-${String(second).padStart(2, '0')}`;
+      const usDateObj = new Date(year, first - 1, second);
+      options.push({
+        format: 'US (MM/DD/YYYY)',
+        date: usDate,
+        label: `${String(first).padStart(2, '0')}/${String(second).padStart(2, '0')}/${year}`,
+        readable: usDateObj.toLocaleDateString('en-US', { day: '2-digit', month: 'long', year: 'numeric' })
+      });
+    }
+
+    // If only one valid option, use it as detected
+    const detected = options.length > 0 ? options[0].date : null;
+
+    return {
+      original: str,
+      detected: detected || new Date().toISOString().split('T')[0],
+      options
+    };
+  }
+
+  // Try JavaScript Date parser as fallback
+  try {
+    const date = new Date(str);
+    if (!isNaN(date.getTime())) {
+      const isoDate = date.toISOString().split('T')[0];
+      return {
+        original: str,
+        detected: isoDate,
+        options: [{
+          format: 'Auto-detected',
+          date: isoDate,
+          label: str,
+          readable: date.toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' })
+        }]
+      };
+    }
+  } catch (e) {
+    console.warn('[excelParser] Could not parse date:', dateStr);
+  }
+
+  // Fallback to current date
+  const fallback = new Date().toISOString().split('T')[0];
+  return {
+    original: str,
+    detected: fallback,
+    options: [{
+      format: 'Fallback (today)',
+      date: fallback,
+      label: 'Unable to parse - using today',
+      readable: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' })
+    }]
+  };
+}
+
+/**
+ * Normalize date string to YYYY-MM-DD format
+ * Handles both UK (DD/MM/YYYY) and US (MM/DD/YYYY) formats
+ */
+function normalizeDateFormat(dateStr) {
+  if (!dateStr) return new Date().toISOString().split('T')[0];
+
+  const str = String(dateStr).trim();
+
+  // If already in YYYY-MM-DD format, return as-is
+  if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
+    return str;
+  }
+
+  // Handle DD/MM/YYYY or DD-MM-YYYY (UK format)
+  const ukMatch = str.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+  if (ukMatch) {
+    const day = parseInt(ukMatch[1], 10);
+    const month = parseInt(ukMatch[2], 10);
+    const year = parseInt(ukMatch[3], 10);
+
+    // If day > 12, it must be UK format (DD/MM/YYYY)
+    // Otherwise, ambiguous - assume UK format for consistency
+    const paddedMonth = String(month).padStart(2, '0');
+    const paddedDay = String(day).padStart(2, '0');
+
+    // Validate the date is reasonable
+    if (month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+      return `${year}-${paddedMonth}-${paddedDay}`;
+    }
+  }
+
+  // Handle YYYY-MM-DD with different separators
+  const isoMatch = str.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})$/);
+  if (isoMatch) {
+    const year = isoMatch[1];
+    const month = String(parseInt(isoMatch[2], 10)).padStart(2, '0');
+    const day = String(parseInt(isoMatch[3], 10)).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+
+  // Try JavaScript Date parser as fallback (handles "March 15, 2024", etc.)
+  try {
+    const date = new Date(str);
+    if (!isNaN(date.getTime())) {
+      return date.toISOString().split('T')[0];
+    }
+  } catch (e) {
+    console.warn('[excelParser] Could not parse date:', dateStr);
+  }
+
+  // Last resort: use current date
+  console.warn('[excelParser] Using current date for unparseable date string:', dateStr);
+  return new Date().toISOString().split('T')[0];
+}
+
+/**
  * Convert parsed sheets to Trial Data Tool format
  */
 function convertToTrialFormat(parsedSheets) {
@@ -250,16 +407,31 @@ function convertToTrialFormat(parsedSheets) {
     unit: guessUnit(name)
   }));
 
+  // Create treatment names array
+  const treatmentNames = treatments.map((t, i) => `Treatment ${t}`);
+
   // Create grid layout
-  const gridLayout = createGridLayout(allPlots, blocks.length, treatments);
+  const gridLayout = createGridLayout(allPlots, blocks.length, treatments, treatmentNames);
+
+  // Collect date interpretations for user confirmation
+  const dateInterpretations = parsedSheets.map(sheet => {
+    let dateStr = sheet.sheetName;
+    if (sheet.metadata.date) {
+      dateStr = sheet.metadata.date;
+    }
+    return getDateInterpretations(dateStr);
+  });
 
   // Process assessment dates - convert to app format
-  const assessmentDates = parsedSheets.map(sheet => {
+  const assessmentDates = parsedSheets.map((sheet, index) => {
     // Try to parse the date from sheet name or metadata
-    let date = sheet.sheetName;
+    let dateStr = sheet.sheetName;
     if (sheet.metadata.date) {
-      date = sheet.metadata.date;
+      dateStr = sheet.metadata.date;
     }
+
+    // Use the detected date from interpretations
+    const date = dateInterpretations[index].detected;
 
     // Create assessments object in the format the app expects
     const assessments = {};
@@ -301,12 +473,13 @@ function convertToTrialFormat(parsedSheets) {
     name: trialName,
     config: {
       blocks: blocks.length,
-      treatments: treatments.length,
-      treatmentNames: treatments.map((t, i) => `Treatment ${t}`),
+      numTreatments: treatments.length,
+      treatments: treatmentNames,  // Array of treatment names, not number
       assessmentTypes
     },
     gridLayout,
     assessmentDates,
+    dateInterpretations,  // Add date interpretation data for user confirmation
     metadata: {
       area: firstSheet.metadata.area,
       assessor: firstSheet.metadata.assessor,
@@ -322,11 +495,12 @@ function convertToTrialFormat(parsedSheets) {
 /**
  * Create grid layout from plot data
  */
-function createGridLayout(plots, numBlocks, treatmentsList) {
+function createGridLayout(plots, numBlocks, treatmentsList, treatmentNames) {
   console.log('[createGridLayout] Input:', {
     plotsCount: plots.length,
     numBlocks,
-    treatments: treatmentsList
+    treatments: treatmentsList,
+    treatmentNames
   });
 
   // Create treatment index mapping (Excel treatment number -> 0-based index)
@@ -358,7 +532,7 @@ function createGridLayout(plots, numBlocks, treatmentsList) {
         id: `${plot.block}-${plot.plot}`,
         block: plot.block,
         treatment: treatmentIdx !== undefined ? treatmentIdx : 0,
-        treatmentName: `Treatment ${plot.treatment}`,
+        treatmentName: treatmentNames[treatmentIdx] || `Treatment ${plot.treatment}`,
         isBlank: false,
         plotNumber: plot.plot
       };

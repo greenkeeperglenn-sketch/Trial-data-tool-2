@@ -314,6 +314,111 @@ const App = () => {
     }
   };
 
+  // Handle config changes (for editing trial setup)
+  const handleConfigChange = (newConfig, currentAssessmentDates, newGridLayout, newOrientation) => {
+    console.log('[App] handleConfigChange called');
+    console.log('[App] Old config assessment types:', config.assessmentTypes.map(t => t.name));
+    console.log('[App] New config assessment types:', newConfig.assessmentTypes.map(t => t.name));
+    console.log('[App] Old config treatments:', config.treatments);
+    console.log('[App] New config treatments:', newConfig.treatments);
+    console.log('[App] Grid layout available:', !!gridLayout, 'Plots:', gridLayout?.flat().filter(p => !p.isBlank).length);
+
+    // Use provided gridLayout if available, otherwise update current gridLayout with new treatment names
+    const updatedGridLayout = (newGridLayout || gridLayout).map(row =>
+      row.map(plot => {
+        if (plot.isBlank) return plot;
+
+        // Update treatment name based on treatment index
+        const treatmentIndex = plot.treatment;
+        const newTreatmentName = newConfig.treatments[treatmentIndex];
+
+        if (newTreatmentName && newTreatmentName !== plot.treatmentName) {
+          console.log(`[App] Updating plot ${plot.id} treatment: "${plot.treatmentName}" -> "${newTreatmentName}"`);
+          return {
+            ...plot,
+            treatmentName: newTreatmentName
+          };
+        }
+
+        return plot;
+      })
+    );
+
+    // Migrate assessment data to match new assessment types
+    const migratedDates = currentAssessmentDates.map(dateObj => {
+      const newAssessments = {};
+
+      console.log(`[App] Processing date: ${dateObj.date}`);
+      console.log(`[App] Available assessments in date:`, Object.keys(dateObj.assessments));
+
+      // For each new assessment type, try to preserve existing data
+      newConfig.assessmentTypes.forEach((newType, index) => {
+        // Check if this is a renamed assessment (same index, different name)
+        const oldType = config.assessmentTypes[index];
+
+        if (oldType && oldType.name !== newType.name) {
+          // This is a rename - migrate data from old name to new name
+          console.log(`[App] Migrating: "${oldType.name}" -> "${newType.name}"`);
+          const oldData = dateObj.assessments[oldType.name];
+          if (oldData) {
+            const dataCount = Object.keys(oldData).filter(k => oldData[k].entered).length;
+            console.log(`[App] Found ${dataCount} entered values for "${oldType.name}"`);
+            newAssessments[newType.name] = oldData;
+          } else {
+            console.warn(`[App] No data found for "${oldType.name}"`);
+            newAssessments[newType.name] = {};
+            if (updatedGridLayout && updatedGridLayout.length > 0) {
+              updatedGridLayout.flat().forEach(plot => {
+                if (!plot.isBlank) {
+                  newAssessments[newType.name][plot.id] = { value: '', entered: false };
+                }
+              });
+            }
+          }
+        } else if (dateObj.assessments[newType.name]) {
+          // Name hasn't changed, preserve existing data
+          const dataCount = Object.keys(dateObj.assessments[newType.name]).filter(k => dateObj.assessments[newType.name][k].entered).length;
+          console.log(`[App] Preserving ${dataCount} values for "${newType.name}"`);
+          newAssessments[newType.name] = dateObj.assessments[newType.name];
+        } else {
+          // This is a new assessment type - create empty data
+          console.log(`[App] New assessment type: "${newType.name}"`);
+          newAssessments[newType.name] = {};
+          if (updatedGridLayout && updatedGridLayout.length > 0) {
+            updatedGridLayout.flat().forEach(plot => {
+              if (!plot.isBlank) {
+                newAssessments[newType.name][plot.id] = { value: '', entered: false };
+              }
+            });
+          }
+        }
+      });
+
+      return {
+        ...dateObj,
+        assessments: newAssessments
+      };
+    });
+
+    console.log('[App] Migration complete, updating state');
+
+    // Update config, grid layout, orientation, and assessment dates
+    setConfig(newConfig);
+    setGridLayout(updatedGridLayout);
+    if (newOrientation !== undefined) {
+      setOrientation(newOrientation);
+    }
+    setAssessmentDates(migratedDates);
+
+    // Save immediately after config change
+    setTimeout(async () => {
+      console.log('[App] Auto-saving after config change');
+      await saveCurrentTrial();
+    }, 500);
+
+    alert('Trial configuration updated successfully! Data has been preserved.');
+  };
+
   // =====================================================
   // MIGRATION FROM LOCALSTORAGE
   // =====================================================
@@ -475,13 +580,27 @@ const App = () => {
         onLayoutChange={setGridLayout}
         onOrientationChange={setOrientation}
         onFinalize={async () => {
+          console.log('[App] Finalizing trial layout');
+          console.log('[App] Current trial ID:', currentTrialId);
+          console.log('[App] Grid layout:', gridLayout);
+          console.log('[App] Config:', config);
+
           setLayoutLocked(true);
 
           // If this is a new trial (temp ID), create it in database
           if (currentTrialId.startsWith('temp-')) {
-            await finalizeNewTrial();
+            console.log('[App] Creating new trial in database');
+            try {
+              await finalizeNewTrial();
+              console.log('[App] Trial created successfully');
+            } catch (error) {
+              console.error('[App] Error creating trial:', error);
+              alert('Error saving trial: ' + error.message);
+              return; // Don't proceed to entry if save failed
+            }
           }
 
+          console.log('[App] Navigating to entry screen');
           setStep('entry');
         }}
         onBack={() => setStep('setup')}
@@ -502,6 +621,7 @@ const App = () => {
         onAssessmentDatesChange={setAssessmentDates}
         onPhotosChange={setPhotos}
         onNotesChange={setNotes}
+        onConfigChange={handleConfigChange}
         onUnlockLayout={() => {
           if (confirm('⚠️ Unlocking layout may affect existing data. Continue?')) {
             setLayoutLocked(false);

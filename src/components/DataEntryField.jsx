@@ -35,16 +35,16 @@ const DataEntryField = ({
     let normalized = Math.max(0, Math.min(1, (numValue - min) / range));
     if (reverseColorScale) normalized = 1 - normalized;
     
-    if (normalized < 0.1) return 'bg-white border-gray-300';
-    else if (normalized < 0.2) return 'bg-green-50 border-green-200';
-    else if (normalized < 0.3) return 'bg-green-100 border-green-300';
-    else if (normalized < 0.4) return 'bg-green-200 border-green-400';
-    else if (normalized < 0.5) return 'bg-green-300 border-green-500';
-    else if (normalized < 0.6) return 'bg-green-400 border-green-600';
-    else if (normalized < 0.7) return 'bg-green-500 border-green-700 text-white';
-    else if (normalized < 0.8) return 'bg-green-600 border-green-800 text-white';
-    else if (normalized < 0.9) return 'bg-green-700 border-green-900 text-white';
-    else return 'bg-green-800 border-green-950 text-white';
+    if (normalized < 0.1) return 'bg-white border-gray-300 text-black';
+    else if (normalized < 0.2) return 'bg-green-50 border-green-200 text-black';
+    else if (normalized < 0.3) return 'bg-green-100 border-green-300 text-black';
+    else if (normalized < 0.4) return 'bg-green-200 border-green-400 text-black';
+    else if (normalized < 0.5) return 'bg-green-300 border-green-500 text-black';
+    else if (normalized < 0.6) return 'bg-green-400 border-green-600 text-black';
+    else if (normalized < 0.7) return 'bg-green-500 border-green-700 text-black';
+    else if (normalized < 0.8) return 'bg-green-600 border-green-800 text-black';
+    else if (normalized < 0.9) return 'bg-green-700 border-green-900 text-black';
+    else return 'bg-green-800 border-green-950 text-black';
   };
 
   // Generate test data
@@ -156,7 +156,7 @@ const DataEntryField = ({
                           onUpdateData(currentDateObj.date, selectedAssessmentType, plot.id, val);
                         }
                       }}
-                      className="w-full p-0.5 text-xs border rounded bg-white flex-1"
+                      className="w-full p-0.5 text-xs border rounded bg-white text-black flex-1"
                       placeholder={`${assessment?.min}-${assessment?.max}`}
                     />
                     <label className="block">

@@ -185,11 +185,92 @@ const convertToDatabase = (trial, userId) => {
 };
 
 /**
+ * Normalize date string to YYYY-MM-DD format
+ * Handles both UK (DD/MM/YYYY) and US (MM/DD/YYYY) formats
+ * @param {string} dateStr - Date string in any format
+ * @returns {string} Normalized date in YYYY-MM-DD format
+ */
+const normalizeDateFormat = (dateStr) => {
+  if (!dateStr) return new Date().toISOString().split('T')[0];
+
+  const str = String(dateStr).trim();
+
+  // If already in YYYY-MM-DD format, return as-is
+  if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
+    return str;
+  }
+
+  // Handle DD/MM/YYYY or DD-MM-YYYY (UK format)
+  const ukMatch = str.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+  if (ukMatch) {
+    const day = parseInt(ukMatch[1], 10);
+    const month = parseInt(ukMatch[2], 10);
+    const year = parseInt(ukMatch[3], 10);
+
+    // If day > 12, it must be UK format (DD/MM/YYYY)
+    // Otherwise, ambiguous - assume UK format for consistency
+    const paddedMonth = String(month).padStart(2, '0');
+    const paddedDay = String(day).padStart(2, '0');
+
+    // Validate the date is reasonable
+    if (month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+      return `${year}-${paddedMonth}-${paddedDay}`;
+    }
+  }
+
+  // Handle YYYY-MM-DD with different separators
+  const isoMatch = str.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})$/);
+  if (isoMatch) {
+    const year = isoMatch[1];
+    const month = String(parseInt(isoMatch[2], 10)).padStart(2, '0');
+    const day = String(parseInt(isoMatch[3], 10)).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+
+  // Try JavaScript Date parser as fallback (handles "March 15, 2024", etc.)
+  try {
+    const date = new Date(str);
+    if (!isNaN(date.getTime())) {
+      return date.toISOString().split('T')[0];
+    }
+  } catch (e) {
+    console.warn('[database] Could not parse date:', dateStr);
+  }
+
+  // Last resort: use current date
+  console.warn('[database] Using current date for unparseable date string:', dateStr);
+  return new Date().toISOString().split('T')[0];
+};
+
+/**
  * Convert database trial to app format (camelCase)
  * @param {Object} dbTrial - Trial data from database
  * @returns {Object} App-formatted trial
  */
 const convertFromDatabase = (dbTrial) => {
+  // Normalize all assessment dates to YYYY-MM-DD format
+  const normalizedAssessmentDates = (dbTrial.assessment_dates || []).map(dateObj => ({
+    ...dateObj,
+    date: normalizeDateFormat(dateObj.date)
+  }));
+
+  // Normalize photo keys to use YYYY-MM-DD format
+  const normalizedPhotos = {};
+  Object.entries(dbTrial.photos || {}).forEach(([key, value]) => {
+    // Keys are in format "date_plotId", normalize the date part
+    const parts = key.split('_');
+    if (parts.length >= 2) {
+      const date = parts[0];
+      const plotId = parts.slice(1).join('_'); // Handle plot IDs with underscores
+      const normalizedDate = normalizeDateFormat(date);
+      const normalizedKey = `${normalizedDate}_${plotId}`;
+      normalizedPhotos[normalizedKey] = value;
+    } else {
+      // If key doesn't match expected format, keep as-is
+      normalizedPhotos[key] = value;
+    }
+  });
+
   return {
     id: dbTrial.id,
     name: dbTrial.name,
@@ -197,8 +278,8 @@ const convertFromDatabase = (dbTrial) => {
     gridLayout: dbTrial.grid_layout,
     orientation: dbTrial.orientation,
     layoutLocked: dbTrial.layout_locked,
-    assessmentDates: dbTrial.assessment_dates,
-    photos: dbTrial.photos,
+    assessmentDates: normalizedAssessmentDates,
+    photos: normalizedPhotos,
     notes: dbTrial.notes,
     created: dbTrial.created_at,
     lastModified: dbTrial.last_modified

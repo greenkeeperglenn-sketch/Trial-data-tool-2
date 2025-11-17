@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Download, Unlock, Grid, List, FileText, BarChart3, Camera, Presentation } from 'lucide-react';
+import { Download, Unlock, Grid, List, FileText, BarChart3, Camera, Presentation, Settings } from 'lucide-react';
 import DateNavigation from './DateNavigation';
 import DataEntryField from './DataEntryField';
 import DataEntryTable from './DataEntryTable';
@@ -7,6 +7,7 @@ import DataEntryNotes from './DataEntryNotes';
 import Analysis from './Analysis';
 import ImageryAnalyzer from './ImageryAnalyzer';
 import PresentationMode from './PresentationMode';
+import TrialConfigEditor from './TrialConfigEditor';
 
 const DataEntry = ({
   config,
@@ -21,7 +22,8 @@ const DataEntry = ({
   onNotesChange,
   onUnlockLayout,
   onExportJSON,
-  onBackToLibrary
+  onBackToLibrary,
+  onConfigChange
 }) => {
   const [currentDateIndex, setCurrentDateIndex] = useState(0);
   const [selectedAssessmentType, setSelectedAssessmentType] = useState(
@@ -29,6 +31,7 @@ const DataEntry = ({
   );
   const [viewMode, setViewMode] = useState('field'); // 'field', 'table', 'notes', 'analysis', 'imagery', 'presentation'
   const [showInputDropdown, setShowInputDropdown] = useState(false);
+  const [showConfigEditor, setShowConfigEditor] = useState(false);
 
   const currentDateObj = assessmentDates[currentDateIndex];
 
@@ -97,18 +100,46 @@ const DataEntry = ({
     );
   };
 
+  // Handle config changes
+  const handleConfigSave = (newConfig, newGridLayout, newOrientation) => {
+    console.log('[DataEntry] Config saved, updating selectedAssessmentType');
+    console.log('[DataEntry] Old selected:', selectedAssessmentType);
+    console.log('[DataEntry] Old config assessment types:', config.assessmentTypes.map(t => t.name));
+    console.log('[DataEntry] New config assessment types:', newConfig.assessmentTypes.map(t => t.name));
+
+    // Find the index of the currently selected assessment type in the old config
+    const oldIndex = config.assessmentTypes.findIndex(t => t.name === selectedAssessmentType);
+
+    // If we found it, update to the new name at the same index
+    if (oldIndex >= 0 && newConfig.assessmentTypes[oldIndex]) {
+      const newName = newConfig.assessmentTypes[oldIndex].name;
+      console.log('[DataEntry] Updating selected assessment type from', selectedAssessmentType, 'to', newName);
+      setSelectedAssessmentType(newName);
+    } else if (newConfig.assessmentTypes.length > 0) {
+      // Otherwise, just select the first one
+      console.log('[DataEntry] Selecting first assessment type:', newConfig.assessmentTypes[0].name);
+      setSelectedAssessmentType(newConfig.assessmentTypes[0].name);
+    }
+
+    if (onConfigChange) {
+      onConfigChange(newConfig, assessmentDates, newGridLayout, newOrientation);
+    }
+    setShowConfigEditor(false);
+  };
+
   // Export CSV data
   const exportToCSV = () => {
     if (!selectedAssessmentType) return;
-    
+
     let csv = 'Plot,Block,Treatment';
     assessmentDates.forEach(d => csv += `,${d.date}`);
     csv += '\n';
-    
+
     gridLayout.flat().filter(p => !p.isBlank).forEach(plot => {
       csv += `${plot.id},${plot.block},${plot.treatmentName}`;
       assessmentDates.forEach(dateObj => {
-        const value = dateObj.assessments[selectedAssessmentType][plot.id]?.value || '';
+        const assessmentData = dateObj.assessments[selectedAssessmentType];
+        const value = assessmentData?.[plot.id]?.value || '';
         csv += `,${value}`;
       });
       csv += '\n';
@@ -134,10 +165,15 @@ const DataEntry = ({
     config.treatments.forEach((treatment, treatmentIdx) => {
       csv += treatment;
       assessmentDates.forEach(dateObj => {
+        const assessmentData = dateObj.assessments[selectedAssessmentType];
+        if (!assessmentData) {
+          csv += ',,';
+          return;
+        }
         const treatmentValues = gridLayout.flat()
           .filter(plot => !plot.isBlank && plot.treatment === treatmentIdx)
           .map(plot => {
-            const plotData = dateObj.assessments[selectedAssessmentType][plot.id];
+            const plotData = assessmentData[plot.id];
             return plotData?.entered && plotData.value !== '' ? parseFloat(plotData.value) : null;
           })
           .filter(v => v !== null);
@@ -175,38 +211,45 @@ const DataEntry = ({
         </div>
         
         <div className="flex gap-2 flex-wrap">
-          <button 
-            onClick={exportToCSV} 
+          <button
+            onClick={() => setShowConfigEditor(true)}
+            className="flex items-center gap-2 px-3 py-2 bg-blue-600 text-white rounded text-sm hover:bg-blue-700 transition"
+          >
+            <Settings size={16} /> Edit Config
+          </button>
+
+          <button
+            onClick={exportToCSV}
             className="flex items-center gap-2 px-3 py-2 bg-green-600 text-white rounded text-sm hover:bg-green-700 transition"
           >
             <Download size={16} /> Export Data
           </button>
-          
-          <button 
-            onClick={exportSummaryCSV} 
+
+          <button
+            onClick={exportSummaryCSV}
             className="flex items-center gap-2 px-3 py-2 bg-green-600 text-white rounded text-sm hover:bg-green-700 transition"
           >
             <Download size={16} /> Summary
           </button>
-          
-          <button 
-            onClick={onExportJSON} 
+
+          <button
+            onClick={onExportJSON}
             className="flex items-center gap-2 px-3 py-2 bg-purple-600 text-white rounded text-sm hover:bg-purple-700 transition"
           >
             <Download size={16} /> Backup Trial
           </button>
-          
+
           {layoutLocked && (
-            <button 
-              onClick={onUnlockLayout} 
+            <button
+              onClick={onUnlockLayout}
               className="flex items-center gap-2 px-3 py-2 bg-red-600 text-white rounded text-sm hover:bg-red-700 transition"
             >
               <Unlock size={16} /> Unlock Layout
             </button>
           )}
-          
-          <button 
-            onClick={onBackToLibrary} 
+
+          <button
+            onClick={onBackToLibrary}
             className="px-3 py-2 bg-gray-200 rounded text-sm hover:bg-gray-300 transition"
           >
             ← Library
@@ -221,6 +264,20 @@ const DataEntry = ({
         onDateChange={setCurrentDateIndex}
         onAddDate={handleAddDate}
       />
+
+      {assessmentDates.length === 0 && (
+        <div className="bg-blue-50 border-2 border-blue-200 rounded-lg p-8 text-center mt-4">
+          <h3 className="text-xl font-bold text-blue-900 mb-2">Welcome to your new trial!</h3>
+          <p className="text-blue-700 mb-4">
+            Your trial layout is ready. Click "Add Date" above to start recording assessment data.
+          </p>
+          <div className="text-sm text-blue-600">
+            <p><strong>Trial Name:</strong> {config.trialName}</p>
+            <p><strong>Grid Size:</strong> {gridLayout.length} rows × {gridLayout[0]?.length || 0} columns</p>
+            <p><strong>Plots:</strong> {gridLayout.flat().filter(p => !p.isBlank).length}</p>
+          </div>
+        </div>
+      )}
 
       {assessmentDates.length > 0 && (
         <>
@@ -387,6 +444,17 @@ const DataEntry = ({
             />
           )}
         </>
+      )}
+
+      {/* Config Editor Modal */}
+      {showConfigEditor && (
+        <TrialConfigEditor
+          config={config}
+          gridLayout={gridLayout}
+          orientation={orientation}
+          onSave={handleConfigSave}
+          onCancel={() => setShowConfigEditor(false)}
+        />
       )}
     </div>
   );

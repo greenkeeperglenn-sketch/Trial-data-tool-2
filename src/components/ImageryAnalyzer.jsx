@@ -18,6 +18,7 @@ const ImageryAnalyzer = ({
   const [imageSrc, setImageSrc] = useState(null);
   const [uploadedFile, setUploadedFile] = useState(null);
   const [fileDate, setFileDate] = useState(null);
+  const [showDateConfirmation, setShowDateConfirmation] = useState(false);
   const [rows, setRows] = useState(trialRows);
   const [cols, setCols] = useState(trialCols);
   const [corners, setCorners] = useState([
@@ -32,10 +33,12 @@ const ImageryAnalyzer = ({
   const [selectedDate, setSelectedDate] = useState(currentDateObj?.date || '');
   const [processing, setProcessing] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [imageOrientation, setImageOrientation] = useState(0);
 
   const fileInputRef = useRef(null);
   const canvasRef = useRef(null);
   const imageRef = useRef(null);
+  const originalImageRef = useRef(null); // Store original high-res image
 
   const handleFileUpload = (file) => {
     if (!file) return;
@@ -47,12 +50,16 @@ const ImageryAnalyzer = ({
     const modifiedDate = new Date(file.lastModified);
     const dateStr = modifiedDate.toISOString().split('T')[0]; // YYYY-MM-DD
     setFileDate(dateStr);
+    setShowDateConfirmation(true); // Always show date confirmation
 
     const reader = new FileReader();
     reader.onload = (event) => {
       const img = new Image();
       img.onload = () => {
-        // Downsample large images to prevent crashes
+        // Store the original full-resolution image
+        originalImageRef.current = img;
+
+        // Downsample for display only to prevent canvas crashes
         const MAX_WIDTH = 2000;
         const MAX_HEIGHT = 2000;
 
@@ -64,14 +71,14 @@ const ImageryAnalyzer = ({
           width = Math.floor(width * scale);
           height = Math.floor(height * scale);
 
-          // Create downsampled version
+          // Create downsampled version for DISPLAY only
           const tempCanvas = document.createElement('canvas');
           tempCanvas.width = width;
           tempCanvas.height = height;
           const tempCtx = tempCanvas.getContext('2d');
           tempCtx.drawImage(img, 0, 0, width, height);
 
-          // Create new image from downsampled canvas
+          // Create new image from downsampled canvas for display
           const downsampledImg = new Image();
           downsampledImg.onload = () => {
             imageRef.current = downsampledImg;
@@ -314,8 +321,8 @@ const ImageryAnalyzer = ({
     setDraggingCorner(null);
   };
 
-  // Fast perspective transformation using larger step size
-  const extractPlotWithPerspective = (sourceCanvas, plotCorners, targetSize) => {
+  // Perspective transformation with high quality - extract from ORIGINAL image
+  const extractPlotWithPerspective = (sourceImage, plotCorners, targetSize, scaleFactor = 1) => {
     const tempCanvas = document.createElement('canvas');
     tempCanvas.width = targetSize;
     tempCanvas.height = targetSize;
@@ -326,12 +333,18 @@ const ImageryAnalyzer = ({
     tempCtx.fillRect(0, 0, targetSize, targetSize);
 
     try {
-      const srcCtx = sourceCanvas.getContext('2d');
-      const srcImageData = srcCtx.getImageData(0, 0, sourceCanvas.width, sourceCanvas.height);
+      // Draw source image to a temporary canvas to get pixel data
+      const srcCanvas = document.createElement('canvas');
+      srcCanvas.width = sourceImage.width;
+      srcCanvas.height = sourceImage.height;
+      const srcCtx = srcCanvas.getContext('2d');
+      srcCtx.drawImage(sourceImage, 0, 0);
+
+      const srcImageData = srcCtx.getImageData(0, 0, sourceImage.width, sourceImage.height);
       const dstImageData = tempCtx.createImageData(targetSize, targetSize);
 
-      // Use step size of 2 for much faster processing
-      const step = 2;
+      // Use step size of 1 for best quality (no pixel skipping)
+      const step = 1;
 
       for (let y = 0; y < targetSize; y += step) {
         for (let x = 0; x < targetSize; x += step) {
@@ -340,23 +353,24 @@ const ImageryAnalyzer = ({
           const v = y / (targetSize - 1);
 
           // Bilinear interpolation to map destination to source quad
+          // Scale corners back to original image coordinates
           const srcX =
-            plotCorners.tl.x * (1 - u) * (1 - v) +
-            plotCorners.tr.x * u * (1 - v) +
-            plotCorners.br.x * u * v +
-            plotCorners.bl.x * (1 - u) * v;
+            (plotCorners.tl.x * scaleFactor) * (1 - u) * (1 - v) +
+            (plotCorners.tr.x * scaleFactor) * u * (1 - v) +
+            (plotCorners.br.x * scaleFactor) * u * v +
+            (plotCorners.bl.x * scaleFactor) * (1 - u) * v;
 
           const srcY =
-            plotCorners.tl.y * (1 - u) * (1 - v) +
-            plotCorners.tr.y * u * (1 - v) +
-            plotCorners.br.y * u * v +
-            plotCorners.bl.y * (1 - u) * v;
+            (plotCorners.tl.y * scaleFactor) * (1 - u) * (1 - v) +
+            (plotCorners.tr.y * scaleFactor) * u * (1 - v) +
+            (plotCorners.br.y * scaleFactor) * u * v +
+            (plotCorners.bl.y * scaleFactor) * (1 - u) * v;
 
           const sx = Math.floor(srcX);
           const sy = Math.floor(srcY);
 
-          if (sx >= 0 && sx < sourceCanvas.width && sy >= 0 && sy < sourceCanvas.height) {
-            const srcIdx = (sy * sourceCanvas.width + sx) * 4;
+          if (sx >= 0 && sx < sourceImage.width && sy >= 0 && sy < sourceImage.height) {
+            const srcIdx = (sy * sourceImage.width + sx) * 4;
 
             // Fill the step size area with the same color
             for (let dy = 0; dy < step && y + dy < targetSize; dy++) {
@@ -382,14 +396,21 @@ const ImageryAnalyzer = ({
 
   // Commit grid and extract plot images with async processing
   const commitGrid = async () => {
-    if (!imageRef.current || !canvasRef.current || !fileDate) return;
+    if (!originalImageRef.current || !canvasRef.current || !fileDate) {
+      alert('Please upload an image and confirm the date first');
+      return;
+    }
 
     try {
       setProcessing(true);
       setProgress(0);
 
-      const canvas = canvasRef.current;
+      const originalImage = originalImageRef.current;
+      const displayImage = imageRef.current;
       const [tl, tr, br, bl] = corners;
+
+      // Calculate scale factor between display image and original image
+      const scaleFactor = originalImage.width / displayImage.width;
 
       const extractedPlots = [];
       const plotImages = {};
@@ -404,7 +425,7 @@ const ImageryAnalyzer = ({
 
       let processedPlots = 0;
 
-    // Extract each plot as an image with perspective correction
+    // Extract each plot as an image with perspective correction from ORIGINAL image
     for (let row = 0; row < rows; row++) {
       for (let col = 0; col < cols; col++) {
         // Calculate plot position using perspective transformation
@@ -413,7 +434,7 @@ const ImageryAnalyzer = ({
         const colL = col / cols;
         const colR = (col + 1) / cols;
 
-        // Get corners of this plot cell in the grid
+        // Get corners of this plot cell in the grid (in display coordinates)
         const topLeftX = tl.x + (tr.x - tl.x) * colL;
         const topLeftY = tl.y + (tr.y - tl.y) * colL;
         const topRightX = tl.x + (tr.x - tl.x) * colR;
@@ -424,7 +445,7 @@ const ImageryAnalyzer = ({
         const bottomRightX = bl.x + (br.x - bl.x) * colR;
         const bottomRightY = bl.y + (br.y - bl.y) * colR;
 
-        // Interpolate for this specific plot row to get the 4 corners
+        // Interpolate for this specific plot row to get the 4 corners (in display coordinates)
         const plotCorners = {
           tl: {
             x: topLeftX + (bottomLeftX - topLeftX) * rowT,
@@ -449,12 +470,12 @@ const ImageryAnalyzer = ({
         const plotId = layoutPlot?.id || `${row + 1}-${col + 1}`;
 
         if (!layoutPlot?.isBlank) {
-          // Extract plot with perspective transformation
-          const targetSize = 300; // Reduced from 400 for faster processing
-          const transformedCanvas = extractPlotWithPerspective(canvas, plotCorners, targetSize);
+          // Extract plot with perspective transformation from ORIGINAL high-res image
+          const targetSize = 800; // Increased from 500 for better quality
+          const transformedCanvas = extractPlotWithPerspective(originalImage, plotCorners, targetSize, scaleFactor);
 
-          // Convert to base64
-          const plotImageData = transformedCanvas.toDataURL('image/jpeg', 0.80);
+          // Convert to base64 with high quality (98% instead of 95%)
+          const plotImageData = transformedCanvas.toDataURL('image/jpeg', 0.98);
 
           // Store with key format: date_plotId
           const photoKey = `${fileDate}_${plotId}`;
@@ -578,7 +599,71 @@ const ImageryAnalyzer = ({
           </div>
         )}
 
-        {imageSrc && (
+        {/* Date Confirmation Dialog - shown first after upload */}
+        {imageSrc && showDateConfirmation && fileDate && (
+          <div className="mt-6">
+            <div className="bg-yellow-50 border-2 border-yellow-400 rounded-lg p-6 shadow-lg">
+              <div className="flex items-start gap-3 mb-4">
+                <div className="text-yellow-600 text-2xl">📅</div>
+                <div className="flex-1">
+                  <h3 className="font-bold text-yellow-900 text-lg mb-2">Confirm Image Date</h3>
+                  <p className="text-sm text-yellow-800 mb-4">
+                    We detected this date from the image file. Please confirm or adjust if incorrect:
+                  </p>
+
+                  <div className="space-y-4">
+                    {/* Auto-detected date */}
+                    <div className="bg-white rounded-lg p-4 border-2 border-yellow-300">
+                      <p className="text-xs text-gray-600 mb-1">Auto-detected from file:</p>
+                      <p className="text-xl font-bold text-gray-900">{fileDate}</p>
+                      <p className="text-sm text-gray-600 mt-1">
+                        {new Date(fileDate).toLocaleDateString('en-GB', {
+                          day: '2-digit',
+                          month: 'long',
+                          year: 'numeric'
+                        })}
+                      </p>
+                    </div>
+
+                    {/* Manual date override */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Or select a different date:
+                      </label>
+                      <input
+                        type="date"
+                        value={fileDate}
+                        onChange={(e) => setFileDate(e.target.value)}
+                        className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500 text-lg"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex gap-3 mt-6">
+                    <button
+                      onClick={() => setShowDateConfirmation(false)}
+                      className="flex-1 px-6 py-3 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 transition font-semibold"
+                    >
+                      ✓ Confirm Date: {fileDate}
+                    </button>
+                    <button
+                      onClick={() => {
+                        setImageSrc(null);
+                        setFileDate(null);
+                        setShowDateConfirmation(false);
+                      }}
+                      className="px-6 py-3 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {imageSrc && !showDateConfirmation && (
           <div className="mt-6 space-y-4">
             <div className="bg-green-50 border border-green-200 text-green-800 p-3 rounded">
               <p className="font-medium">Grid Detected from Trial Setup:</p>
@@ -611,6 +696,75 @@ const ImageryAnalyzer = ({
               </label>
             </div>
 
+            {/* Compass/Orientation Tool */}
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+              <div className="flex items-center justify-between gap-4">
+                <div className="flex-1">
+                  <p className="font-medium text-amber-900 mb-1">Image Orientation</p>
+                  <p className="text-sm text-amber-700">Rotate to match field compass direction</p>
+                </div>
+
+                <div className="flex items-center gap-4">
+                  {/* Compass Display */}
+                  <div className="relative w-20 h-20 bg-gradient-to-br from-blue-50 to-blue-100 rounded-full shadow-lg border-4 border-blue-300">
+                    <div
+                      className="absolute inset-0 flex items-center justify-center"
+                      style={{ transform: `rotate(${imageOrientation}deg)` }}
+                    >
+                      {/* North Arrow */}
+                      <div className="absolute top-0.5 left-1/2 -translate-x-1/2">
+                        <div className="w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-b-[12px] border-b-red-600"></div>
+                        <div className="text-xs font-bold text-red-600 text-center">N</div>
+                      </div>
+                      {/* South Marker */}
+                      <div className="absolute bottom-0.5 left-1/2 -translate-x-1/2">
+                        <div className="text-xs text-gray-500">S</div>
+                      </div>
+                      {/* East Marker */}
+                      <div className="absolute right-0.5 top-1/2 -translate-y-1/2">
+                        <div className="text-xs text-gray-500">E</div>
+                      </div>
+                      {/* West Marker */}
+                      <div className="absolute left-0.5 top-1/2 -translate-y-1/2">
+                        <div className="text-xs text-gray-500">W</div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col gap-2">
+                    {/* Rotation Display */}
+                    <div className="text-sm font-mono text-gray-700 bg-gray-100 px-2 py-1 rounded text-center">
+                      {imageOrientation}°
+                    </div>
+
+                    {/* Rotation Controls */}
+                    <div className="flex gap-1">
+                      <button
+                        onClick={() => setImageOrientation((imageOrientation - 5 + 360) % 360)}
+                        className="px-2 py-1 bg-blue-100 hover:bg-blue-200 text-blue-700 text-xs rounded transition"
+                        title="Rotate -5°"
+                      >
+                        ↺ 5°
+                      </button>
+                      <button
+                        onClick={() => setImageOrientation((imageOrientation + 5) % 360)}
+                        className="px-2 py-1 bg-blue-100 hover:bg-blue-200 text-blue-700 text-xs rounded transition"
+                        title="Rotate +5°"
+                      >
+                        ↻ 5°
+                      </button>
+                    </div>
+                    <button
+                      onClick={() => setImageOrientation(0)}
+                      className="px-2 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs rounded transition"
+                    >
+                      Reset
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <div className="bg-blue-50 text-blue-700 p-3 rounded text-sm">
               <p className="font-medium">Grid Alignment:</p>
               <p>Drag the red corner markers (TL, TR, BR, BL) to align the grid with your plots.</p>
@@ -630,13 +784,24 @@ const ImageryAnalyzer = ({
             />
 
             {/* File Date and Image Info */}
-            {fileDate && imageRef.current && (
+            {fileDate && imageRef.current && !showDateConfirmation && (
               <div className="bg-purple-50 border border-purple-200 text-purple-800 p-3 rounded">
-                <p className="font-medium">Image File Date: {fileDate}</p>
-                <p className="text-sm">Image Size: {imageRef.current.width} × {imageRef.current.height}px</p>
-                {(imageRef.current.width > 2000 || imageRef.current.height > 2000) && (
-                  <p className="text-xs mt-1">⚠️ Image was downsampled for performance</p>
+                <p className="font-medium">Image Date: {fileDate}</p>
+                <p className="text-sm">
+                  Display Size: {imageRef.current.width} × {imageRef.current.height}px
+                  {originalImageRef.current && (
+                    <> | Original: {originalImageRef.current.width} × {originalImageRef.current.height}px</>
+                  )}
+                </p>
+                {originalImageRef.current && (originalImageRef.current.width > 2000 || originalImageRef.current.height > 2000) && (
+                  <p className="text-xs mt-1">✓ Original high-res image preserved for extraction (800×800px plots)</p>
                 )}
+                <button
+                  onClick={() => setShowDateConfirmation(true)}
+                  className="mt-2 text-xs underline hover:text-purple-900"
+                >
+                  Change date
+                </button>
               </div>
             )}
 
