@@ -3,7 +3,7 @@
 
 self.onmessage = async (event) => {
   const {
-    imageData,
+    imageBuffer,
     width,
     height,
     plotCorners,
@@ -14,6 +14,13 @@ self.onmessage = async (event) => {
   } = event.data;
 
   try {
+    // Reconstruct ImageData from transferred buffer
+    const imageData = new ImageData(
+      new Uint8ClampedArray(imageBuffer),
+      width,
+      height
+    );
+
     const result = await extractPlotWithPerspective(
       imageData,
       width,
