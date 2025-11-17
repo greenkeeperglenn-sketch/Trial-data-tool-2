@@ -35,6 +35,7 @@ const ImageryAnalyzer = ({
     { x: 50, y: 550, label: 'BL' }
   ]);
   const [draggingCorner, setDraggingCorner] = useState(null);
+  const [loading, setLoading] = useState(false);
 
   // Refs (required for canvas and file input)
   const fileInputRef = useRef(null);
@@ -55,16 +56,18 @@ const ImageryAnalyzer = ({
     if (!file) return;
 
     try {
+      setLoading(true);
+
       // FAST: Create blob URL immediately (no need to convert to data URL first)
       const blobUrl = URL.createObjectURL(file);
-      
+
       const img = new Image();
       img.onload = () => {
         console.log('Image loaded successfully:', img.width, img.height);
         imageRef.current = img;
         // Use blob URL instead of data URL - much faster for large files
         setImageSrc(blobUrl);
-        
+
         // Set corner positions based on image size
         setCorners([
           { x: img.width * 0.1, y: img.height * 0.1, label: 'TL' },
@@ -72,14 +75,17 @@ const ImageryAnalyzer = ({
           { x: img.width * 0.9, y: img.height * 0.9, label: 'BR' },
           { x: img.width * 0.1, y: img.height * 0.9, label: 'BL' }
         ]);
+
+        setLoading(false);
       };
-      
+
       img.onerror = (error) => {
         console.error('Image load error:', error);
         URL.revokeObjectURL(blobUrl);
+        setLoading(false);
         alert('Failed to load image. Please try another file.');
       };
-      
+
       img.src = blobUrl;
 
       // Extract date from EXIF in parallel (non-blocking)
@@ -260,9 +266,14 @@ const ImageryAnalyzer = ({
         <div className="flex gap-2 mb-4">
           <button
             onClick={() => fileInputRef.current?.click()}
-            className="px-4 py-2 rounded bg-emerald-600 text-white text-sm hover:bg-emerald-700 transition"
+            disabled={loading}
+            className={`px-4 py-2 rounded text-white text-sm transition ${
+              loading
+                ? 'bg-gray-400 cursor-not-allowed'
+                : 'bg-emerald-600 hover:bg-emerald-700'
+            }`}
           >
-            Upload Image
+            {loading ? 'Loading...' : 'Upload Image'}
           </button>
           <input
             ref={fileInputRef}
@@ -270,11 +281,28 @@ const ImageryAnalyzer = ({
             accept="image/jpeg,image/jpg,image/png"
             onChange={(event) => handleFileUpload(event.target.files?.[0])}
             className="hidden"
+            disabled={loading}
           />
         </div>
 
+        {/* Loading State */}
+        {loading && (
+          <div className="border-2 border-blue-300 rounded-lg p-8 text-center bg-blue-50">
+            <div className="flex flex-col items-center gap-4">
+              <div className="w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+              <div className="space-y-2">
+                <p className="text-lg font-medium text-blue-900">Loading image...</p>
+                <p className="text-sm text-blue-600">Processing EXIF data and preparing canvas</p>
+              </div>
+              <div className="w-full max-w-md bg-blue-200 rounded-full h-2 overflow-hidden">
+                <div className="bg-blue-600 h-full animate-pulse" style={{ width: '100%' }}></div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* No Image State */}
-        {!imageSrc && (
+        {!imageSrc && !loading && (
           <div className="border-2 border-dashed rounded-lg p-8 text-center border-gray-300 bg-gray-50">
             <p className="text-lg font-medium">Drag & drop or click to upload a drone image</p>
             <p className="text-sm text-gray-500 mt-2">JPEG or PNG files are supported</p>
