@@ -107,7 +107,25 @@ const ImageryAnalyzer = ({
     try {
       console.log(`Loading image: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)}MB)`);
 
-      setLoadProgress(25); // Creating blob URL
+      // Validate file signature (magic bytes) to ensure it's actually an image
+      setLoadProgress(20); // Validating file
+      const buffer = await file.slice(0, 12).arrayBuffer();
+      const bytes = new Uint8Array(buffer);
+
+      // Check for valid image signatures
+      const isJPEG = bytes[0] === 0xFF && bytes[1] === 0xD8 && bytes[2] === 0xFF;
+      const isPNG = bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4E && bytes[3] === 0x47;
+
+      if (!isJPEG && !isPNG) {
+        console.error('Invalid file signature. First 12 bytes:', Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join(' '));
+        setLoadError(`This file does not appear to be a valid JPEG or PNG image. The file may have the wrong extension or be corrupted. Detected bytes: ${Array.from(bytes.slice(0, 4)).map(b => '0x' + b.toString(16).toUpperCase()).join(' ')}`);
+        setLoadProgress(0);
+        setLoading(false);
+        return;
+      }
+
+      console.log('File signature validated:', isJPEG ? 'JPEG' : 'PNG');
+      setLoadProgress(30); // File validated
 
       // FAST: Create blob URL immediately (no need to convert to data URL first)
       const blobUrl = URL.createObjectURL(file);
@@ -117,7 +135,19 @@ const ImageryAnalyzer = ({
       // Load original high-res image for extraction
       const originalImg = new Image();
 
+      // Add timeout for image loading
+      const loadTimeout = setTimeout(() => {
+        if (!imageRef.current) {
+          console.error('Image loading timeout after 30 seconds');
+          setLoadError('Image loading timed out. The file may be too large or have encoding issues. Try a smaller image or re-export from your source.');
+          setLoadProgress(0);
+          setLoading(false);
+          URL.revokeObjectURL(blobUrl);
+        }
+      }, 30000); // 30 second timeout
+
       originalImg.onload = async () => {
+        clearTimeout(loadTimeout);
         try {
           setLoadProgress(60); // Image loaded
           console.log('Original image loaded:', originalImg.width, originalImg.height);
@@ -250,8 +280,27 @@ const ImageryAnalyzer = ({
       };
 
       originalImg.onerror = (error) => {
+        clearTimeout(loadTimeout);
         console.error('Image load error:', error);
-        setLoadError('Failed to load image. The file may be corrupted or in an unsupported format.');
+        console.error('File details:', {
+          name: file.name,
+          type: file.type,
+          size: file.size,
+          lastModified: new Date(file.lastModified).toISOString()
+        });
+
+        // Try to provide more specific error message
+        let errorMsg = 'Failed to load image. ';
+
+        if (file.size > 30 * 1024 * 1024) {
+          errorMsg += 'The file is very large (>30MB). Try compressing it or using a smaller resolution.';
+        } else if (!file.type || file.type === 'application/octet-stream') {
+          errorMsg += 'The file type could not be detected. Make sure it\'s a valid JPEG or PNG image.';
+        } else {
+          errorMsg += 'The file may be corrupted, have an incorrect extension, or use an unsupported encoding. Try re-exporting the image or converting it to standard JPEG format.';
+        }
+
+        setLoadError(errorMsg);
         setLoadProgress(0);
         setLoading(false);
         URL.revokeObjectURL(blobUrl);
