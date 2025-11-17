@@ -179,64 +179,71 @@ const ImageryAnalyzer = ({
               setLoadProgress(80); // Drawing to canvas
               ctx.drawImage(originalImg, 0, 0, displayCanvas.width, displayCanvas.height);
 
-              setLoadProgress(90); // Converting to data URL
+              setLoadProgress(90); // Converting to blob
 
-              // Try to convert to data URL
-              let dataUrl;
-              try {
-                dataUrl = displayCanvas.toDataURL('image/jpeg', 0.85);
-              } catch (e) {
-                console.warn('Failed to create data URL, using blob URL instead:', e);
-                // Fallback: use original blob URL if data URL creation fails
-                imageRef.current = originalImg;
-                setImageSrc(blobUrl);
-                setCorners([
-                  { x: displayCanvas.width * 0.1, y: displayCanvas.height * 0.1, label: 'TL' },
-                  { x: displayCanvas.width * 0.9, y: displayCanvas.height * 0.1, label: 'TR' },
-                  { x: displayCanvas.width * 0.9, y: displayCanvas.height * 0.9, label: 'BR' },
-                  { x: displayCanvas.width * 0.1, y: displayCanvas.height * 0.9, label: 'BL' }
-                ]);
-                setLoadProgress(100);
-                setLoading(false);
-                console.log('Display image ready (using blob URL fallback)');
-                return;
-              }
+              // Convert canvas to blob (MUCH more efficient than data URL for large images)
+              displayCanvas.toBlob(
+                (blob) => {
+                  if (!blob) {
+                    console.warn('Failed to create blob, using original image');
+                    // Fallback: use original image directly
+                    imageRef.current = originalImg;
+                    setImageSrc(blobUrl);
+                    setCorners([
+                      { x: originalImg.width * 0.1, y: originalImg.height * 0.1, label: 'TL' },
+                      { x: originalImg.width * 0.9, y: originalImg.height * 0.1, label: 'TR' },
+                      { x: originalImg.width * 0.9, y: originalImg.height * 0.9, label: 'BR' },
+                      { x: originalImg.width * 0.1, y: originalImg.height * 0.9, label: 'BL' }
+                    ]);
+                    setLoadProgress(100);
+                    setLoading(false);
+                    console.log('Display image ready (using original - blob creation failed)');
+                    return;
+                  }
 
-              const displayImgObj = new Image();
-              displayImgObj.onload = () => {
-                imageRef.current = displayImgObj;
-                setImageSrc(displayImgObj.src);
+                  const downsampledBlobUrl = URL.createObjectURL(blob);
+                  console.log('Created downsampled blob:', (blob.size / 1024 / 1024).toFixed(2), 'MB');
 
-                // Set corner positions based on display image size
-                setCorners([
-                  { x: displayImgObj.width * 0.1, y: displayImgObj.height * 0.1, label: 'TL' },
-                  { x: displayImgObj.width * 0.9, y: displayImgObj.height * 0.1, label: 'TR' },
-                  { x: displayImgObj.width * 0.9, y: displayImgObj.height * 0.9, label: 'BR' },
-                  { x: displayImgObj.width * 0.1, y: displayImgObj.height * 0.9, label: 'BL' }
-                ]);
+                  const displayImgObj = new Image();
+                  displayImgObj.onload = () => {
+                    imageRef.current = displayImgObj;
+                    setImageSrc(downsampledBlobUrl);
 
-                setLoadProgress(100);
-                setLoading(false);
-                console.log('Display image ready');
-              };
+                    // Set corner positions based on display image size
+                    setCorners([
+                      { x: displayImgObj.width * 0.1, y: displayImgObj.height * 0.1, label: 'TL' },
+                      { x: displayImgObj.width * 0.9, y: displayImgObj.height * 0.1, label: 'TR' },
+                      { x: displayImgObj.width * 0.9, y: displayImgObj.height * 0.9, label: 'BR' },
+                      { x: displayImgObj.width * 0.1, y: displayImgObj.height * 0.9, label: 'BL' }
+                    ]);
 
-              displayImgObj.onerror = (e) => {
-                console.error('Failed to load downsampled image, using original instead:', e);
-                // Fallback: use original blob URL if downsampled image fails to load
-                imageRef.current = originalImg;
-                setImageSrc(blobUrl);
-                setCorners([
-                  { x: displayCanvas.width * 0.1, y: displayCanvas.height * 0.1, label: 'TL' },
-                  { x: displayCanvas.width * 0.9, y: displayCanvas.height * 0.1, label: 'TR' },
-                  { x: displayCanvas.width * 0.9, y: displayCanvas.height * 0.9, label: 'BR' },
-                  { x: displayCanvas.width * 0.1, y: displayCanvas.height * 0.9, label: 'BL' }
-                ]);
-                setLoadProgress(100);
-                setLoading(false);
-                console.log('Display image ready (using original after downsample error)');
-              };
+                    setLoadProgress(100);
+                    setLoading(false);
+                    console.log('Display image ready (downsampled)');
+                  };
 
-              displayImgObj.src = dataUrl;
+                  displayImgObj.onerror = (e) => {
+                    console.error('Failed to load downsampled blob image, using original instead:', e);
+                    URL.revokeObjectURL(downsampledBlobUrl);
+                    // Fallback: use original blob URL
+                    imageRef.current = originalImg;
+                    setImageSrc(blobUrl);
+                    setCorners([
+                      { x: originalImg.width * 0.1, y: originalImg.height * 0.1, label: 'TL' },
+                      { x: originalImg.width * 0.9, y: originalImg.height * 0.1, label: 'TR' },
+                      { x: originalImg.width * 0.9, y: originalImg.height * 0.9, label: 'BR' },
+                      { x: originalImg.width * 0.1, y: originalImg.height * 0.9, label: 'BL' }
+                    ]);
+                    setLoadProgress(100);
+                    setLoading(false);
+                    console.log('Display image ready (using original after blob load error)');
+                  };
+
+                  displayImgObj.src = downsampledBlobUrl;
+                },
+                'image/jpeg',
+                0.85
+              );
             } catch (downsampleError) {
               console.error('Downsampling failed, using original image:', downsampleError);
               // Complete fallback: just use the original image
