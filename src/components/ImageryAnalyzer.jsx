@@ -95,6 +95,11 @@ const ImageryAnalyzer = ({
       return;
     }
 
+    // Warn about very large files
+    if (file.size > 35 * 1024 * 1024) {
+      console.warn(`Large file detected: ${(file.size / 1024 / 1024).toFixed(2)}MB - this may take 1-2 minutes to load`);
+    }
+
     // Set loading state immediately
     setLoading(true);
     setLoadError(null);
@@ -135,16 +140,19 @@ const ImageryAnalyzer = ({
       // Load original high-res image for extraction
       const originalImg = new Image();
 
-      // Add timeout for image loading
+      // Add timeout for image loading (2 minutes for very large files)
+      const timeoutDuration = file.size > 35 * 1024 * 1024 ? 120000 : 60000;
+      console.log(`Setting image load timeout to ${timeoutDuration / 1000} seconds`);
+
       const loadTimeout = setTimeout(() => {
         if (!imageRef.current) {
-          console.error('Image loading timeout after 30 seconds');
-          setLoadError('Image loading timed out. The file may be too large or have encoding issues. Try a smaller image or re-export from your source.');
+          console.error(`Image loading timeout after ${timeoutDuration / 1000} seconds`);
+          setLoadError(`Image loading timed out after ${timeoutDuration / 1000} seconds. The file is too large or complex for this browser. Please try:\n\n1. Compress the image to under 25MB\n2. Reduce resolution to 4000px max width\n3. Re-export as standard JPEG with lower quality\n4. Try a different browser (Chrome/Edge handle large images better)`);
           setLoadProgress(0);
           setLoading(false);
           URL.revokeObjectURL(blobUrl);
         }
-      }, 30000); // 30 second timeout
+      }, timeoutDuration);
 
       originalImg.onload = async () => {
         clearTimeout(loadTimeout);
@@ -739,7 +747,10 @@ const ImageryAnalyzer = ({
                     style={{ width: `${loadProgress}%` }}
                   />
                 </div>
-                <p className="text-sm text-blue-700 mt-2">{loadProgress}% complete</p>
+                <p className="text-sm text-blue-700 mt-2">
+                  {loadProgress}% complete
+                  {loadProgress === 40 && ' - Decoding image (this may take 30-120 seconds for large files)...'}
+                </p>
               </div>
             </div>
           </div>
