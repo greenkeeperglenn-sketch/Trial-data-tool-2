@@ -1,20 +1,22 @@
-import React from 'react';
-import { Plus, Trash2 } from 'lucide-react';
+import React, { useState } from 'react';
+import { Plus, Trash2, ClipboardPaste } from 'lucide-react';
 
 const TrialSetup = ({ config, onConfigChange, onNext, onBack }) => {
-  
+  const [showBulkPaste, setShowBulkPaste] = useState(false);
+  const [bulkPasteText, setBulkPasteText] = useState('');
+
   const updateConfig = (field, value) => {
     onConfigChange({ ...config, [field]: value });
   };
 
   const updateTreatmentCount = (num) => {
-    const newTreatments = Array(num).fill(0).map((_, i) => 
+    const newTreatments = Array(num).fill(0).map((_, i) =>
       config.treatments[i] || `Treatment ${String.fromCharCode(65 + i)}`
     );
-    onConfigChange({ 
-      ...config, 
-      numTreatments: num, 
-      treatments: newTreatments 
+    onConfigChange({
+      ...config,
+      numTreatments: num,
+      treatments: newTreatments
     });
   };
 
@@ -22,6 +24,35 @@ const TrialSetup = ({ config, onConfigChange, onNext, onBack }) => {
     const newTreatments = [...config.treatments];
     newTreatments[idx] = name;
     onConfigChange({ ...config, treatments: newTreatments });
+  };
+
+  const handleBulkPaste = () => {
+    // Split by newlines and filter out empty lines
+    const lines = bulkPasteText
+      .split('\n')
+      .map(line => line.trim())
+      .filter(line => line.length > 0);
+
+    if (lines.length === 0) {
+      alert('Please paste treatment names (one per line)');
+      return;
+    }
+
+    if (lines.length > 17) {
+      alert('Maximum 17 treatments allowed. Only the first 17 will be used.');
+    }
+
+    const treatmentNames = lines.slice(0, 17);
+
+    onConfigChange({
+      ...config,
+      numTreatments: treatmentNames.length,
+      treatments: treatmentNames
+    });
+
+    // Close bulk paste and clear text
+    setShowBulkPaste(false);
+    setBulkPasteText('');
   };
 
   const updateAssessmentType = (idx, field, value) => {
@@ -102,19 +133,78 @@ const TrialSetup = ({ config, onConfigChange, onNext, onBack }) => {
 
         {/* Treatment Names */}
         <div>
-          <label className="block text-sm font-medium mb-2">Treatment Names</label>
-          <div className="space-y-2">
-            {config.treatments.map((treatment, idx) => (
-              <input
-                key={idx}
-                type="text"
-                value={treatment}
-                onChange={(e) => updateTreatmentName(idx, e.target.value)}
-                className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                placeholder={`Treatment ${String.fromCharCode(65 + idx)}`}
-              />
-            ))}
+          <div className="flex items-center justify-between mb-2">
+            <label className="block text-sm font-medium">Treatment Names</label>
+            <button
+              onClick={() => setShowBulkPaste(!showBulkPaste)}
+              className="flex items-center gap-1 text-sm text-blue-600 hover:text-blue-700 transition"
+            >
+              <ClipboardPaste size={16} />
+              {showBulkPaste ? 'Individual Inputs' : 'Bulk Paste'}
+            </button>
           </div>
+
+          {showBulkPaste ? (
+            /* Bulk Paste Mode */
+            <div className="space-y-3">
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                <p className="text-sm text-blue-900 mb-1">
+                  <strong>Paste treatment names from Excel:</strong>
+                </p>
+                <ul className="text-xs text-blue-700 list-disc list-inside space-y-1">
+                  <li>Copy a column from Excel (Ctrl+C)</li>
+                  <li>Paste below (one treatment per line)</li>
+                  <li>Max 17 treatments</li>
+                </ul>
+              </div>
+
+              <textarea
+                value={bulkPasteText}
+                onChange={(e) => setBulkPasteText(e.target.value)}
+                className="w-full p-3 border rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono text-sm"
+                rows={10}
+                placeholder="Paste treatment names here...&#10;Treatment A&#10;Treatment B&#10;Treatment C&#10;..."
+              />
+
+              <div className="flex gap-2">
+                <button
+                  onClick={handleBulkPaste}
+                  className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition"
+                >
+                  Apply Treatment Names
+                </button>
+                <button
+                  onClick={() => {
+                    setShowBulkPaste(false);
+                    setBulkPasteText('');
+                  }}
+                  className="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 transition"
+                >
+                  Cancel
+                </button>
+              </div>
+
+              {bulkPasteText && (
+                <p className="text-sm text-gray-600">
+                  Preview: {bulkPasteText.split('\n').filter(line => line.trim()).length} treatments detected
+                </p>
+              )}
+            </div>
+          ) : (
+            /* Individual Input Mode */
+            <div className="space-y-2">
+              {config.treatments.map((treatment, idx) => (
+                <input
+                  key={idx}
+                  type="text"
+                  value={treatment}
+                  onChange={(e) => updateTreatmentName(idx, e.target.value)}
+                  className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  placeholder={`Treatment ${String.fromCharCode(65 + idx)}`}
+                />
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Assessment Types */}
