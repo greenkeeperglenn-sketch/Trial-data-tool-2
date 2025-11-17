@@ -12,6 +12,13 @@ const ImageryAnalyzer = ({
   onPhotosChange,
   onAssessmentDatesChange
 }) => {
+  // Log mount and props to help debug blank-screen issues
+  try {
+    // eslint-disable-next-line no-console
+    console.log('[ImageryAnalyzer] mount', { gridLayout: !!gridLayout, config: !!config, assessmentDatesLength: assessmentDates?.length });
+  } catch (e) {
+    // swallow logging errors
+  }
   // Auto-detect grid dimensions from trial setup
   const trialRows = gridLayout?.length || 4;
   const trialCols = gridLayout?.[0]?.length || 4;
