@@ -254,12 +254,18 @@ function getDateInterpretations(dateStr) {
     };
   }
 
-  // Parse DD/MM/YYYY or MM/DD/YYYY format
-  const dateMatch = str.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+  // Parse DD/MM/YYYY or DD.MM.YY format (support /, -, . separators and 2 or 4 digit years)
+  const dateMatch = str.match(/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2,4})$/);
   if (dateMatch) {
     const first = parseInt(dateMatch[1], 10);
     const second = parseInt(dateMatch[2], 10);
-    const year = parseInt(dateMatch[3], 10);
+    let year = parseInt(dateMatch[3], 10);
+
+    // Convert 2-digit year to 4-digit year
+    if (year < 100) {
+      // Assume 20xx for years 00-99
+      year = 2000 + year;
+    }
 
     // Determine if date is ambiguous
     const firstIsValidDay = first >= 1 && first <= 31;
@@ -271,24 +277,32 @@ function getDateInterpretations(dateStr) {
     if (secondIsValidMonth && firstIsValidDay) {
       const ukDate = `${year}-${String(second).padStart(2, '0')}-${String(first).padStart(2, '0')}`;
       const ukDateObj = new Date(year, second - 1, first);
-      options.push({
-        format: 'UK (DD/MM/YYYY)',
-        date: ukDate,
-        label: `${String(first).padStart(2, '0')}/${String(second).padStart(2, '0')}/${year}`,
-        readable: ukDateObj.toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' })
-      });
+
+      // Validate the date is actually valid (e.g., not Feb 31)
+      if (ukDateObj.getMonth() === second - 1 && ukDateObj.getDate() === first) {
+        options.push({
+          format: 'UK (DD/MM/YYYY)',
+          date: ukDate,
+          label: `${String(first).padStart(2, '0')}/${String(second).padStart(2, '0')}/${year}`,
+          readable: ukDateObj.toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' })
+        });
+      }
     }
 
     // US Format (MM/DD/YYYY) - only add if DIFFERENT from UK and both are valid
     if (firstIsValidMonth && secondIsValidDay && first !== second) {
       const usDate = `${year}-${String(first).padStart(2, '0')}-${String(second).padStart(2, '0')}`;
       const usDateObj = new Date(year, first - 1, second);
-      options.push({
-        format: 'US (MM/DD/YYYY)',
-        date: usDate,
-        label: `${String(first).padStart(2, '0')}/${String(second).padStart(2, '0')}/${year}`,
-        readable: usDateObj.toLocaleDateString('en-US', { day: '2-digit', month: 'long', year: 'numeric' })
-      });
+
+      // Validate the date is actually valid (e.g., not Feb 31)
+      if (usDateObj.getMonth() === first - 1 && usDateObj.getDate() === second) {
+        options.push({
+          format: 'US (MM/DD/YYYY)',
+          date: usDate,
+          label: `${String(first).padStart(2, '0')}/${String(second).padStart(2, '0')}/${year}`,
+          readable: usDateObj.toLocaleDateString('en-US', { day: '2-digit', month: 'long', year: 'numeric' })
+        });
+      }
     }
 
     // Only need confirmation if genuinely ambiguous (both interpretations valid and different)
@@ -344,6 +358,7 @@ function getDateInterpretations(dateStr) {
 /**
  * Normalize date string to YYYY-MM-DD format
  * Handles both UK (DD/MM/YYYY) and US (MM/DD/YYYY) formats
+ * Supports /, -, . separators and 2-digit or 4-digit years
  */
 function normalizeDateFormat(dateStr) {
   if (!dateStr) return new Date().toISOString().split('T')[0];
@@ -355,15 +370,20 @@ function normalizeDateFormat(dateStr) {
     return str;
   }
 
-  // Handle DD/MM/YYYY or DD-MM-YYYY (UK format)
-  const ukMatch = str.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+  // Handle DD/MM/YYYY, DD.MM.YY, DD-MM-YYYY (UK format)
+  // Support /, -, . separators and 2 or 4 digit years
+  const ukMatch = str.match(/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2,4})$/);
   if (ukMatch) {
     const day = parseInt(ukMatch[1], 10);
     const month = parseInt(ukMatch[2], 10);
-    const year = parseInt(ukMatch[3], 10);
+    let year = parseInt(ukMatch[3], 10);
 
-    // If day > 12, it must be UK format (DD/MM/YYYY)
-    // Otherwise, ambiguous - assume UK format for consistency
+    // Convert 2-digit year to 4-digit year
+    if (year < 100) {
+      year = 2000 + year;
+    }
+
+    // Assume UK format (DD/MM/YYYY) - most common for your use case
     const paddedMonth = String(month).padStart(2, '0');
     const paddedDay = String(day).padStart(2, '0');
 
@@ -374,7 +394,7 @@ function normalizeDateFormat(dateStr) {
   }
 
   // Handle YYYY-MM-DD with different separators
-  const isoMatch = str.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})$/);
+  const isoMatch = str.match(/^(\d{4})[\/\-\.](\d{1,2})[\/\-\.](\d{1,2})$/);
   if (isoMatch) {
     const year = isoMatch[1];
     const month = String(parseInt(isoMatch[2], 10)).padStart(2, '0');
