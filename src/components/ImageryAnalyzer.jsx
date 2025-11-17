@@ -39,6 +39,7 @@ const ImageryAnalyzer = ({
   const [progress, setProgress] = useState(0);
   const [committed, setCommitted] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [loadProgress, setLoadProgress] = useState(0);
   const [loadError, setLoadError] = useState(null);
 
   // Refs (required for canvas, file input, and worker)
@@ -98,6 +99,7 @@ const ImageryAnalyzer = ({
     setLoading(true);
     setLoadError(null);
     setCommitted(false);
+    setLoadProgress(10); // Initial progress
 
     // Allow UI to update before starting heavy processing
     await new Promise(resolve => setTimeout(resolve, 100));
@@ -105,14 +107,19 @@ const ImageryAnalyzer = ({
     try {
       console.log(`Loading image: ${file.name} (${(file.size / 1024 / 1024).toFixed(2)}MB)`);
 
+      setLoadProgress(25); // Creating blob URL
+
       // FAST: Create blob URL immediately (no need to convert to data URL first)
       const blobUrl = URL.createObjectURL(file);
+
+      setLoadProgress(40); // Blob URL created
 
       // Load original high-res image for extraction
       const originalImg = new Image();
 
       originalImg.onload = async () => {
         try {
+          setLoadProgress(60); // Image loaded
           console.log('Original image loaded:', originalImg.width, originalImg.height);
           originalImageRef.current = originalImg;
 
@@ -121,43 +128,103 @@ const ImageryAnalyzer = ({
 
           if (originalImg.width > maxDisplaySize || originalImg.height > maxDisplaySize) {
             console.log('Downsampling large image for display...');
+            setLoadProgress(70); // Starting downsample
 
             // Use setTimeout to allow UI to update
             await new Promise(resolve => setTimeout(resolve, 50));
 
-            const scale = Math.min(maxDisplaySize / originalImg.width, maxDisplaySize / originalImg.height);
-            const displayCanvas = document.createElement('canvas');
-            displayCanvas.width = Math.floor(originalImg.width * scale);
-            displayCanvas.height = Math.floor(originalImg.height * scale);
-            const ctx = displayCanvas.getContext('2d');
-            ctx.drawImage(originalImg, 0, 0, displayCanvas.width, displayCanvas.height);
+            try {
+              const scale = Math.min(maxDisplaySize / originalImg.width, maxDisplaySize / originalImg.height);
+              const displayCanvas = document.createElement('canvas');
+              displayCanvas.width = Math.floor(originalImg.width * scale);
+              displayCanvas.height = Math.floor(originalImg.height * scale);
 
-            const displayImgObj = new Image();
-            displayImgObj.onload = () => {
-              imageRef.current = displayImgObj;
-              setImageSrc(displayImgObj.src);
+              console.log(`Downsampling from ${originalImg.width}x${originalImg.height} to ${displayCanvas.width}x${displayCanvas.height}`);
 
-              // Set corner positions based on display image size
+              const ctx = displayCanvas.getContext('2d');
+              if (!ctx) {
+                throw new Error('Failed to get canvas context');
+              }
+
+              setLoadProgress(80); // Drawing to canvas
+              ctx.drawImage(originalImg, 0, 0, displayCanvas.width, displayCanvas.height);
+
+              setLoadProgress(90); // Converting to data URL
+
+              // Try to convert to data URL
+              let dataUrl;
+              try {
+                dataUrl = displayCanvas.toDataURL('image/jpeg', 0.85);
+              } catch (e) {
+                console.warn('Failed to create data URL, using blob URL instead:', e);
+                // Fallback: use original blob URL if data URL creation fails
+                imageRef.current = originalImg;
+                setImageSrc(blobUrl);
+                setCorners([
+                  { x: displayCanvas.width * 0.1, y: displayCanvas.height * 0.1, label: 'TL' },
+                  { x: displayCanvas.width * 0.9, y: displayCanvas.height * 0.1, label: 'TR' },
+                  { x: displayCanvas.width * 0.9, y: displayCanvas.height * 0.9, label: 'BR' },
+                  { x: displayCanvas.width * 0.1, y: displayCanvas.height * 0.9, label: 'BL' }
+                ]);
+                setLoadProgress(100);
+                setLoading(false);
+                console.log('Display image ready (using blob URL fallback)');
+                return;
+              }
+
+              const displayImgObj = new Image();
+              displayImgObj.onload = () => {
+                imageRef.current = displayImgObj;
+                setImageSrc(displayImgObj.src);
+
+                // Set corner positions based on display image size
+                setCorners([
+                  { x: displayImgObj.width * 0.1, y: displayImgObj.height * 0.1, label: 'TL' },
+                  { x: displayImgObj.width * 0.9, y: displayImgObj.height * 0.1, label: 'TR' },
+                  { x: displayImgObj.width * 0.9, y: displayImgObj.height * 0.9, label: 'BR' },
+                  { x: displayImgObj.width * 0.1, y: displayImgObj.height * 0.9, label: 'BL' }
+                ]);
+
+                setLoadProgress(100);
+                setLoading(false);
+                console.log('Display image ready');
+              };
+
+              displayImgObj.onerror = (e) => {
+                console.error('Failed to load downsampled image, using original instead:', e);
+                // Fallback: use original blob URL if downsampled image fails to load
+                imageRef.current = originalImg;
+                setImageSrc(blobUrl);
+                setCorners([
+                  { x: displayCanvas.width * 0.1, y: displayCanvas.height * 0.1, label: 'TL' },
+                  { x: displayCanvas.width * 0.9, y: displayCanvas.height * 0.1, label: 'TR' },
+                  { x: displayCanvas.width * 0.9, y: displayCanvas.height * 0.9, label: 'BR' },
+                  { x: displayCanvas.width * 0.1, y: displayCanvas.height * 0.9, label: 'BL' }
+                ]);
+                setLoadProgress(100);
+                setLoading(false);
+                console.log('Display image ready (using original after downsample error)');
+              };
+
+              displayImgObj.src = dataUrl;
+            } catch (downsampleError) {
+              console.error('Downsampling failed, using original image:', downsampleError);
+              // Complete fallback: just use the original image
+              imageRef.current = originalImg;
+              setImageSrc(blobUrl);
               setCorners([
-                { x: displayImgObj.width * 0.1, y: displayImgObj.height * 0.1, label: 'TL' },
-                { x: displayImgObj.width * 0.9, y: displayImgObj.height * 0.1, label: 'TR' },
-                { x: displayImgObj.width * 0.9, y: displayImgObj.height * 0.9, label: 'BR' },
-                { x: displayImgObj.width * 0.1, y: displayImgObj.height * 0.9, label: 'BL' }
+                { x: originalImg.width * 0.1, y: originalImg.height * 0.1, label: 'TL' },
+                { x: originalImg.width * 0.9, y: originalImg.height * 0.1, label: 'TR' },
+                { x: originalImg.width * 0.9, y: originalImg.height * 0.9, label: 'BR' },
+                { x: originalImg.width * 0.1, y: originalImg.height * 0.9, label: 'BL' }
               ]);
-
+              setLoadProgress(100);
               setLoading(false);
-              console.log('Display image ready');
-            };
-
-            displayImgObj.onerror = () => {
-              setLoadError('Failed to process downsampled image. Please try a smaller image.');
-              setLoading(false);
-              URL.revokeObjectURL(blobUrl);
-            };
-
-            displayImgObj.src = displayCanvas.toDataURL('image/jpeg', 0.9);
+              console.log('Image ready (using original after downsample failure)');
+            }
           } else {
             // Image is small enough to display directly
+            setLoadProgress(90);
             imageRef.current = originalImg;
             setImageSrc(blobUrl);
 
@@ -169,12 +236,14 @@ const ImageryAnalyzer = ({
               { x: originalImg.width * 0.1, y: originalImg.height * 0.9, label: 'BL' }
             ]);
 
+            setLoadProgress(100);
             setLoading(false);
             console.log('Image ready');
           }
         } catch (error) {
           console.error('Error processing image:', error);
           setLoadError(`Failed to process image: ${error.message}`);
+          setLoadProgress(0);
           setLoading(false);
           URL.revokeObjectURL(blobUrl);
         }
@@ -183,6 +252,7 @@ const ImageryAnalyzer = ({
       originalImg.onerror = (error) => {
         console.error('Image load error:', error);
         setLoadError('Failed to load image. The file may be corrupted or in an unsupported format.');
+        setLoadProgress(0);
         setLoading(false);
         URL.revokeObjectURL(blobUrl);
       };
@@ -604,6 +674,17 @@ const ImageryAnalyzer = ({
               <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600"></div>
               <p className="text-lg font-medium text-blue-900">Loading image...</p>
               <p className="text-sm text-blue-700">Please wait while we process your image</p>
+
+              {/* Progress Bar */}
+              <div className="w-full max-w-md">
+                <div className="w-full bg-blue-200 rounded-full h-3 overflow-hidden">
+                  <div
+                    className="bg-emerald-600 h-3 transition-all duration-300"
+                    style={{ width: `${loadProgress}%` }}
+                  />
+                </div>
+                <p className="text-sm text-blue-700 mt-2">{loadProgress}% complete</p>
+              </div>
             </div>
           </div>
         )}
@@ -741,6 +822,7 @@ const ImageryAnalyzer = ({
                   setFileDate(null);
                   setLoadError(null);
                   setLoading(false);
+                  setLoadProgress(0);
                   if (originalImageRef.current) {
                     originalImageRef.current.src = '';
                     originalImageRef.current = null;
