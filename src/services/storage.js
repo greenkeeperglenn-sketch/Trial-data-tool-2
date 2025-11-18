@@ -20,6 +20,7 @@ export const uploadPlotImage = async (imageBlob, trialId, date, plotId) => {
   try {
     // Create file path: trialId/date/plotId.jpg
     const fileName = `${trialId}/${date}/${plotId}.jpg`;
+    console.log(`[Storage] Uploading ${fileName}, size: ${imageBlob.size} bytes`);
 
     // Upload to Supabase Storage
     const { data, error } = await supabase.storage
@@ -30,16 +31,23 @@ export const uploadPlotImage = async (imageBlob, trialId, date, plotId) => {
         cacheControl: '3600'
       });
 
-    if (error) throw error;
+    if (error) {
+      console.error(`[Storage] Upload error for ${fileName}:`, error);
+      throw error;
+    }
+
+    console.log(`[Storage] Upload successful for ${fileName}:`, data);
 
     // Get public URL
     const { data: { publicUrl } } = supabase.storage
       .from(BUCKET_NAME)
       .getPublicUrl(fileName);
 
+    console.log(`[Storage] Public URL for ${fileName}:`, publicUrl);
+
     return publicUrl;
   } catch (error) {
-    console.error('Error uploading plot image:', error);
+    console.error(`[Storage] Error uploading plot image ${plotId}:`, error);
     throw error;
   }
 };

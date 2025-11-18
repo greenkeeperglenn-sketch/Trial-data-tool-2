@@ -263,8 +263,19 @@ const ImageryAnalyzer = ({
       setIsProcessing(true);
       setProgress({ current: 0, total: rows * cols, stage: 'Extracting plots' });
 
-      // Ensure storage bucket exists
-      await ensureBucketExists();
+      console.log('[ImageryAnalyzer] Starting grid extraction...');
+      console.log('[ImageryAnalyzer] Trial ID:', trialId);
+      console.log('[ImageryAnalyzer] Date:', fileDate);
+      console.log('[ImageryAnalyzer] Grid size:', rows, 'x', cols);
+
+      // Ensure storage bucket exists (note: requires admin permissions or pre-created bucket)
+      try {
+        await ensureBucketExists();
+        console.log('[ImageryAnalyzer] Storage bucket check complete');
+      } catch (bucketError) {
+        console.warn('[ImageryAnalyzer] Could not verify/create bucket (expected if using anon key):', bucketError);
+        // Continue anyway - bucket might already exist
+      }
 
       // Extract all grid cells
       const cells = await extractGridCells(
@@ -294,26 +305,46 @@ const ImageryAnalyzer = ({
         setProgress({ current, total, stage: 'Uploading to storage' });
       });
 
-      console.log('Upload results:', uploadResults);
+      console.log('[ImageryAnalyzer] Upload results:', uploadResults);
+
+      // Count successful uploads
+      const successCount = Object.values(uploadResults).filter(url => url !== null).length;
+      const failCount = Object.values(uploadResults).filter(url => url === null).length;
+      console.log('[ImageryAnalyzer] Successful uploads:', successCount);
+      console.log('[ImageryAnalyzer] Failed uploads:', failCount);
 
       // Update photos object with URLs
       const updatedPhotos = { ...(photos || {}) };
+      console.log('[ImageryAnalyzer] Current photos object:', photos);
+
       Object.entries(uploadResults).forEach(([plotId, url]) => {
         if (url) {
           const key = `${fileDate}_${plotId}`;
+          console.log(`[ImageryAnalyzer] Adding photo for key: ${key}, URL: ${url}`);
           // Store URL instead of data URL
           updatedPhotos[key] = updatedPhotos[key] || [];
           updatedPhotos[key].push(url);
+        } else {
+          console.error(`[ImageryAnalyzer] Failed to upload plot ${plotId}`);
         }
       });
+
+      console.log('[ImageryAnalyzer] Updated photos object:', updatedPhotos);
+      console.log('[ImageryAnalyzer] Total photo keys:', Object.keys(updatedPhotos).length);
 
       // Call onPhotosChange with updated photos
       if (onPhotosChange) {
         onPhotosChange(updatedPhotos);
+        console.log('[ImageryAnalyzer] Photos state updated via onPhotosChange');
       }
 
       setIsProcessing(false);
-      alert(`✅ Success!\n\nExtracted and uploaded ${cells.length} plot images for ${fileDate}\n\nImages are now saved in the database.`);
+
+      if (failCount > 0) {
+        alert(`⚠️ Partial Success\n\nExtracted: ${cells.length} images\nUploaded: ${successCount}\nFailed: ${failCount}\n\nCheck console for details. You may need to:\n1. Create 'plot-images' bucket in Supabase Storage\n2. Make bucket public\n3. Check Supabase credentials`);
+      } else {
+        alert(`✅ Success!\n\nExtracted and uploaded ${cells.length} plot images for ${fileDate}\n\nImages are now saved in the database.`);
+      }
 
       // Clear the image to allow processing another one
       setImageSrc(null);
