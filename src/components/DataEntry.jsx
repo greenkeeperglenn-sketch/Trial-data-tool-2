@@ -11,6 +11,7 @@ import PresentationMode from './PresentationMode';
 import TrialConfigEditor from './TrialConfigEditor';
 
 const DataEntry = ({
+  trialId,
   config,
   gridLayout,
   orientation,
@@ -421,8 +422,10 @@ const DataEntry = ({
           {viewMode === 'imagery' && (
             <ErrorBoundary>
               <ImageryAnalyzer
+                trialId={trialId}
                 gridLayout={gridLayout}
                 config={config}
+                photos={photos}
                 assessmentDates={assessmentDates}
                 currentDateObj={currentDateObj}
                 selectedAssessmentType={selectedAssessmentType}

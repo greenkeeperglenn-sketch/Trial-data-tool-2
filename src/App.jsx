@@ -611,6 +611,7 @@ const App = () => {
   if (step === 'entry') {
     return (
       <DataEntry
+        trialId={currentTrialId}
         config={config}
         gridLayout={gridLayout}
         orientation={orientation}

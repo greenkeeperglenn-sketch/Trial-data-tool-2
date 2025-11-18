@@ -1,9 +1,13 @@
 import React, { useState, useRef, useEffect } from 'react';
 import piexif from 'piexifjs';
+import { extractGridCells } from '../utils/gridExtractor';
+import { uploadPlotImages, ensureBucketExists } from '../services/storage';
 
 const ImageryAnalyzer = ({
+  trialId,
   gridLayout,
   config,
+  photos,
   assessmentDates,
   currentDateObj,
   selectedAssessmentType,
@@ -35,6 +39,8 @@ const ImageryAnalyzer = ({
     { x: 50, y: 550, label: 'BL' }
   ]);
   const [draggingCorner, setDraggingCorner] = useState(null);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [progress, setProgress] = useState({ current: 0, total: 0, stage: '' });
 
   // Refs (required for canvas and file input)
   const fileInputRef = useRef(null);
@@ -246,6 +252,82 @@ const ImageryAnalyzer = ({
     setDraggingCorner(null);
   };
 
+  // Handle grid extraction and upload
+  const handleSubmitGrid = async () => {
+    if (!imageRef.current || !trialId || !fileDate) {
+      alert('Missing required data. Please ensure image is loaded and trial is saved.');
+      return;
+    }
+
+    try {
+      setIsProcessing(true);
+      setProgress({ current: 0, total: rows * cols, stage: 'Extracting plots' });
+
+      // Ensure storage bucket exists
+      await ensureBucketExists();
+
+      // Extract all grid cells
+      const cells = await extractGridCells(
+        imageRef.current,
+        rows,
+        cols,
+        corners,
+        gridLayout,
+        (current, total) => {
+          setProgress({ current, total, stage: 'Extracting plots' });
+        }
+      );
+
+      console.log(`Extracted ${cells.length} plot images`);
+
+      // Prepare uploads
+      const uploads = cells.map(cell => ({
+        imageBlob: cell.blob,
+        trialId,
+        date: fileDate,
+        plotId: cell.plotId
+      }));
+
+      // Upload to Supabase Storage
+      setProgress({ current: 0, total: uploads.length, stage: 'Uploading to storage' });
+      const uploadResults = await uploadPlotImages(uploads, (current, total) => {
+        setProgress({ current, total, stage: 'Uploading to storage' });
+      });
+
+      console.log('Upload results:', uploadResults);
+
+      // Update photos object with URLs
+      const updatedPhotos = { ...(photos || {}) };
+      Object.entries(uploadResults).forEach(([plotId, url]) => {
+        if (url) {
+          const key = `${fileDate}_${plotId}`;
+          // Store URL instead of data URL
+          updatedPhotos[key] = updatedPhotos[key] || [];
+          updatedPhotos[key].push(url);
+        }
+      });
+
+      // Call onPhotosChange with updated photos
+      if (onPhotosChange) {
+        onPhotosChange(updatedPhotos);
+      }
+
+      setIsProcessing(false);
+      alert(`✅ Success!\n\nExtracted and uploaded ${cells.length} plot images for ${fileDate}\n\nImages are now saved in the database.`);
+
+      // Clear the image to allow processing another one
+      setImageSrc(null);
+      setFileDate(null);
+      if (imageSrc && imageSrc.startsWith('blob:')) {
+        URL.revokeObjectURL(imageSrc);
+      }
+    } catch (error) {
+      console.error('Error processing grid:', error);
+      setIsProcessing(false);
+      alert(`❌ Error: ${error.message}\n\nPlease try again or check console for details.`);
+    }
+  };
+
   return (
     <div className="space-y-4">
       <div className="bg-white rounded-lg shadow p-6">
@@ -339,14 +421,33 @@ const ImageryAnalyzer = ({
 
             {/* Submit Button */}
             <button
-              onClick={() => {
-                console.log('Grid committed with:', { rows, cols, corners, fileDate });
-                alert(`✓ Grid saved!\n\nRows: ${rows}\nCols: ${cols}\nDate: ${fileDate}\n\nNext: Extract plots (coming soon)`);
-              }}
-              className="w-full px-6 py-3 bg-emerald-600 text-white font-semibold rounded-lg hover:bg-emerald-700 transition"
+              onClick={handleSubmitGrid}
+              disabled={isProcessing || !trialId}
+              className="w-full px-6 py-3 bg-emerald-600 text-white font-semibold rounded-lg hover:bg-emerald-700 transition disabled:bg-gray-400 disabled:cursor-not-allowed"
             >
-              ✓ Submit Grid Alignment
+              {isProcessing ? (
+                <span>
+                  {progress.stage} ({progress.current}/{progress.total})
+                </span>
+              ) : (
+                '✓ Extract Grids & Save to Database'
+              )}
             </button>
+
+            {/* Progress Indicator */}
+            {isProcessing && (
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <div className="w-full bg-blue-200 rounded-full h-2.5 mb-2">
+                  <div
+                    className="bg-blue-600 h-2.5 rounded-full transition-all duration-300"
+                    style={{ width: `${(progress.current / progress.total) * 100}%` }}
+                  ></div>
+                </div>
+                <p className="text-sm text-blue-800 text-center">
+                  {progress.stage}: {progress.current} / {progress.total}
+                </p>
+              </div>
+            )}
           </div>
         )}
       </div>
