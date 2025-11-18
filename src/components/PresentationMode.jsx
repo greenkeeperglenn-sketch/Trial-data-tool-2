@@ -425,6 +425,13 @@ const PresentationMode = ({
   photos,
   notes
 }) => {
+  // Debug: Log photos prop
+  useEffect(() => {
+    console.log('[PresentationMode] Photos prop:', photos);
+    console.log('[PresentationMode] Photo keys:', Object.keys(photos || {}));
+    console.log('[PresentationMode] Total photos:', Object.keys(photos || {}).length);
+  }, [photos]);
+
   const [currentSlide, setCurrentSlide] = useState(0);
   const [visibleTreatments, setVisibleTreatments] = useState({});
   const [visibleAssessments, setVisibleAssessments] = useState({});
@@ -531,21 +538,28 @@ const PresentationMode = ({
 
   // Get photos for current date (with date normalization)
   const getPhotosForDate = (date) => {
+    console.log('[PresentationMode] getPhotosForDate called with:', date);
     const normalizedDate = normalizeDateFormat(date);
+    console.log('[PresentationMode] Normalized current date:', normalizedDate);
     const datePhotos = {};
 
     Object.entries(photos).forEach(([key, photoArray]) => {
+      console.log('[PresentationMode] Checking photo key:', key, 'Array length:', photoArray?.length);
       // Extract the date part from the key and normalize it
       const keyParts = key.split('_');
       if (keyParts.length >= 2) {
         const photoDate = normalizeDateFormat(keyParts[0]);
+        const plotId = keyParts.slice(1).join('_'); // In case plot ID has underscores
+        console.log(`[PresentationMode] Photo date: ${photoDate}, Plot ID: ${plotId}, Match: ${photoDate === normalizedDate}`);
         if (photoDate === normalizedDate) {
-          const plotId = keyParts.slice(1).join('_'); // In case plot ID has underscores
           datePhotos[plotId] = photoArray;
+          console.log(`[PresentationMode] ✓ Added photos for plot ${plotId}:`, photoArray);
         }
       }
     });
 
+    console.log('[PresentationMode] Total photos for date:', Object.keys(datePhotos).length);
+    console.log('[PresentationMode] Date photos object:', datePhotos);
     return datePhotos;
   };
 
@@ -742,7 +756,13 @@ const PresentationMode = ({
   };
 
   const renderPhotos = () => {
-    if (Object.keys(currentPhotos).length === 0) return null;
+    console.log('[PresentationMode] renderPhotos - currentPhotos:', currentPhotos);
+    console.log('[PresentationMode] renderPhotos - currentPhotos keys:', Object.keys(currentPhotos));
+
+    if (Object.keys(currentPhotos).length === 0) {
+      console.log('[PresentationMode] No photos to render for current date');
+      return null;
+    }
 
     // Collect all photos with their plot info including treatment index
     const allPhotos = [];
@@ -751,6 +771,7 @@ const PresentationMode = ({
       .forEach(([treatment, plots]) => {
         plots.forEach(plot => {
           const plotPhotos = currentPhotos[plot.id];
+          console.log(`[PresentationMode] Plot ${plot.id} photos:`, plotPhotos);
           if (plotPhotos && plotPhotos.length > 0) {
             // Find position in gridLayout (including blanks)
             let rowIdx = -1;
