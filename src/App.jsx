@@ -141,8 +141,16 @@ const App = () => {
       created: trials[currentTrialId]?.created || new Date().toISOString()
     };
 
+    console.log('[App] Auto-saving trial...');
+    console.log('[App] Trial ID:', currentTrialId);
+    console.log('[App] Photos to save:', photos);
+    console.log('[App] Photo keys:', Object.keys(photos || {}));
+    console.log('[App] Total photo keys:', Object.keys(photos || {}).length);
+
     try {
       const updatedTrial = await updateTrial(currentTrialId, trialData);
+      console.log('[App] Trial saved successfully');
+      console.log('[App] Saved trial photos:', updatedTrial.photos);
       setTrials(prev => ({ ...prev, [currentTrialId]: updatedTrial }));
     } catch (error) {
       console.error('Error saving trial:', error);
@@ -152,12 +160,23 @@ const App = () => {
 
   // Auto-save when data changes (debounced)
   useEffect(() => {
+    console.log('[App] Auto-save effect triggered');
+    console.log('[App] Current photos state:', photos);
+    console.log('[App] Photo keys count:', Object.keys(photos || {}).length);
+
     if (currentTrialId && gridLayout.length > 0 && user) {
+      console.log('[App] Scheduling auto-save in 1 second...');
       const timeout = setTimeout(() => {
         saveCurrentTrial();
       }, 1000); // Debounce 1 second
 
       return () => clearTimeout(timeout);
+    } else {
+      console.log('[App] Skipping auto-save:', {
+        hasTrialId: !!currentTrialId,
+        hasGrid: gridLayout.length > 0,
+        hasUser: !!user
+      });
     }
   }, [config, gridLayout, orientation, layoutLocked, assessmentDates, photos, notes]);
 
@@ -220,6 +239,11 @@ const App = () => {
     const trial = trials[trialId];
     if (!trial) return;
 
+    console.log('[App] Loading trial:', trialId);
+    console.log('[App] Trial photos from database:', trial.photos);
+    console.log('[App] Trial photo keys:', Object.keys(trial.photos || {}));
+    console.log('[App] Trial photo count:', Object.keys(trial.photos || {}).length);
+
     setCurrentTrialId(trialId);
     setConfig(trial.config);
     setGridLayout(trial.gridLayout || []);
@@ -229,6 +253,8 @@ const App = () => {
     setPhotos(trial.photos || {});
     setNotes(trial.notes || {});
     setStep('entry');
+
+    console.log('[App] Photos state set to:', trial.photos);
   };
 
   // Delete trial
