@@ -426,6 +426,7 @@ const DataEntry = ({
                 assessmentDates={assessmentDates}
                 currentDateObj={currentDateObj}
                 selectedAssessmentType={selectedAssessmentType}
+                photos={photos}
                 onSelectAssessmentType={setSelectedAssessmentType}
                 onBulkUpdateData={handleBulkUpdateData}
                 onPhotosChange={onPhotosChange}
