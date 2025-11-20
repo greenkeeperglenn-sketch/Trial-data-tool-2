@@ -86,6 +86,22 @@ const TrialLibrary = ({ trials, loading, user, onCreateNew, onLoadTrial, onDelet
     return { dataPoints, imageCount };
   };
 
+  // Determine trial status color
+  const getTrialStatusColor = (trial) => {
+    // Green if completed
+    if (trial.completed) {
+      return 'bg-green-50 border-l-4 border-green-500';
+    }
+
+    // Red if protocol not submitted
+    if (!trial.protocolCompleted) {
+      return 'bg-red-50 border-l-4 border-red-500';
+    }
+
+    // Orange if in progress (protocol done but not completed)
+    return 'bg-orange-50 border-l-4 border-orange-500';
+  };
+
   return (
     <div className="p-6 max-w-6xl mx-auto">
       {/* Header */}
@@ -168,14 +184,18 @@ const TrialLibrary = ({ trials, loading, user, onCreateNew, onLoadTrial, onDelet
             const isEditing = editingTrial === trial.id;
             const isEditingWorkflow = editingWorkflow === trial.id;
             const stats = calculateStats(trial);
+            const statusColor = getTrialStatusColor(trial);
 
             return (
               <div
                 key={trial.id}
-                className="bg-white rounded-lg shadow hover:shadow-lg transition-shadow"
+                className="bg-white rounded-lg shadow hover:shadow-lg transition-shadow overflow-hidden"
               >
-                {/* Card Header - Always Visible */}
-                <div className="flex justify-between items-center p-4 cursor-pointer" onClick={() => toggleExpand(trial.id)}>
+                {/* Card Header - Always Visible with Status Color */}
+                <div
+                  className={`flex justify-between items-center p-4 cursor-pointer ${statusColor}`}
+                  onClick={() => toggleExpand(trial.id)}
+                >
                   <h3 className="text-lg font-bold flex-1">{trial.name}</h3>
                   <div className="flex gap-2 items-center">
                     <button
@@ -183,13 +203,13 @@ const TrialLibrary = ({ trials, loading, user, onCreateNew, onLoadTrial, onDelet
                         e.stopPropagation();
                         onDeleteTrial(trial.id);
                       }}
-                      className="text-red-500 hover:bg-red-50 p-2 rounded transition"
+                      className="text-red-600 hover:bg-red-100 p-2 rounded transition"
                       title="Delete trial"
                     >
                       <Trash2 size={18} />
                     </button>
                     <button
-                      className="text-gray-500 hover:bg-gray-100 p-2 rounded transition"
+                      className="text-gray-600 hover:bg-white/50 p-2 rounded transition"
                       title={isExpanded ? "Collapse details" : "Expand details"}
                     >
                       {isExpanded ? <ChevronUp size={20} /> : <ChevronDown size={20} />}

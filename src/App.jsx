@@ -273,9 +273,7 @@ const App = () => {
 
       const updatedTrial = {
         ...trial,
-        trialistName: metadata.trialistName,
-        clientSponsor: metadata.clientSponsor,
-        contactInfo: metadata.contactInfo,
+        ...metadata, // Spread all metadata fields (includes workflow fields)
         lastModified: new Date().toISOString()
       };
 
