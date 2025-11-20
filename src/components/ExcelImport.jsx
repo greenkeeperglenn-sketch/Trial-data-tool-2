@@ -60,8 +60,9 @@ export default function ExcelImport({ onImport, onCancel }) {
       if (data.dateInterpretations && data.dateInterpretations.length > 0) {
         setSelectedDates(data.dateInterpretations.map(interp => interp.detected));
 
-        // Always show date confirmation so user can verify all dates
-        setShowDateConfirmation(true);
+        // Only show date confirmation if there are ambiguous dates or fallbacks
+        const needsConfirmation = data.dateInterpretations.some(interp => interp.needsConfirmation);
+        setShowDateConfirmation(needsConfirmation);
       }
     } catch (err) {
       console.error('Parse error:', err);
@@ -275,9 +276,17 @@ export default function ExcelImport({ onImport, onCancel }) {
                 {/* Assessment Dates */}
                 {parsedData.assessmentDates && parsedData.assessmentDates.length > 0 && (
                   <div>
-                    <span className="text-sm font-medium text-gray-600 block mb-2">
-                      Assessment Dates:
-                    </span>
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm font-medium text-gray-600">
+                        Assessment Dates:
+                      </span>
+                      <button
+                        onClick={() => setShowDateConfirmation(true)}
+                        className="text-xs text-blue-600 hover:text-blue-800 underline"
+                      >
+                        Review / Edit Dates
+                      </button>
+                    </div>
                     <div className="flex flex-wrap gap-2">
                       {parsedData.assessmentDates.map((dateObj, idx) => (
                         <span
@@ -319,83 +328,85 @@ export default function ExcelImport({ onImport, onCancel }) {
             <div className="border border-yellow-300 rounded-lg p-6 bg-yellow-50">
               <div className="flex items-start space-x-3 mb-4">
                 <AlertCircle className="h-6 w-6 text-yellow-600 flex-shrink-0 mt-0.5" />
-                <div>
+                <div className="flex-1">
                   <h3 className="font-bold text-yellow-900 text-lg">Confirm Assessment Dates</h3>
                   <p className="text-sm text-yellow-700 mt-1">
-                    Some dates could be interpreted multiple ways. Please confirm the correct format:
+                    Please verify the dates below are correct. Click the date to edit with a calendar picker.
                   </p>
                 </div>
               </div>
 
-              <div className="space-y-4">
-                {parsedData.dateInterpretations.map((interp, index) => (
-                  <div key={index} className="bg-white rounded-lg p-4 border border-yellow-200">
-                    <div className="mb-3">
-                      <span className="text-sm font-medium text-gray-600">Original from Excel:</span>
-                      <p className="text-lg font-bold text-gray-900">"{interp.original}"</p>
-                    </div>
+              <div className="space-y-3">
+                {parsedData.dateInterpretations.map((interp, index) => {
+                  const hasMultipleOptions = interp.options.length > 1;
+                  const selectedOption = interp.options.find(opt => opt.date === selectedDates[index]);
 
-                    <div>
-                      {interp.options.length > 1 ? (
-                        <div>
-                          <span className="text-sm font-medium text-gray-600 block mb-2">
-                            Select correct interpretation:
-                          </span>
-                          <div className="space-y-2">
-                            {interp.options.map((option, optIdx) => (
-                              <label
-                                key={optIdx}
-                                className={`flex items-center p-3 rounded-lg cursor-pointer transition ${
-                                  selectedDates[index] === option.date
-                                    ? 'bg-blue-100 border-2 border-blue-500'
-                                    : 'bg-gray-50 border-2 border-gray-300 hover:border-gray-400'
-                                }`}
-                              >
-                                <input
-                                  type="radio"
-                                  name={`date-${index}`}
-                                  value={option.date}
-                                  checked={selectedDates[index] === option.date}
-                                  onChange={(e) => handleDateChange(index, e.target.value)}
-                                  className="mr-3"
-                                />
-                                <div className="flex-1">
-                                  <div className="font-semibold text-gray-900">{option.format}</div>
-                                  <div className="text-sm text-gray-600">{option.readable}</div>
-                                  <div className="text-xs text-gray-500 mt-1">ISO: {option.date}</div>
-                                </div>
-                              </label>
-                            ))}
-                          </div>
+                  return (
+                    <div key={index} className="bg-white rounded-lg p-4 border border-gray-200">
+                      <div className="flex items-start gap-4">
+                        {/* Date number badge */}
+                        <div className="flex-shrink-0 w-8 h-8 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-sm">
+                          {index + 1}
                         </div>
-                      ) : (
-                        <div className="space-y-2">
-                          <div className="flex items-center space-x-2 text-green-700 p-3 bg-green-50 rounded-lg border-2 border-green-300">
-                            <CheckCircle size={18} />
-                            <div className="flex-1">
-                              <div className="font-semibold">{interp.options[0]?.format}</div>
-                              <div className="text-sm">{interp.options[0]?.readable}</div>
-                              <div className="text-xs text-gray-600 mt-1">ISO: {interp.options[0]?.date}</div>
-                            </div>
-                          </div>
-                        </div>
-                      )}
 
-                      {/* Manual date override */}
-                      <div className="mt-3 pt-3 border-t border-gray-200">
-                        <label className="block text-sm font-medium text-gray-600 mb-2">
-                          Or enter date manually (YYYY-MM-DD):
-                        </label>
-                        <input
-                          type="date"
-                          value={selectedDates[index] || ''}
-                          onChange={(e) => handleDateChange(index, e.target.value)}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        />
+                        {/* Original date from Excel */}
+                        <div className="flex-1 min-w-0">
+                          <div className="text-xs text-gray-500 mb-1">From Excel:</div>
+                          <div className="font-mono text-sm text-gray-700 mb-2">"{interp.original}"</div>
+
+                          {/* Quick date picker - most prominent */}
+                          <div className="flex items-center gap-3">
+                            <input
+                              type="date"
+                              value={selectedDates[index] || ''}
+                              onChange={(e) => handleDateChange(index, e.target.value)}
+                              className="px-3 py-2 text-base font-semibold border-2 border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-blue-50"
+                            />
+                            {selectedOption && (
+                              <div className="text-sm text-gray-600">
+                                {selectedOption.readable}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Show radio buttons only if ambiguous */}
+                          {hasMultipleOptions && (
+                            <details className="mt-3">
+                              <summary className="text-xs text-blue-600 cursor-pointer hover:text-blue-800">
+                                Date is ambiguous - choose interpretation
+                              </summary>
+                              <div className="mt-2 space-y-2 pl-4 border-l-2 border-gray-200">
+                                {interp.options.map((option, optIdx) => (
+                                  <label
+                                    key={optIdx}
+                                    className={`flex items-start p-2 rounded cursor-pointer transition ${
+                                      selectedDates[index] === option.date
+                                        ? 'bg-blue-50 border border-blue-300'
+                                        : 'hover:bg-gray-50'
+                                    }`}
+                                  >
+                                    <input
+                                      type="radio"
+                                      name={`date-${index}`}
+                                      value={option.date}
+                                      checked={selectedDates[index] === option.date}
+                                      onChange={(e) => handleDateChange(index, e.target.value)}
+                                      className="mt-0.5 mr-2"
+                                    />
+                                    <div className="text-xs">
+                                      <div className="font-semibold text-gray-900">{option.format}</div>
+                                      <div className="text-gray-600">{option.readable}</div>
+                                    </div>
+                                  </label>
+                                ))}
+                              </div>
+                            </details>
+                          )}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
 
               <div className="flex justify-end space-x-3 mt-6 pt-4 border-t border-yellow-200">
@@ -410,7 +421,7 @@ export default function ExcelImport({ onImport, onCancel }) {
                   className="px-6 py-2 bg-yellow-600 text-white rounded hover:bg-yellow-700 transition-colors flex items-center space-x-2"
                 >
                   <CheckCircle size={18} />
-                  <span>Confirm Dates</span>
+                  <span>Confirm All Dates</span>
                 </button>
               </div>
             </div>

@@ -168,6 +168,10 @@ const convertToDatabase = (trial, userId) => {
     assessment_dates: trial.assessmentDates || [],
     photos: trial.photos || {},
     notes: trial.notes || {},
+    trialist_name: trial.trialistName || null,
+    client_sponsor: trial.clientSponsor || null,
+    contact_info: trial.contactInfo || null,
+    metadata: trial.metadata || {},
     last_modified: trial.lastModified || new Date().toISOString()
   };
 
@@ -281,6 +285,10 @@ const convertFromDatabase = (dbTrial) => {
     assessmentDates: normalizedAssessmentDates,
     photos: normalizedPhotos,
     notes: dbTrial.notes,
+    trialistName: dbTrial.trialist_name,
+    clientSponsor: dbTrial.client_sponsor,
+    contactInfo: dbTrial.contact_info,
+    metadata: dbTrial.metadata || {},
     created: dbTrial.created_at,
     lastModified: dbTrial.last_modified
   };

@@ -230,19 +230,27 @@ function getDateInterpretations(dateStr) {
     return {
       original: '',
       detected: new Date().toISOString().split('T')[0],
-      options: []
+      options: [],
+      needsConfirmation: false
     };
   }
 
   const str = String(dateStr).trim();
   const options = [];
 
-  // If already in YYYY-MM-DD format, only one option
+  // If already in YYYY-MM-DD format, only one option (no confirmation needed)
   if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
+    const date = new Date(str);
     return {
       original: str,
       detected: str,
-      options: [{ format: 'ISO', date: str, label: str }]
+      options: [{
+        format: 'ISO (YYYY-MM-DD)',
+        date: str,
+        label: str,
+        readable: date.toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' })
+      }],
+      needsConfirmation: false
     };
   }
 
@@ -253,8 +261,14 @@ function getDateInterpretations(dateStr) {
     const second = parseInt(dateMatch[2], 10);
     const year = parseInt(dateMatch[3], 10);
 
-    // UK Format (DD/MM/YYYY)
-    if (second >= 1 && second <= 12 && first >= 1 && first <= 31) {
+    // Determine if date is ambiguous
+    const firstIsValidDay = first >= 1 && first <= 31;
+    const firstIsValidMonth = first >= 1 && first <= 12;
+    const secondIsValidDay = second >= 1 && second <= 31;
+    const secondIsValidMonth = second >= 1 && second <= 12;
+
+    // UK Format (DD/MM/YYYY) - PREFER THIS
+    if (secondIsValidMonth && firstIsValidDay) {
       const ukDate = `${year}-${String(second).padStart(2, '0')}-${String(first).padStart(2, '0')}`;
       const ukDateObj = new Date(year, second - 1, first);
       options.push({
@@ -265,8 +279,8 @@ function getDateInterpretations(dateStr) {
       });
     }
 
-    // US Format (MM/DD/YYYY) - only if different from UK
-    if (first >= 1 && first <= 12 && second >= 1 && second <= 31 && first !== second) {
+    // US Format (MM/DD/YYYY) - only add if DIFFERENT from UK and both are valid
+    if (firstIsValidMonth && secondIsValidDay && first !== second) {
       const usDate = `${year}-${String(first).padStart(2, '0')}-${String(second).padStart(2, '0')}`;
       const usDateObj = new Date(year, first - 1, second);
       options.push({
@@ -277,13 +291,17 @@ function getDateInterpretations(dateStr) {
       });
     }
 
-    // If only one valid option, use it as detected
-    const detected = options.length > 0 ? options[0].date : null;
+    // Only need confirmation if genuinely ambiguous (both interpretations valid and different)
+    const needsConfirmation = options.length > 1;
+
+    // Default to UK format (first option)
+    const detected = options.length > 0 ? options[0].date : new Date().toISOString().split('T')[0];
 
     return {
       original: str,
-      detected: detected || new Date().toISOString().split('T')[0],
-      options
+      detected,
+      options,
+      needsConfirmation
     };
   }
 
@@ -300,14 +318,15 @@ function getDateInterpretations(dateStr) {
           date: isoDate,
           label: str,
           readable: date.toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' })
-        }]
+        }],
+        needsConfirmation: false
       };
     }
   } catch (e) {
     console.warn('[excelParser] Could not parse date:', dateStr);
   }
 
-  // Fallback to current date
+  // Fallback to current date (needs confirmation!)
   const fallback = new Date().toISOString().split('T')[0];
   return {
     original: str,
@@ -317,7 +336,8 @@ function getDateInterpretations(dateStr) {
       date: fallback,
       label: 'Unable to parse - using today',
       readable: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' })
-    }]
+    }],
+    needsConfirmation: true // Always confirm fallbacks
   };
 }
 

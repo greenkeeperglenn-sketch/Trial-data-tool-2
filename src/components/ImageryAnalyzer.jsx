@@ -7,6 +7,7 @@ const ImageryAnalyzer = ({
   assessmentDates,
   currentDateObj,
   selectedAssessmentType,
+  photos,
   onSelectAssessmentType,
   onBulkUpdateData,
   onPhotosChange,
@@ -35,6 +36,7 @@ const ImageryAnalyzer = ({
     { x: 50, y: 550, label: 'BL' }
   ]);
   const [draggingCorner, setDraggingCorner] = useState(null);
+  const [loading, setLoading] = useState(false);
 
   // Refs (required for canvas and file input)
   const fileInputRef = useRef(null);
@@ -55,16 +57,18 @@ const ImageryAnalyzer = ({
     if (!file) return;
 
     try {
+      setLoading(true);
+
       // FAST: Create blob URL immediately (no need to convert to data URL first)
       const blobUrl = URL.createObjectURL(file);
-      
+
       const img = new Image();
       img.onload = () => {
         console.log('Image loaded successfully:', img.width, img.height);
         imageRef.current = img;
         // Use blob URL instead of data URL - much faster for large files
         setImageSrc(blobUrl);
-        
+
         // Set corner positions based on image size
         setCorners([
           { x: img.width * 0.1, y: img.height * 0.1, label: 'TL' },
@@ -72,14 +76,17 @@ const ImageryAnalyzer = ({
           { x: img.width * 0.9, y: img.height * 0.9, label: 'BR' },
           { x: img.width * 0.1, y: img.height * 0.9, label: 'BL' }
         ]);
+
+        setLoading(false);
       };
-      
+
       img.onerror = (error) => {
         console.error('Image load error:', error);
         URL.revokeObjectURL(blobUrl);
+        setLoading(false);
         alert('Failed to load image. Please try another file.');
       };
-      
+
       img.src = blobUrl;
 
       // Extract date from EXIF in parallel (non-blocking)
@@ -246,6 +253,131 @@ const ImageryAnalyzer = ({
     setDraggingCorner(null);
   };
 
+  // Extract individual plot images from the grid
+  const handleExtractPlots = async () => {
+    if (!imageRef.current || !canvasRef.current || !fileDate) {
+      alert('Missing required data. Please ensure image is loaded and has a date.');
+      return;
+    }
+
+    if (!gridLayout || gridLayout.length === 0) {
+      alert('No grid layout available. Please set up your trial first.');
+      return;
+    }
+
+    try {
+      const canvas = canvasRef.current;
+      const img = imageRef.current;
+      const [tl, tr, br, bl] = corners;
+
+      // Check if date exists in assessmentDates, if not prompt to create it
+      const dateExists = assessmentDates.some(d => d.date === fileDate);
+      if (!dateExists) {
+        const shouldCreateDate = window.confirm(
+          `The date ${fileDate} doesn't exist in your assessment dates. Would you like to add it?`
+        );
+
+        if (shouldCreateDate) {
+          // Create new assessment date
+          const newDate = { date: fileDate, assessments: {} };
+
+          // Initialize all assessment types for all plots
+          config.assessmentTypes.forEach(type => {
+            newDate.assessments[type.name] = {};
+            gridLayout.flat().forEach(plot => {
+              if (!plot.isBlank) {
+                newDate.assessments[type.name][plot.id] = { value: '', entered: false };
+              }
+            });
+          });
+
+          onAssessmentDatesChange([...assessmentDates, newDate].sort((a, b) =>
+            new Date(a.date) - new Date(b.date)
+          ));
+        } else {
+          return; // User cancelled
+        }
+      }
+
+      // Create a temporary canvas for extraction
+      const extractCanvas = document.createElement('canvas');
+      const extractCtx = extractCanvas.getContext('2d');
+
+      const plotWidth = Math.floor(img.width / cols);
+      const plotHeight = Math.floor(img.height / rows);
+      extractCanvas.width = plotWidth;
+      extractCanvas.height = plotHeight;
+
+      const newPhotos = { ...photos };
+      let extractedCount = 0;
+
+      // Extract each plot
+      for (let row = 0; row < rows; row++) {
+        for (let col = 0; col < cols; col++) {
+          // Find the corresponding plot in gridLayout
+          if (row >= gridLayout.length || col >= gridLayout[row].length) continue;
+
+          const plot = gridLayout[row][col];
+          if (plot.isBlank) continue;
+
+          // Calculate the position in the warped grid using bilinear interpolation
+          const colFraction = (col + 0.5) / cols; // Center of the plot
+          const rowFraction = (row + 0.5) / rows;
+
+          // Interpolate position on the image
+          const topX = tl.x + (tr.x - tl.x) * colFraction;
+          const topY = tl.y + (tr.y - tl.y) * colFraction;
+          const bottomX = bl.x + (br.x - bl.x) * colFraction;
+          const bottomY = bl.y + (br.y - bl.y) * colFraction;
+
+          const centerX = topX + (bottomX - topX) * rowFraction;
+          const centerY = topY + (bottomY - topY) * rowFraction;
+
+          // Extract a rectangular region around this center point
+          const extractWidth = Math.abs(tr.x - tl.x) / cols * 0.8; // 80% to avoid overlap
+          const extractHeight = Math.abs(bl.y - tl.y) / rows * 0.8;
+
+          const sourceX = Math.max(0, centerX - extractWidth / 2);
+          const sourceY = Math.max(0, centerY - extractHeight / 2);
+          const sourceWidth = Math.min(extractWidth, img.width - sourceX);
+          const sourceHeight = Math.min(extractHeight, img.height - sourceY);
+
+          // Clear canvas and draw the extracted plot
+          extractCtx.clearRect(0, 0, plotWidth, plotHeight);
+          extractCtx.drawImage(
+            img,
+            sourceX, sourceY, sourceWidth, sourceHeight,
+            0, 0, plotWidth, plotHeight
+          );
+
+          // Convert to blob URL
+          const dataUrl = extractCanvas.toDataURL('image/jpeg', 0.9);
+
+          // Store in photos object with key: date_plotId
+          const photoKey = `${fileDate}_${plot.id}`;
+          newPhotos[photoKey] = [dataUrl]; // Array to support multiple photos per plot
+
+          extractedCount++;
+        }
+      }
+
+      // Update photos state
+      onPhotosChange(newPhotos);
+
+      alert(`✓ Success!\n\nExtracted ${extractedCount} plot images for date ${fileDate}.\n\nThese images will now appear in:\n• Field Map view\n• Presentation mode`);
+
+      // Reset the component for next image
+      setImageSrc(null);
+      setFileDate(null);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    } catch (error) {
+      console.error('Error extracting plots:', error);
+      alert('Error extracting plot images. Please try again.');
+    }
+  };
+
   return (
     <div className="space-y-4">
       <div className="bg-white rounded-lg shadow p-6">
@@ -260,9 +392,14 @@ const ImageryAnalyzer = ({
         <div className="flex gap-2 mb-4">
           <button
             onClick={() => fileInputRef.current?.click()}
-            className="px-4 py-2 rounded bg-emerald-600 text-white text-sm hover:bg-emerald-700 transition"
+            disabled={loading}
+            className={`px-4 py-2 rounded text-white text-sm transition ${
+              loading
+                ? 'bg-gray-400 cursor-not-allowed'
+                : 'bg-emerald-600 hover:bg-emerald-700'
+            }`}
           >
-            Upload Image
+            {loading ? 'Loading...' : 'Upload Image'}
           </button>
           <input
             ref={fileInputRef}
@@ -270,11 +407,28 @@ const ImageryAnalyzer = ({
             accept="image/jpeg,image/jpg,image/png"
             onChange={(event) => handleFileUpload(event.target.files?.[0])}
             className="hidden"
+            disabled={loading}
           />
         </div>
 
+        {/* Loading State */}
+        {loading && (
+          <div className="border-2 border-blue-300 rounded-lg p-8 text-center bg-blue-50">
+            <div className="flex flex-col items-center gap-4">
+              <div className="w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+              <div className="space-y-2">
+                <p className="text-lg font-medium text-blue-900">Loading image...</p>
+                <p className="text-sm text-blue-600">Processing EXIF data and preparing canvas</p>
+              </div>
+              <div className="w-full max-w-md bg-blue-200 rounded-full h-2 overflow-hidden">
+                <div className="bg-blue-600 h-full animate-pulse" style={{ width: '100%' }}></div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* No Image State */}
-        {!imageSrc && (
+        {!imageSrc && !loading && (
           <div className="border-2 border-dashed rounded-lg p-8 text-center border-gray-300 bg-gray-50">
             <p className="text-lg font-medium">Drag & drop or click to upload a drone image</p>
             <p className="text-sm text-gray-500 mt-2">JPEG or PNG files are supported</p>
@@ -339,13 +493,10 @@ const ImageryAnalyzer = ({
 
             {/* Submit Button */}
             <button
-              onClick={() => {
-                console.log('Grid committed with:', { rows, cols, corners, fileDate });
-                alert(`✓ Grid saved!\n\nRows: ${rows}\nCols: ${cols}\nDate: ${fileDate}\n\nNext: Extract plots (coming soon)`);
-              }}
+              onClick={handleExtractPlots}
               className="w-full px-6 py-3 bg-emerald-600 text-white font-semibold rounded-lg hover:bg-emerald-700 transition"
             >
-              ✓ Submit Grid Alignment
+              ✓ Extract Plot Images
             </button>
           </div>
         )}
