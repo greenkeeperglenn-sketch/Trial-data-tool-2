@@ -637,31 +637,6 @@ const MultiLineChart = ({ treatmentData, treatmentColors, currentDate, min, max,
               >
                 {item.treatment}
               </text>
-
-              {/* Value */}
-              <text
-                x={x + 130}
-                y={y + 2}
-                fontSize="14"
-                fontWeight="bold"
-                fill="#9ca3af"
-                textAnchor="end"
-              >
-                {item.displayValue}
-              </text>
-
-              {/* Statistical group letter */}
-              {item.group && (
-                <text
-                  x={x + 155}
-                  y={y + 2}
-                  fontSize="13"
-                  fontWeight="bold"
-                  fill="#fbbf24"
-                >
-                  ({item.group})
-                </text>
-              )}
             </g>
           );
         })}
