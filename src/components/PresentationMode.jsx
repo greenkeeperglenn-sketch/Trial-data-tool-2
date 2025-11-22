@@ -806,9 +806,6 @@ const PresentationMode = ({
     const assessmentMin = selectedAssessmentConfig?.min ?? 0;
     const assessmentMax = selectedAssessmentConfig?.max ?? 10;
 
-    // Get number of blocks
-    const numBlocks = config.blocks || config.numBlocks || 4;
-
     // Collect all plot data with photos
     const plotDataMap = {};
     Object.entries(treatmentGroups)
@@ -827,6 +824,9 @@ const PresentationMode = ({
           };
         });
       });
+
+    // Get expanded photo data for modal (rendered once, outside loops)
+    const expandedPhotoData = expandedPhoto ? plotDataMap[expandedPhoto] : null;
 
     return (
       <div className="bg-gray-800 rounded-xl p-6 shadow-2xl">
@@ -916,7 +916,7 @@ const PresentationMode = ({
                       style={{ backgroundColor: bgColor }}
                       onClick={() => {
                         if (plotData?.image) {
-                          setExpandedPhoto(expandedPhoto === plot.id ? null : plot.id);
+                          setExpandedPhoto(plot.id);
                         }
                       }}
                     >
@@ -931,36 +931,6 @@ const PresentationMode = ({
                       {plotData?.image && (
                         <div className="absolute top-1 right-1">
                           <ImageIcon size={12} className="text-white/70" />
-                        </div>
-                      )}
-
-                      {/* Expanded photo view */}
-                      {expandedPhoto === plot.id && plotData?.image && (
-                        <div
-                          className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4"
-                          onClick={(e) => { e.stopPropagation(); setExpandedPhoto(null); }}
-                        >
-                          <div className="relative w-full h-full flex items-center justify-center">
-                            <img
-                              src={plotData.image}
-                              alt={plot.id}
-                              className="max-w-full max-h-full object-contain rounded-lg shadow-2xl"
-                              style={{ border: `8px solid ${plotData.color}` }}
-                              onClick={(e) => e.stopPropagation()}
-                            />
-                            <div
-                              className="absolute top-4 left-1/2 -translate-x-1/2 text-center text-3xl font-bold text-white px-6 py-3 rounded-lg shadow-xl"
-                              style={{ backgroundColor: plotData.color }}
-                            >
-                              Plot {plot.id} - {plotData.treatment}
-                            </div>
-                            <button
-                              className="absolute top-4 right-4 bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg font-semibold shadow-xl"
-                              onClick={(e) => { e.stopPropagation(); setExpandedPhoto(null); }}
-                            >
-                              Close (X)
-                            </button>
-                          </div>
                         </div>
                       )}
                     </div>
@@ -1003,7 +973,7 @@ const PresentationMode = ({
                           style={{ backgroundColor: bgColor }}
                           onClick={() => {
                             if (plotData.image) {
-                              setExpandedPhoto(expandedPhoto === plotData.plotId ? null : plotData.plotId);
+                              setExpandedPhoto(plotData.plotId);
                             }
                           }}
                         >
@@ -1023,36 +993,6 @@ const PresentationMode = ({
                               <span className="text-xs text-white/80">B{plotData.block}</span>
                             </div>
                           )}
-
-                          {/* Expanded photo view */}
-                          {expandedPhoto === plotData.plotId && plotData.image && (
-                            <div
-                              className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4"
-                              onClick={(e) => { e.stopPropagation(); setExpandedPhoto(null); }}
-                            >
-                              <div className="relative w-full h-full flex items-center justify-center">
-                                <img
-                                  src={plotData.image}
-                                  alt={plotData.plotId}
-                                  className="max-w-full max-h-full object-contain rounded-lg shadow-2xl"
-                                  style={{ border: `8px solid ${plotData.color}` }}
-                                  onClick={(e) => e.stopPropagation()}
-                                />
-                                <div
-                                  className="absolute top-4 left-1/2 -translate-x-1/2 text-center text-3xl font-bold text-white px-6 py-3 rounded-lg shadow-xl"
-                                  style={{ backgroundColor: plotData.color }}
-                                >
-                                  Plot {plotData.plotId} - {plotData.treatment}
-                                </div>
-                                <button
-                                  className="absolute top-4 right-4 bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg font-semibold shadow-xl"
-                                  onClick={(e) => { e.stopPropagation(); setExpandedPhoto(null); }}
-                                >
-                                  Close (X)
-                                </button>
-                              </div>
-                            </div>
-                          )}
                         </div>
                       );
                     })}
@@ -1060,6 +1000,36 @@ const PresentationMode = ({
                 </div>
               );
             })}
+          </div>
+        )}
+
+        {/* Single expanded photo modal - rendered once outside loops */}
+        {expandedPhoto && expandedPhotoData?.image && (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4"
+            onClick={() => setExpandedPhoto(null)}
+          >
+            <div className="relative w-full h-full flex items-center justify-center">
+              <img
+                src={expandedPhotoData.image}
+                alt={expandedPhotoData.plotId}
+                className="max-w-full max-h-full object-contain rounded-lg shadow-2xl"
+                style={{ border: `8px solid ${expandedPhotoData.color}` }}
+                onClick={(e) => e.stopPropagation()}
+              />
+              <div
+                className="absolute top-4 left-1/2 -translate-x-1/2 text-center text-3xl font-bold text-white px-6 py-3 rounded-lg shadow-xl"
+                style={{ backgroundColor: expandedPhotoData.color }}
+              >
+                Plot {expandedPhotoData.plotId} - {expandedPhotoData.treatment}
+              </div>
+              <button
+                className="absolute top-4 right-4 bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg font-semibold shadow-xl"
+                onClick={() => setExpandedPhoto(null)}
+              >
+                Close (X)
+              </button>
+            </div>
           </div>
         )}
       </div>
