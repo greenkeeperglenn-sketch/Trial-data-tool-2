@@ -28,7 +28,9 @@ const Analysis = ({ config, gridLayout, assessmentDates, selectedAssessmentType 
     );
   }
 
-  // GenStat-style Fisher's LSD letter assignment algorithm
+  // GenStat-style Compact Letter Display (CLD) algorithm
+  // Key: Two treatments share a letter ONLY if they are NOT significantly different from EACH OTHER
+  // No transitive inheritance allowed!
   const assignLetters = (sortedTreatments, lsd, significant) => {
     if (!significant) {
       return sortedTreatments.map(t => ({ ...t, group: 'NS' }));
@@ -38,56 +40,66 @@ const Analysis = ({ config, gridLayout, assessmentDates, selectedAssessmentType 
       return [];
     }
 
-    const letters = {};
+    // Sort by mean descending (standard for CLD)
+    const treatments = [...sortedTreatments].sort((a, b) => b.mean - a.mean);
 
-    // First treatment always gets 'a'
-    letters[sortedTreatments[0].treatment] = 'a';
+    // Groups: each group contains treatments that are ALL within LSD of each other
+    let groups = [];
 
-    // Track the maximum letter we've created
-    let nextNewLetterCode = 'b'.charCodeAt(0);
-
-    // Process each subsequent treatment
-    for (let i = 1; i < sortedTreatments.length; i++) {
-      const curr = sortedTreatments[i];
-
-      // For this treatment, determine which letters it can have
-      // by checking against all previous treatments
-      const letterSet = new Set();
-
-      // Check against each previous treatment
-      for (let j = 0; j < i; j++) {
-        const prev = sortedTreatments[j];
-        const prevLetters = letters[prev.treatment];
-        const diff = Math.abs(curr.mean - prev.mean);
-
-        // If NOT significantly different from this previous treatment
-        if (diff <= lsd) {
-          // Current can have ALL letters that previous has
-          for (const letter of prevLetters) {
-            letterSet.add(letter);
+    // Step 1: Insert each treatment into applicable groups
+    for (const t of treatments) {
+      // Find groups where t fits (within LSD of ALL members)
+      for (const group of groups) {
+        let fits = true;
+        for (const member of group) {
+          if (Math.abs(t.mean - member.mean) > lsd) {
+            fits = false;
+            break;
           }
         }
+        if (fits) {
+          group.push(t);
+        }
       }
-
-      let assignedLetters;
-      // Convert set to string
-      if (letterSet.size > 0) {
-        // Sort the letters to ensure 'a' comes before 'b', etc.
-        const sortedLetters = Array.from(letterSet).sort();
-        assignedLetters = sortedLetters.join('');
-      } else {
-        // This treatment is significantly different from all previous
-        // Give it a new letter
-        assignedLetters = String.fromCharCode(nextNewLetterCode);
-        nextNewLetterCode++;
-      }
-
-      letters[curr.treatment] = assignedLetters;
+      // Always create singleton group (may become larger group later)
+      groups.push([t]);
     }
 
+    // Step 2: Remove redundant groups (groups that are subsets of other groups)
+    groups = groups.filter(g => {
+      const gSet = new Set(g.map(t => t.treatment));
+      for (const other of groups) {
+        if (other === g) continue;
+        if (other.length > g.length) {
+          const otherSet = new Set(other.map(t => t.treatment));
+          let isSubset = true;
+          for (const gt of gSet) {
+            if (!otherSet.has(gt)) {
+              isSubset = false;
+              break;
+            }
+          }
+          if (isSubset) return false; // g is redundant
+        }
+      }
+      return true;
+    });
+
+    // Step 3: Assign letters to groups
+    const letterMap = new Map();
+    treatments.forEach(t => letterMap.set(t.treatment, ''));
+
+    groups.forEach((group, idx) => {
+      const letter = String.fromCharCode('a'.charCodeAt(0) + idx);
+      for (const member of group) {
+        letterMap.set(member.treatment, letterMap.get(member.treatment) + letter);
+      }
+    });
+
+    // Return with letters sorted alphabetically
     return sortedTreatments.map(t => ({
       ...t,
-      group: letters[t.treatment]
+      group: letterMap.get(t.treatment).split('').sort().join('')
     }));
   };
 
