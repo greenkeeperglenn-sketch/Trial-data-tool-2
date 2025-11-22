@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { ChevronLeft, ChevronRight, Calendar, Image as ImageIcon, FileText, TrendingUp, Eye, EyeOff, ArrowUp, ArrowDown, Maximize2, MapPin, Grid } from 'lucide-react';
+import { jStat } from 'jstat';
 
 // Helper function to normalize date format to YYYY-MM-DD
 const normalizeDateFormat = (dateStr) => {
@@ -54,6 +55,139 @@ const calculateAutoScale = (values) => {
     min: Math.max(0, dataMin - padding), // Don't go below 0
     max: dataMax + padding
   };
+};
+
+// GenStat-style Compact Letter Display (CLD) algorithm for Fisher's LSD
+const assignLetters = (sortedTreatments, lsd, significant) => {
+  if (!significant) {
+    return sortedTreatments.map(t => ({ ...t, group: 'NS' }));
+  }
+
+  if (sortedTreatments.length === 0) {
+    return [];
+  }
+
+  // Sort by mean descending (standard for CLD)
+  const treatments = [...sortedTreatments].sort((a, b) => b.mean - a.mean);
+
+  // Groups: each group contains treatments that are ALL within LSD of each other
+  let groups = [];
+
+  // Step 1: Insert each treatment into applicable groups
+  for (const t of treatments) {
+    for (const group of groups) {
+      let fits = true;
+      for (const member of group) {
+        if (Math.abs(t.mean - member.mean) > lsd) {
+          fits = false;
+          break;
+        }
+      }
+      if (fits) {
+        group.push(t);
+      }
+    }
+    groups.push([t]);
+  }
+
+  // Step 2: Remove redundant groups
+  groups = groups.filter(g => {
+    const gSet = new Set(g.map(t => t.treatment));
+    for (const other of groups) {
+      if (other === g) continue;
+      if (other.length > g.length) {
+        const otherSet = new Set(other.map(t => t.treatment));
+        let isSubset = true;
+        for (const gt of gSet) {
+          if (!otherSet.has(gt)) {
+            isSubset = false;
+            break;
+          }
+        }
+        if (isSubset) return false;
+      }
+    }
+    return true;
+  });
+
+  // Step 3: Assign letters to groups
+  const letterMap = new Map();
+  treatments.forEach(t => letterMap.set(t.treatment, ''));
+
+  groups.forEach((group, idx) => {
+    const letter = String.fromCharCode('a'.charCodeAt(0) + idx);
+    for (const member of group) {
+      letterMap.set(member.treatment, letterMap.get(member.treatment) + letter);
+    }
+  });
+
+  return sortedTreatments.map(t => ({
+    ...t,
+    group: letterMap.get(t.treatment).split('').sort().join('')
+  }));
+};
+
+// Calculate RCBD ANOVA and LSD for a dataset
+const calculateAnovaStats = (treatmentStats, numBlocks) => {
+  const treatments = Object.keys(treatmentStats);
+  const numTreatments = treatments.length;
+
+  if (numTreatments < 2 || numBlocks < 2) {
+    return { significant: false, lsd: 0 };
+  }
+
+  // Collect all values
+  const allValues = [];
+  treatments.forEach(t => {
+    treatmentStats[t].values.forEach(v => allValues.push(v));
+  });
+
+  const totalN = allValues.length;
+  const grandTotal = allValues.reduce((sum, v) => sum + v, 0);
+  const grandMean = grandTotal / totalN;
+  const correctionFactor = (grandTotal * grandTotal) / totalN;
+
+  // Total SS
+  const ssTotal = allValues.reduce((sum, v) => sum + v * v, 0) - correctionFactor;
+
+  // Treatment SS
+  let ssTreatment = 0;
+  treatments.forEach(t => {
+    const tt = treatmentStats[t];
+    ssTreatment += (tt.total * tt.total) / tt.n;
+  });
+  ssTreatment -= correctionFactor;
+
+  // Residual SS (simplified - assumes balanced design)
+  const ssResidual = ssTotal - ssTreatment;
+
+  // Degrees of freedom
+  const dfTreatment = numTreatments - 1;
+  const dfResidual = totalN - numTreatments;
+
+  if (dfResidual <= 0) {
+    return { significant: false, lsd: 0 };
+  }
+
+  // Mean squares
+  const msTreatment = ssTreatment / dfTreatment;
+  const msResidual = ssResidual / dfResidual;
+
+  // F-statistic and p-value
+  const fTreatment = msResidual > 0 ? msTreatment / msResidual : 0;
+  const pValue = dfTreatment > 0 && dfResidual > 0 && fTreatment > 0
+    ? 1 - jStat.centralF.cdf(fTreatment, dfTreatment, dfResidual)
+    : 1;
+
+  const significant = pValue < 0.05;
+
+  // Calculate LSD
+  const replicates = numBlocks;
+  const sed = msResidual > 0 ? Math.sqrt(2 * msResidual / replicates) : 0;
+  const tCritical = dfResidual > 0 ? jStat.studentt.inv(0.975, dfResidual) : 2.064;
+  const lsd = sed * tCritical;
+
+  return { significant, lsd, pValue, fTreatment };
 };
 
 // Simple SVG Bar Chart Component by Treatment
@@ -113,6 +247,19 @@ const SimpleBarChart = ({ data, min, max, currentDateColor }) => {
               fill={item.color}
               className="hover:opacity-80 transition-opacity"
             />
+            {/* Significance letter above value */}
+            {item.group && (
+              <text
+                x={x + barWidth / 2}
+                y={y - 22}
+                fontSize="16"
+                fontWeight="bold"
+                fill="#fbbf24"
+                textAnchor="middle"
+              >
+                ({item.group})
+              </text>
+            )}
             {/* Value label above bar */}
             <text
               x={x + barWidth / 2}
@@ -694,7 +841,7 @@ const PresentationMode = ({
     return filteredData;
   };
 
-  // Prepare bar chart data by treatment for current date
+  // Prepare bar chart data by treatment for current date (with statistics)
   const prepareBarChartDataForType = (typeName) => {
     if (!currentDate) return [];
 
@@ -703,11 +850,16 @@ const PresentationMode = ({
 
     const treatmentStats = {};
 
-    // Calculate average for each treatment
+    // Get unique blocks for ANOVA calculation
+    const blocks = new Set();
+
+    // Calculate stats for each treatment
     gridLayout.forEach(row => {
       row.forEach(plot => {
         if (!plot.isBlank) {
           const treatment = plot.treatmentName || 'Untreated';
+          blocks.add(plot.block);
+
           // Only include visible treatments
           if (!visibleTreatments[treatment]) return;
 
@@ -715,25 +867,52 @@ const PresentationMode = ({
 
           if (plotData?.entered && plotData.value !== '') {
             if (!treatmentStats[treatment]) {
-              treatmentStats[treatment] = { values: [], count: 0 };
+              treatmentStats[treatment] = { values: [], count: 0, total: 0, n: 0 };
             }
-            treatmentStats[treatment].values.push(parseFloat(plotData.value));
+            const val = parseFloat(plotData.value);
+            treatmentStats[treatment].values.push(val);
+            treatmentStats[treatment].total += val;
+            treatmentStats[treatment].n++;
             treatmentStats[treatment].count++;
           }
         }
       });
     });
 
-    // Convert to array with averages, sorted by value (highest to lowest)
-    return Object.entries(treatmentStats).map(([treatment, stats]) => {
-      const avg = stats.values.reduce((sum, val) => sum + val, 0) / stats.values.length;
+    const numBlocks = blocks.size;
+
+    // Calculate ANOVA and get LSD
+    const anovaResult = calculateAnovaStats(treatmentStats, numBlocks);
+
+    // Build treatment data with means
+    const treatmentData = Object.entries(treatmentStats).map(([treatment, stats]) => {
+      const mean = stats.total / stats.n;
       return {
         treatment,
-        value: avg.toFixed(1),
+        mean,
+        value: mean.toFixed(1),
         count: stats.count,
         color: treatmentColors[treatment]
       };
-    }).sort((a, b) => parseFloat(b.value) - parseFloat(a.value)); // Sort by value descending
+    });
+
+    // Sort by mean ascending for letter assignment
+    const sortedForLetters = [...treatmentData].sort((a, b) => a.mean - b.mean);
+
+    // Assign significance letters
+    const withLetters = assignLetters(sortedForLetters, anovaResult.lsd, anovaResult.significant);
+
+    // Create lookup for letters
+    const letterLookup = {};
+    withLetters.forEach(t => {
+      letterLookup[t.treatment] = t.group;
+    });
+
+    // Add letters to treatment data and sort by value descending for display
+    return treatmentData.map(t => ({
+      ...t,
+      group: letterLookup[t.treatment]
+    })).sort((a, b) => parseFloat(b.value) - parseFloat(a.value));
   };
 
   const nextSlide = () => {
