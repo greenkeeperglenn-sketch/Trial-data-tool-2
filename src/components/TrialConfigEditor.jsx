@@ -385,31 +385,6 @@ export default function TrialConfigEditor({ config, gridLayout, orientation, onS
   // Alias for single column
   const addBlankColumn = () => addBlankColumns(1);
 
-  // Remove last row
-  const removeLastRow = () => {
-    if (localGridLayout.length <= 1) {
-      alert('Cannot remove the last row');
-      return;
-    }
-
-    if (!confirm('Remove the last row? This cannot be undone.')) return;
-
-    setLocalGridLayout(localGridLayout.slice(0, -1));
-  };
-
-  // Remove last column
-  const removeLastColumn = () => {
-    if (localGridLayout.length === 0 || localGridLayout[0].length <= 1) {
-      alert('Cannot remove the last column');
-      return;
-    }
-
-    if (!confirm('Remove the last column from all rows? This cannot be undone.')) return;
-
-    const newGrid = localGridLayout.map(row => row.slice(0, -1));
-    setLocalGridLayout(newGrid);
-  };
-
   const handleSave = () => {
     // Validation
     if (!editedConfig.trialName || editedConfig.trialName.trim() === '') {
