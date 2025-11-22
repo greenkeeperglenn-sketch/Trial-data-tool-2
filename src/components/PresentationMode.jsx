@@ -305,12 +305,12 @@ const SimpleBarChart = ({ data, min, max, currentDateColor }) => {
 };
 
 // Multi-Line Chart Component - One line per treatment
-const MultiLineChart = ({ treatmentData, treatmentColors, currentDate, min, max, allDates }) => {
-  const width = 1000;  // Increased to make room for legend on right
-  const height = 400;  // Increased to accommodate rotated labels
+const MultiLineChart = ({ treatmentData, treatmentColors, currentDate, min, max, allDates, statsData }) => {
+  const width = 1100;  // Increased to make room for bigger legend
+  const height = 450;  // Increased for better proportions
   const padding = 60;
   const bottomPadding = 80;  // Extra space for rotated labels
-  const legendWidth = 200;  // Space reserved for legend on right
+  const legendWidth = 300;  // Increased space for legend with grouping lines
   const chartWidth = width - padding * 2 - legendWidth;  // Chart area excludes legend space
   const chartHeight = height - padding - bottomPadding;
 
@@ -366,6 +366,45 @@ const MultiLineChart = ({ treatmentData, treatmentColors, currentDate, min, max,
   };
 
   const currentDateX = getCurrentDatePosition();
+
+  // Get sorted treatments with their stats for legend
+  const getSortedTreatmentsWithStats = () => {
+    const treatmentValuesAtCurrentDate = Object.entries(treatmentData).map(([treatment, dataPoints]) => {
+      const currentDataPoint = dataPoints.find(d => d.date === currentDate);
+      const value = currentDataPoint ? parseFloat(currentDataPoint.value) : -Infinity;
+      // Find stats for this treatment
+      const stat = statsData?.find(s => s.treatment === treatment);
+      return {
+        treatment,
+        value,
+        group: stat?.group || '',
+        displayValue: currentDataPoint ? currentDataPoint.value : '-'
+      };
+    });
+
+    return treatmentValuesAtCurrentDate.sort((a, b) => b.value - a.value);
+  };
+
+  const sortedTreatments = getSortedTreatmentsWithStats();
+
+  // Get unique letters and which treatments have each letter
+  const getLetterGroups = () => {
+    const letterGroups = {};
+    sortedTreatments.forEach((t, idx) => {
+      if (t.group && t.group !== 'NS') {
+        for (const letter of t.group) {
+          if (!letterGroups[letter]) {
+            letterGroups[letter] = [];
+          }
+          letterGroups[letter].push({ treatment: t.treatment, index: idx });
+        }
+      }
+    });
+    return letterGroups;
+  };
+
+  const letterGroups = getLetterGroups();
+  const letters = Object.keys(letterGroups).sort();
 
   return (
     <svg width="100%" height={height} viewBox={`0 0 ${width} ${height}`} className="text-gray-300">
@@ -449,7 +488,6 @@ const MultiLineChart = ({ treatmentData, treatmentColors, currentDate, min, max,
 
         // Still show in legend even if no points
         if (points.length === 0) {
-          console.log(`No points for treatment: ${treatment}`);
           return null;
         }
 
@@ -484,54 +522,161 @@ const MultiLineChart = ({ treatmentData, treatmentColors, currentDate, min, max,
         );
       })}
 
-      {/* Legend - show all treatments vertically on the right, sorted by current date value */}
+      {/* Enhanced Legend with Statistical Groupings */}
       <g>
-        {(() => {
-          // Get current date values for each treatment to sort by
-          const treatmentValuesAtCurrentDate = Object.entries(treatmentData).map(([treatment, dataPoints]) => {
-            const currentDataPoint = dataPoints.find(d => d.date === currentDate);
-            const value = currentDataPoint ? parseFloat(currentDataPoint.value) : -Infinity;
-            return { treatment, value };
-          });
+        {/* Legend background */}
+        <rect
+          x={padding + chartWidth + 15}
+          y={padding - 20}
+          width={legendWidth - 20}
+          height={sortedTreatments.length * 36 + 50}
+          fill="#1f2937"
+          rx="8"
+          opacity="0.9"
+        />
 
-          // Sort by value (highest to lowest)
-          const sortedTreatments = treatmentValuesAtCurrentDate
-            .sort((a, b) => b.value - a.value)
-            .map(item => item.treatment);
+        {/* Legend title */}
+        <text
+          x={padding + chartWidth + 25}
+          y={padding}
+          fontSize="14"
+          fontWeight="bold"
+          fill="#fbbf24"
+        >
+          Treatments (ranked)
+        </text>
 
-          return sortedTreatments.map((treatment, idx) => {
-            const color = treatmentColors[treatment];
-            const x = padding + chartWidth + 30;  // Legend starts 30px after chart
-            const y = padding + (idx * 25);  // 25px spacing between items
+        {/* Statistical grouping brackets on the left */}
+        {letters.map((letter, letterIdx) => {
+          const group = letterGroups[letter];
+          if (group.length < 1) return null;
 
-            return (
-              <g key={treatment}>
-                <line
-                  x1={x}
-                  y1={y}
-                  x2={x + 20}
-                  y2={y}
-                  stroke={color}
-                  strokeWidth="3"
-                />
-                <circle
-                  cx={x + 10}
-                  cy={y}
-                  r="4"
-                  fill={color}
-                />
+          const minIdx = Math.min(...group.map(g => g.index));
+          const maxIdx = Math.max(...group.map(g => g.index));
+
+          const bracketX = padding + chartWidth + 25 + (letterIdx * 12);
+          const topY = padding + 18 + (minIdx * 36);
+          const bottomY = padding + 18 + (maxIdx * 36);
+
+          // Colors for different letters
+          const bracketColors = ['#00BFB8', '#43B12E', '#00B6ED', '#E2E200', '#8ED8B2', '#0072BC'];
+          const bracketColor = bracketColors[letterIdx % bracketColors.length];
+
+          return (
+            <g key={letter}>
+              {/* Vertical line */}
+              <line
+                x1={bracketX}
+                y1={topY}
+                x2={bracketX}
+                y2={bottomY}
+                stroke={bracketColor}
+                strokeWidth="3"
+                strokeLinecap="round"
+              />
+              {/* Top cap */}
+              <line
+                x1={bracketX}
+                y1={topY}
+                x2={bracketX + 6}
+                y2={topY}
+                stroke={bracketColor}
+                strokeWidth="3"
+                strokeLinecap="round"
+              />
+              {/* Bottom cap */}
+              <line
+                x1={bracketX}
+                y1={bottomY}
+                x2={bracketX + 6}
+                y2={bottomY}
+                stroke={bracketColor}
+                strokeWidth="3"
+                strokeLinecap="round"
+              />
+              {/* Letter label */}
+              <text
+                x={bracketX}
+                y={bottomY + 18}
+                fontSize="12"
+                fontWeight="bold"
+                fill={bracketColor}
+                textAnchor="middle"
+              >
+                {letter}
+              </text>
+            </g>
+          );
+        })}
+
+        {/* Treatment items */}
+        {sortedTreatments.map((item, idx) => {
+          const color = treatmentColors[item.treatment];
+          const x = padding + chartWidth + 55 + (letters.length * 12);  // Offset for brackets
+          const y = padding + 20 + (idx * 36);
+
+          return (
+            <g key={item.treatment}>
+              {/* Color indicator */}
+              <rect
+                x={x}
+                y={y - 10}
+                width={16}
+                height={16}
+                rx="3"
+                fill={color}
+              />
+
+              {/* Treatment name */}
+              <text
+                x={x + 22}
+                y={y + 2}
+                fontSize="14"
+                fontWeight="600"
+                fill="#ffffff"
+              >
+                {item.treatment}
+              </text>
+
+              {/* Value */}
+              <text
+                x={x + 130}
+                y={y + 2}
+                fontSize="14"
+                fontWeight="bold"
+                fill="#9ca3af"
+                textAnchor="end"
+              >
+                {item.displayValue}
+              </text>
+
+              {/* Statistical group letter */}
+              {item.group && (
                 <text
-                  x={x + 25}
-                  y={y + 4}
-                  fontSize="12"
-                  fill="#9ca3af"
+                  x={x + 155}
+                  y={y + 2}
+                  fontSize="13"
+                  fontWeight="bold"
+                  fill="#fbbf24"
                 >
-                  {treatment}
+                  ({item.group})
                 </text>
-              </g>
-            );
-          });
-        })()}
+              )}
+            </g>
+          );
+        })}
+
+        {/* Legend footer - explanation */}
+        {letters.length > 0 && (
+          <text
+            x={padding + chartWidth + 25}
+            y={padding + 30 + (sortedTreatments.length * 36)}
+            fontSize="10"
+            fill="#6b7280"
+          >
+            Brackets = not significantly different
+          </text>
+        )}
       </g>
     </svg>
   );
@@ -1259,6 +1404,9 @@ const PresentationMode = ({
 
             const allDates = sortedDates.map(d => d.date);
 
+            // Get stats for current date (includes letter groups)
+            const statsData = prepareBarChartDataForType(type.name);
+
             // Use config min/max by default, or auto-calculated when button is held
             let minValue = type.min;
             let maxValue = type.max;
@@ -1283,6 +1431,7 @@ const PresentationMode = ({
                     min={minValue}
                     max={maxValue}
                     allDates={allDates}
+                    statsData={statsData}
                   />
                 </div>
               </div>
