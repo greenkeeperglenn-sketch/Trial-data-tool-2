@@ -469,7 +469,7 @@ const MultiLineChart = ({ treatmentData, treatmentColors, currentDate, min, max,
             fill="#00BFB8"
             textAnchor="middle"
           >
-            Current ({currentDate})
+            {currentDate}
           </text>
         </g>
       )}
