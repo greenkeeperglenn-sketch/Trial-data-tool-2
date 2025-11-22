@@ -432,6 +432,7 @@ const PresentationMode = ({
   const [useAutoScale, setUseAutoScale] = useState(false);
   const [sortPhotosByPosition, setSortPhotosByPosition] = useState(false);
   const [expandedPhoto, setExpandedPhoto] = useState(null);
+  const [selectedGridAssessment, setSelectedGridAssessment] = useState(null);
 
   // Get all dates sorted chronologically
   const sortedDates = [...assessmentDates].sort((a, b) =>
@@ -475,6 +476,11 @@ const PresentationMode = ({
       assessments[type.name] = true;
     });
     setVisibleAssessments(assessments);
+
+    // Initialize selected grid assessment if not set
+    if (!selectedGridAssessment && config.assessmentTypes.length > 0) {
+      setSelectedGridAssessment(config.assessmentTypes[0].name);
+    }
   }, [treatmentNames.join(','), config.assessmentTypes.map(t => t.name).join(',')]);
   const treatmentColors = {};
   // STRI Brand Color Palette for treatments
@@ -494,6 +500,52 @@ const PresentationMode = ({
 
   // Color for current date across all charts - STRI Teal
   const currentDateColor = '#00BFB8'; // STRI Primary Teal
+
+  // Calculate color based on assessment value (green = high/good, red = low/bad)
+  const getScoreColor = (value, min, max) => {
+    if (value === null || value === undefined || value === '') return '#4B5563'; // Gray for no data
+
+    const numVal = parseFloat(value);
+    if (isNaN(numVal)) return '#4B5563';
+
+    // Normalize value to 0-1 range
+    const range = max - min;
+    const normalized = range > 0 ? (numVal - min) / range : 0.5;
+    const clamped = Math.max(0, Math.min(1, normalized));
+
+    // Interpolate from red (low) to yellow (mid) to green (high)
+    let r, g, b;
+    if (clamped < 0.5) {
+      // Red to Yellow
+      const t = clamped * 2;
+      r = 220;
+      g = Math.round(50 + t * 170); // 50 to 220
+      b = 50;
+    } else {
+      // Yellow to Green
+      const t = (clamped - 0.5) * 2;
+      r = Math.round(220 - t * 180); // 220 to 40
+      g = Math.round(220 - t * 20); // 220 to 200
+      b = Math.round(50 + t * 30); // 50 to 80
+    }
+
+    return `rgb(${r}, ${g}, ${b})`;
+  };
+
+  // Get assessment value for a plot on current date
+  const getPlotAssessmentValue = (plotId, assessmentName) => {
+    if (!currentDate || !assessmentName) return null;
+    const assessment = currentDate.assessments[assessmentName];
+    if (!assessment) return null;
+    const plotData = assessment[plotId];
+    if (!plotData?.entered || plotData.value === '') return null;
+    return plotData.value;
+  };
+
+  // Get assessment type config by name
+  const getAssessmentTypeConfig = (name) => {
+    return config.assessmentTypes.find(t => t.name === name);
+  };
 
   // Toggle functions
   const toggleTreatment = (treatment) => {
@@ -742,7 +794,10 @@ const PresentationMode = ({
   };
 
   const renderPhotos = () => {
-    if (Object.keys(currentPhotos).length === 0) return null;
+    // Get selected assessment config for color scoring
+    const selectedAssessmentConfig = getAssessmentTypeConfig(selectedGridAssessment);
+    const assessmentMin = selectedAssessmentConfig?.min ?? 0;
+    const assessmentMax = selectedAssessmentConfig?.max ?? 10;
 
     // Collect all photos with their plot info including treatment index
     const allPhotos = [];
@@ -751,73 +806,110 @@ const PresentationMode = ({
       .forEach(([treatment, plots]) => {
         plots.forEach(plot => {
           const plotPhotos = currentPhotos[plot.id];
-          if (plotPhotos && plotPhotos.length > 0) {
-            // Find position in gridLayout (including blanks)
-            let rowIdx = -1;
-            let colIdx = -1;
-            for (let r = 0; r < gridLayout.length; r++) {
-              for (let c = 0; c < gridLayout[r].length; c++) {
-                if (gridLayout[r][c].id === plot.id) {
-                  rowIdx = r;
-                  colIdx = c;
-                  break;
-                }
+          // Find position in gridLayout (including blanks)
+          let rowIdx = -1;
+          let colIdx = -1;
+          for (let r = 0; r < gridLayout.length; r++) {
+            for (let c = 0; c < gridLayout[r].length; c++) {
+              if (gridLayout[r][c].id === plot.id) {
+                rowIdx = r;
+                colIdx = c;
+                break;
               }
-              if (rowIdx !== -1) break;
             }
-
-            allPhotos.push({
-              plotId: plot.id,
-              treatment: treatment,
-              treatmentName: plot.treatmentName,
-              treatmentIdx: plot.treatment, // The treatment index (0, 1, 2, etc.)
-              block: plot.block,
-              color: treatmentColors[treatment],
-              image: plotPhotos[0],
-              rowIdx,
-              colIdx
-            });
+            if (rowIdx !== -1) break;
           }
+
+          allPhotos.push({
+            plotId: plot.id,
+            treatment: treatment,
+            treatmentName: plot.treatmentName,
+            treatmentIdx: plot.treatment, // The treatment index (0, 1, 2, etc.)
+            block: plot.block,
+            color: treatmentColors[treatment],
+            image: plotPhotos && plotPhotos.length > 0 ? plotPhotos[0] : null,
+            rowIdx,
+            colIdx
+          });
         });
       });
 
     return (
       <div className="bg-gray-800 rounded-xl p-6 shadow-2xl">
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center justify-between mb-6 flex-wrap gap-4">
           <h3 className="text-2xl font-bold flex items-center gap-2">
             <ImageIcon size={24} className="text-stri-teal" />
-            Plot Images
+            Field Map
           </h3>
 
-          {/* Sort button */}
-          <button
-            onMouseDown={() => setSortPhotosByPosition(true)}
-            onMouseUp={() => setSortPhotosByPosition(false)}
-            onMouseLeave={() => setSortPhotosByPosition(false)}
-            onTouchStart={() => setSortPhotosByPosition(true)}
-            onTouchEnd={() => setSortPhotosByPosition(false)}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg transition shadow-lg ${
-              sortPhotosByPosition
-                ? 'bg-orange-500 hover:bg-orange-600 text-white'
-                : 'bg-purple-600 hover:bg-purple-700 text-white'
-            }`}
-            title="Hold to show field map layout"
-          >
-            <MapPin size={20} />
-            {sortPhotosByPosition ? 'Field Map View' : 'Hold for Field Map View'}
-          </button>
+          <div className="flex items-center gap-4">
+            {/* Assessment dropdown for color scoring */}
+            <div className="flex items-center gap-2">
+              <label className="text-sm text-gray-400">Color by:</label>
+              <select
+                value={selectedGridAssessment || ''}
+                onChange={(e) => setSelectedGridAssessment(e.target.value)}
+                className="bg-gray-700 text-white px-3 py-2 rounded-lg border border-gray-600 text-sm focus:outline-none focus:ring-2 focus:ring-stri-teal"
+              >
+                {config.assessmentTypes.map(type => (
+                  <option key={type.name} value={type.name}>
+                    {type.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Sort button */}
+            <button
+              onMouseDown={() => setSortPhotosByPosition(true)}
+              onMouseUp={() => setSortPhotosByPosition(false)}
+              onMouseLeave={() => setSortPhotosByPosition(false)}
+              onTouchStart={() => setSortPhotosByPosition(true)}
+              onTouchEnd={() => setSortPhotosByPosition(false)}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg transition shadow-lg ${
+                sortPhotosByPosition
+                  ? 'bg-orange-500 hover:bg-orange-600 text-white'
+                  : 'bg-purple-600 hover:bg-purple-700 text-white'
+              }`}
+              title="Hold to show photos"
+            >
+              <MapPin size={20} />
+              {sortPhotosByPosition ? 'Photo View' : 'Hold for Photos'}
+            </button>
+          </div>
         </div>
 
+        {/* Color legend */}
+        {selectedGridAssessment && (
+          <div className="mb-4 flex items-center gap-4 justify-center">
+            <span className="text-sm text-gray-400">{selectedGridAssessment}:</span>
+            <div className="flex items-center gap-1">
+              <span className="text-xs text-gray-500">{assessmentMin}</span>
+              <div className="flex h-4 rounded overflow-hidden">
+                {[0, 0.25, 0.5, 0.75, 1].map((pct, i) => (
+                  <div
+                    key={i}
+                    className="w-8 h-4"
+                    style={{ backgroundColor: getScoreColor(assessmentMin + pct * (assessmentMax - assessmentMin), assessmentMin, assessmentMax) }}
+                  />
+                ))}
+              </div>
+              <span className="text-xs text-gray-500">{assessmentMax}</span>
+            </div>
+          </div>
+        )}
+
         {sortPhotosByPosition ? (
-          // Field Map Layout - Show grid with blanks
+          // Photo View - Show photos in grid with images
           <div className="space-y-2">
             {gridLayout.map((row, rowIdx) => (
               <div key={rowIdx} className="flex gap-2 justify-center">
                 {row.map((plot, colIdx) => {
-                  const photo = allPhotos.find(p => p.plotId === plot.id);
+                  const photoData = allPhotos.find(p => p.plotId === plot.id);
+                  const assessmentValue = getPlotAssessmentValue(plot.id, selectedGridAssessment);
+                  const bgColor = getScoreColor(assessmentValue, assessmentMin, assessmentMax);
 
                   if (plot.isBlank) {
-                    // Grey square for blank plots
                     return (
                       <div
                         key={colIdx}
@@ -828,14 +920,96 @@ const PresentationMode = ({
                     );
                   }
 
-                  if (!photo) {
-                    // No photo for this plot
+                  if (photoData?.image) {
                     return (
                       <div
                         key={colIdx}
-                        className="w-24 h-24 rounded-lg border-2 border-gray-600 bg-gray-700 flex items-center justify-center"
+                        className="relative group cursor-pointer"
+                        onClick={() => setExpandedPhoto(expandedPhoto === plot.id ? null : plot.id)}
                       >
-                        <span className="text-gray-400 text-xs">{plot.id}</span>
+                        <div
+                          className="w-24 h-24 rounded-lg overflow-hidden shadow-lg transition-all hover:scale-105"
+                          style={{ border: `3px solid ${photoData.color}` }}
+                        >
+                          <img
+                            src={photoData.image}
+                            alt={plot.id}
+                            className="w-full h-full object-cover"
+                          />
+                        </div>
+                        <div
+                          className="absolute bottom-0 left-0 right-0 text-center text-xs font-semibold text-white px-1 py-0.5"
+                          style={{ backgroundColor: photoData.color }}
+                        >
+                          {plot.id}
+                        </div>
+
+                        {expandedPhoto === plot.id && (
+                          <div
+                            className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4"
+                            onClick={(e) => { e.stopPropagation(); setExpandedPhoto(null); }}
+                          >
+                            <div className="relative w-full h-full flex items-center justify-center">
+                              <img
+                                src={photoData.image}
+                                alt={plot.id}
+                                className="max-w-full max-h-full object-contain rounded-lg shadow-2xl"
+                                style={{ border: `8px solid ${photoData.color}` }}
+                                onClick={(e) => e.stopPropagation()}
+                              />
+                              <div
+                                className="absolute top-4 left-1/2 -translate-x-1/2 text-center text-3xl font-bold text-white px-6 py-3 rounded-lg shadow-xl"
+                                style={{ backgroundColor: photoData.color }}
+                              >
+                                Plot {plot.id} - {photoData.treatment}
+                              </div>
+                              <button
+                                className="absolute top-4 right-4 bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg font-semibold shadow-xl"
+                                onClick={(e) => { e.stopPropagation(); setExpandedPhoto(null); }}
+                              >
+                                Close (X)
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  }
+
+                  // No photo - show colored box with plot number
+                  return (
+                    <div
+                      key={colIdx}
+                      className="w-24 h-24 rounded-lg shadow-lg flex flex-col items-center justify-center transition-all hover:scale-105"
+                      style={{ backgroundColor: bgColor }}
+                    >
+                      <span className="text-2xl font-bold text-white drop-shadow-lg">{plot.id}</span>
+                      {assessmentValue !== null && (
+                        <span className="text-sm text-white/80 mt-1">{assessmentValue}</span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            ))}
+          </div>
+        ) : (
+          // Default Field Map View - Always show grid with color scoring
+          <div className="space-y-3">
+            {gridLayout.map((row, rowIdx) => (
+              <div key={rowIdx} className="flex gap-3 justify-center">
+                {row.map((plot, colIdx) => {
+                  const assessmentValue = getPlotAssessmentValue(plot.id, selectedGridAssessment);
+                  const bgColor = getScoreColor(assessmentValue, assessmentMin, assessmentMax);
+                  const photoData = allPhotos.find(p => p.plotId === plot.id);
+
+                  if (plot.isBlank) {
+                    return (
+                      <div
+                        key={colIdx}
+                        className="w-20 h-20 rounded-lg border-2 border-dashed border-gray-600 bg-gray-700 flex items-center justify-center"
+                      >
+                        <span className="text-gray-500 text-xs">-</span>
                       </div>
                     );
                   }
@@ -843,60 +1017,52 @@ const PresentationMode = ({
                   return (
                     <div
                       key={colIdx}
-                      className="relative group cursor-pointer"
-                      onClick={() => setExpandedPhoto(expandedPhoto === photo.plotId ? null : photo.plotId)}
+                      className="w-20 h-20 rounded-lg shadow-lg flex flex-col items-center justify-center transition-all hover:scale-110 cursor-pointer relative"
+                      style={{ backgroundColor: bgColor }}
+                      onClick={() => {
+                        if (photoData?.image) {
+                          setExpandedPhoto(expandedPhoto === plot.id ? null : plot.id);
+                        }
+                      }}
                     >
-                      {/* Thumbnail */}
-                      <div
-                        className="w-24 h-24 rounded-lg overflow-hidden shadow-lg transition-all hover:scale-105"
-                        style={{
-                          border: `3px solid ${photo.color}`
-                        }}
-                      >
-                        <img
-                          src={photo.image}
-                          alt={photo.plotId}
-                          className="w-full h-full object-cover"
-                        />
-                      </div>
+                      {/* Large centered plot number */}
+                      <span className="text-2xl font-bold text-white drop-shadow-lg">{plot.id}</span>
 
-                      {/* Label */}
-                      <div
-                        className="absolute bottom-0 left-0 right-0 text-center text-xs font-semibold text-white px-1 py-0.5"
-                        style={{ backgroundColor: photo.color }}
-                      >
-                        {photo.plotId}
-                      </div>
+                      {/* Assessment value below */}
+                      {assessmentValue !== null && (
+                        <span className="text-sm text-white/90 font-medium">{assessmentValue}</span>
+                      )}
 
-                      {/* Expanded view on click */}
-                      {expandedPhoto === photo.plotId && (
+                      {/* Photo indicator */}
+                      {photoData?.image && (
+                        <div className="absolute top-1 right-1">
+                          <ImageIcon size={12} className="text-white/70" />
+                        </div>
+                      )}
+
+                      {/* Expanded photo view */}
+                      {expandedPhoto === plot.id && photoData?.image && (
                         <div
                           className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setExpandedPhoto(null);
-                          }}
+                          onClick={(e) => { e.stopPropagation(); setExpandedPhoto(null); }}
                         >
                           <div className="relative w-full h-full flex items-center justify-center">
                             <img
-                              src={photo.image}
-                              alt={photo.plotId}
+                              src={photoData.image}
+                              alt={plot.id}
                               className="max-w-full max-h-full object-contain rounded-lg shadow-2xl"
-                              style={{ border: `8px solid ${photo.color}` }}
+                              style={{ border: `8px solid ${photoData.color}` }}
                               onClick={(e) => e.stopPropagation()}
                             />
                             <div
                               className="absolute top-4 left-1/2 -translate-x-1/2 text-center text-3xl font-bold text-white px-6 py-3 rounded-lg shadow-xl"
-                              style={{ backgroundColor: photo.color }}
+                              style={{ backgroundColor: photoData.color }}
                             >
-                              Plot {photo.plotId} - {photo.treatment}
+                              Plot {plot.id} - {photoData.treatment}
                             </div>
                             <button
                               className="absolute top-4 right-4 bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg font-semibold shadow-xl"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setExpandedPhoto(null);
-                              }}
+                              onClick={(e) => { e.stopPropagation(); setExpandedPhoto(null); }}
                             >
                               Close (X)
                             </button>
@@ -908,102 +1074,6 @@ const PresentationMode = ({
                 })}
               </div>
             ))}
-          </div>
-        ) : (
-          // Treatment Column Layout
-          <div className="grid gap-6" style={{ gridTemplateColumns: `repeat(${config.treatments.length}, minmax(0, 1fr))` }}>
-            {config.treatments.map((treatment, treatmentIdx) => {
-              const color = treatmentColors[treatment];
-              const treatmentPhotos = allPhotos
-                .filter(p => p.treatmentIdx === treatmentIdx)
-                .sort((a, b) => a.block - b.block);
-
-              if (treatmentPhotos.length === 0) return null;
-
-              return (
-                <div key={treatmentIdx} className="space-y-3">
-                  {/* Treatment Header */}
-                  <div
-                    className="text-center font-bold text-lg py-3 rounded-lg shadow-lg"
-                    style={{
-                      backgroundColor: color,
-                      color: 'white'
-                    }}
-                  >
-                    {treatment}
-                  </div>
-
-                  {/* Photos for this treatment */}
-                  <div className="space-y-3">
-                    {treatmentPhotos.map((photo) => (
-                      <div
-                        key={photo.plotId}
-                        className="relative group cursor-pointer"
-                        onClick={() => setExpandedPhoto(expandedPhoto === photo.plotId ? null : photo.plotId)}
-                      >
-                        {/* Thumbnail */}
-                        <div
-                          className="w-full aspect-square rounded-lg overflow-hidden shadow-lg transition-all hover:scale-105"
-                          style={{
-                            border: `3px solid ${photo.color}`
-                          }}
-                        >
-                          <img
-                            src={photo.image}
-                            alt={photo.plotId}
-                            className="w-full h-full object-cover"
-                          />
-                        </div>
-
-                        {/* Label */}
-                        <div
-                          className="absolute bottom-0 left-0 right-0 text-center text-sm font-semibold text-white px-2 py-1"
-                          style={{ backgroundColor: photo.color }}
-                        >
-                          {photo.plotId}
-                        </div>
-
-                        {/* Expanded view on click */}
-                        {expandedPhoto === photo.plotId && (
-                          <div
-                            className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setExpandedPhoto(null);
-                            }}
-                          >
-                            <div className="relative w-full h-full flex items-center justify-center">
-                              <img
-                                src={photo.image}
-                                alt={photo.plotId}
-                                className="max-w-full max-h-full object-contain rounded-lg shadow-2xl"
-                                style={{ border: `8px solid ${photo.color}` }}
-                                onClick={(e) => e.stopPropagation()}
-                              />
-                              <div
-                                className="absolute top-4 left-1/2 -translate-x-1/2 text-center text-3xl font-bold text-white px-6 py-3 rounded-lg shadow-xl"
-                                style={{ backgroundColor: photo.color }}
-                              >
-                                Plot {photo.plotId} - {photo.treatment}
-                              </div>
-                              <button
-                                className="absolute top-4 right-4 bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg font-semibold shadow-xl"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setExpandedPhoto(null);
-                                }}
-                              >
-                                Close (X)
-                              </button>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              );
-            })}
           </div>
         )}
       </div>
