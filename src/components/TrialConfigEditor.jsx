@@ -61,6 +61,8 @@ export default function TrialConfigEditor({ config, gridLayout, orientation, onS
   const [localGridLayout, setLocalGridLayout] = useState(gridLayout || []);
   const [localOrientation, setLocalOrientation] = useState(orientation || 0);
   const [draggedPlot, setDraggedPlot] = useState(null);
+  const [addRowCount, setAddRowCount] = useState(1);
+  const [addColCount, setAddColCount] = useState(1);
 
   const handleTrialNameChange = (value) => {
     setEditedConfig({ ...editedConfig, trialName: value });
@@ -184,27 +186,29 @@ export default function TrialConfigEditor({ config, gridLayout, orientation, onS
     setLocalGridLayout(newGrid);
   };
 
-  // Handle plot selection from dropdown - simplified to just treatment selection
+  // Handle plot selection from dropdown - block-treatment combination
   const handlePlotSelect = (rowIdx, colIdx, value) => {
     const newGrid = localGridLayout.map(row => [...row]);
 
     if (value === '' || value === 'BLANK') {
       // Set to blank / unassigned
       newGrid[rowIdx][colIdx] = {
-        id: `${rowIdx + 1}-${colIdx + 1}`,
-        block: rowIdx + 1,
+        id: `blank-${rowIdx}-${colIdx}`,
+        block: null,
         treatment: null,
         treatmentName: '',
         isBlank: true,
         plotNumber: colIdx + 1
       };
     } else {
-      // Value is just the treatment index
-      const treatmentIdx = parseInt(value, 10);
+      // Value is "block-treatment" format (e.g., "1-0" = Block 1, Treatment A)
+      const [blockStr, treatmentStr] = value.split('-');
+      const block = parseInt(blockStr, 10);
+      const treatmentIdx = parseInt(treatmentStr, 10);
 
       newGrid[rowIdx][colIdx] = {
-        id: `${rowIdx + 1}-${treatmentIdx + 1}`,
-        block: rowIdx + 1,
+        id: `${block}-${treatmentIdx + 1}`,
+        block: block,
         treatment: treatmentIdx,
         treatmentName: editedConfig.treatments[treatmentIdx] || `Treatment ${treatmentIdx + 1}`,
         isBlank: false,
@@ -215,63 +219,72 @@ export default function TrialConfigEditor({ config, gridLayout, orientation, onS
     setLocalGridLayout(newGrid);
   };
 
-  // Get treatments already used in a specific row (block)
-  const getUsedTreatmentsInRow = (rowIdx) => {
-    const row = localGridLayout[rowIdx];
-    if (!row) return new Set();
-
-    return new Set(
-      row
-        .filter(plot => !plot.isBlank && plot.treatment !== null && plot.treatment !== undefined)
-        .map(plot => plot.treatment)
-    );
+  // Get all used block-treatment combinations in the grid
+  const getUsedCombinations = () => {
+    const used = new Set();
+    localGridLayout.forEach(row => {
+      row.forEach(plot => {
+        if (!plot.isBlank && plot.block !== null && plot.treatment !== null &&
+            plot.block !== undefined && plot.treatment !== undefined) {
+          used.add(`${plot.block}-${plot.treatment}`);
+        }
+      });
+    });
+    return used;
   };
 
-  // Get available treatments for a specific row (not yet assigned in that row)
-  const getAvailableTreatmentsForRow = (rowIdx, currentPlotTreatment) => {
-    const usedTreatments = getUsedTreatmentsInRow(rowIdx);
+  // Get all possible block-treatment combinations
+  const getAllCombinations = () => {
+    const combinations = [];
+    const numBlocks = editedConfig.blocks || editedConfig.numBlocks || 4;
 
-    return editedConfig.treatments.map((treatment, idx) => ({
-      value: idx,
-      label: treatment,
-      isAvailable: !usedTreatments.has(idx) || idx === currentPlotTreatment
-    })).filter(t => t.isAvailable);
+    for (let block = 1; block <= numBlocks; block++) {
+      editedConfig.treatments.forEach((treatment, treatmentIdx) => {
+        combinations.push({
+          value: `${block}-${treatmentIdx}`,
+          block,
+          treatment: treatmentIdx,
+          label: `B${block} - ${String.fromCharCode(65 + treatmentIdx)} (${treatment})`
+        });
+      });
+    }
+    return combinations;
   };
 
-  // Auto-fill all empty/blank plots with random treatments (RCBD style)
+  // Get available combinations for dropdown (excluding already used, but including current)
+  const getAvailableCombinations = (currentBlock, currentTreatment) => {
+    const used = getUsedCombinations();
+    const currentKey = (currentBlock !== null && currentTreatment !== null)
+      ? `${currentBlock}-${currentTreatment}`
+      : null;
+
+    return getAllCombinations().filter(combo => {
+      return !used.has(combo.value) || combo.value === currentKey;
+    });
+  };
+
+  // Auto-fill empty plots with random block-treatment combinations
   const autoFillAll = () => {
+    const used = getUsedCombinations();
+    const allCombos = getAllCombinations();
+    const availableCombos = allCombos.filter(c => !used.has(c.value));
+    const shuffled = [...availableCombos].sort(() => Math.random() - 0.5);
+
+    let comboIdx = 0;
     const newGrid = localGridLayout.map((row, rowIdx) => {
-      // Get treatments already assigned in this row
-      const usedTreatments = new Set(
-        row
-          .filter(plot => !plot.isBlank && plot.treatment !== null && plot.treatment !== undefined)
-          .map(plot => plot.treatment)
-      );
-
-      // Get unassigned treatments
-      const unassignedTreatments = editedConfig.treatments
-        .map((_, idx) => idx)
-        .filter(t => !usedTreatments.has(t));
-
-      // Shuffle unassigned treatments
-      const shuffled = [...unassignedTreatments].sort(() => Math.random() - 0.5);
-
-      let shuffleIdx = 0;
       return row.map((plot, colIdx) => {
-        // Skip if already has a treatment assigned
-        if (!plot.isBlank && plot.treatment !== null && plot.treatment !== undefined) {
-          return plot;
+        if (!plot.isBlank && plot.block !== null && plot.treatment !== null) {
+          return plot; // Keep existing assignments
         }
 
-        // Assign next shuffled treatment
-        const treatmentIdx = shuffled[shuffleIdx++];
-        if (treatmentIdx === undefined) return plot; // No more treatments
+        const combo = shuffled[comboIdx++];
+        if (!combo) return plot; // No more combinations
 
         return {
-          id: `${rowIdx + 1}-${treatmentIdx + 1}`,
-          block: rowIdx + 1,
-          treatment: treatmentIdx,
-          treatmentName: editedConfig.treatments[treatmentIdx],
+          id: `${combo.block}-${combo.treatment + 1}`,
+          block: combo.block,
+          treatment: combo.treatment,
+          treatmentName: editedConfig.treatments[combo.treatment],
           isBlank: false,
           plotNumber: colIdx + 1
         };
@@ -281,12 +294,12 @@ export default function TrialConfigEditor({ config, gridLayout, orientation, onS
     setLocalGridLayout(newGrid);
   };
 
-  // Clear all plot assignments (make all blank)
+  // Clear all plot assignments
   const clearAllPlots = () => {
     const newGrid = localGridLayout.map((row, rowIdx) =>
       row.map((plot, colIdx) => ({
-        id: `${rowIdx + 1}-${colIdx + 1}`,
-        block: rowIdx + 1,
+        id: `blank-${rowIdx}-${colIdx}`,
+        block: null,
         treatment: null,
         treatmentName: '',
         isBlank: true,
@@ -296,65 +309,81 @@ export default function TrialConfigEditor({ config, gridLayout, orientation, onS
     setLocalGridLayout(newGrid);
   };
 
-  // Clear a single row
-  const clearRow = (rowIdx) => {
-    const newGrid = [...localGridLayout];
-    newGrid[rowIdx] = newGrid[rowIdx].map((plot, colIdx) => ({
-      id: `${rowIdx + 1}-${colIdx + 1}`,
-      block: rowIdx + 1,
-      treatment: null,
-      treatmentName: '',
-      isBlank: true,
-      plotNumber: colIdx + 1
-    }));
+  // Get overall progress
+  const getOverallProgress = () => {
+    const used = getUsedCombinations();
+    const total = getAllCombinations().length;
+    return { assigned: used.size, total };
+  };
+
+  // Remove last row
+  const removeLastRow = () => {
+    if (localGridLayout.length <= 1) {
+      alert('Cannot remove the last row');
+      return;
+    }
+    setLocalGridLayout(localGridLayout.slice(0, -1));
+  };
+
+  // Remove last column
+  const removeLastColumn = () => {
+    if (localGridLayout.length === 0 || localGridLayout[0].length <= 1) {
+      alert('Cannot remove the last column');
+      return;
+    }
+    const newGrid = localGridLayout.map(row => row.slice(0, -1));
     setLocalGridLayout(newGrid);
   };
 
-  // Get progress for a row
-  const getRowProgress = (rowIdx) => {
-    const row = localGridLayout[rowIdx];
-    if (!row) return { assigned: 0, total: editedConfig.treatments.length };
-    const assigned = row.filter(p => !p.isBlank && p.treatment !== null && p.treatment !== undefined).length;
-    return { assigned, total: editedConfig.treatments.length };
-  };
-
-  // Add a row of blank plots
-  const addBlankRow = () => {
+  // Add multiple rows of blank plots
+  const addBlankRows = (count = 1) => {
     if (localGridLayout.length === 0) return;
 
     const numCols = localGridLayout[0].length;
-    const newRowIdx = localGridLayout.length;
-    const newRow = Array.from({ length: numCols }, (_, colIdx) => ({
-      id: `${newRowIdx + 1}-${colIdx + 1}`,
-      block: newRowIdx + 1,
-      treatment: 0,
-      treatmentName: '',
-      isBlank: true,
-      plotNumber: colIdx + 1
-    }));
+    const newRows = [];
 
-    setLocalGridLayout([...localGridLayout, newRow]);
+    for (let i = 0; i < count; i++) {
+      const newRowIdx = localGridLayout.length + i;
+      const newRow = Array.from({ length: numCols }, (_, colIdx) => ({
+        id: `blank-${newRowIdx}-${colIdx}`,
+        block: null,
+        treatment: null,
+        treatmentName: '',
+        isBlank: true,
+        plotNumber: colIdx + 1
+      }));
+      newRows.push(newRow);
+    }
+
+    setLocalGridLayout([...localGridLayout, ...newRows]);
   };
 
-  // Add a column of blank plots
-  const addBlankColumn = () => {
+  // Alias for single row
+  const addBlankRow = () => addBlankRows(1);
+
+  // Add multiple columns of blank plots
+  const addBlankColumns = (count = 1) => {
     const newGrid = localGridLayout.map((row, rowIdx) => {
-      const newColIdx = row.length;
-      return [
-        ...row,
-        {
-          id: `${rowIdx + 1}-${newColIdx + 1}`,
-          block: rowIdx + 1,
-          treatment: 0,
+      const newCols = [];
+      for (let i = 0; i < count; i++) {
+        const newColIdx = row.length + i;
+        newCols.push({
+          id: `blank-${rowIdx}-${newColIdx}`,
+          block: null,
+          treatment: null,
           treatmentName: '',
           isBlank: true,
           plotNumber: newColIdx + 1
-        }
-      ];
+        });
+      }
+      return [...row, ...newCols];
     });
 
     setLocalGridLayout(newGrid);
   };
+
+  // Alias for single column
+  const addBlankColumn = () => addBlankColumns(1);
 
   // Remove last row
   const removeLastRow = () => {
@@ -550,7 +579,7 @@ export default function TrialConfigEditor({ config, gridLayout, orientation, onS
               <div className="flex items-center justify-between">
                 <div>
                   <h3 className="text-lg font-semibold text-gray-800">Field Map Layout</h3>
-                  <p className="text-sm text-gray-600">Assign treatments using dropdowns. Treatments disappear once assigned per row.</p>
+                  <p className="text-sm text-gray-600">Place blocks anywhere on the grid. Each cell can be any block-treatment combination.</p>
                 </div>
 
                 {/* Compass Control */}
@@ -574,8 +603,29 @@ export default function TrialConfigEditor({ config, gridLayout, orientation, onS
                 </div>
               </div>
 
+              {/* Progress indicator */}
+              {(() => {
+                const progress = getOverallProgress();
+                return (
+                  <div className="flex items-center gap-3">
+                    <span className={`px-3 py-1 rounded text-sm font-medium ${
+                      progress.assigned >= progress.total
+                        ? 'bg-green-100 text-green-700'
+                        : 'bg-yellow-100 text-yellow-700'
+                    }`}>
+                      {progress.assigned}/{progress.total} plots assigned
+                    </span>
+                    {progress.assigned < progress.total && (
+                      <span className="text-xs text-gray-500">
+                        {progress.total - progress.assigned} remaining
+                      </span>
+                    )}
+                  </div>
+                );
+              })()}
+
               {/* Quick Actions */}
-              <div className="flex gap-2 flex-wrap">
+              <div className="flex gap-2 flex-wrap items-center">
                 <button
                   onClick={autoFillAll}
                   className="flex items-center gap-2 px-3 py-2 bg-purple-600 text-white rounded text-sm hover:bg-purple-700 transition"
@@ -583,7 +633,7 @@ export default function TrialConfigEditor({ config, gridLayout, orientation, onS
                   title="Randomly assign all empty plots"
                 >
                   <Shuffle size={16} />
-                  Auto-fill (Randomize)
+                  Auto-fill
                 </button>
 
                 <button
@@ -596,136 +646,140 @@ export default function TrialConfigEditor({ config, gridLayout, orientation, onS
                   Clear All
                 </button>
 
-                <div className="flex-1" />
+                <div className="border-l border-gray-300 h-6 mx-2" />
+
+                {/* Add columns with count */}
+                <div className="flex items-center gap-1">
+                  <input
+                    type="number"
+                    min="1"
+                    max="20"
+                    value={addColCount}
+                    onChange={(e) => setAddColCount(Math.max(1, parseInt(e.target.value) || 1))}
+                    className="w-12 px-1 py-1 text-xs border rounded text-center"
+                  />
+                  <button
+                    onClick={() => addBlankColumns(addColCount)}
+                    className="flex items-center gap-1 px-2 py-1.5 bg-green-100 text-green-700 rounded text-xs hover:bg-green-200 transition"
+                    type="button"
+                  >
+                    <Plus size={14} /> Col
+                  </button>
+                </div>
+
+                {/* Add rows with count */}
+                <div className="flex items-center gap-1">
+                  <input
+                    type="number"
+                    min="1"
+                    max="20"
+                    value={addRowCount}
+                    onChange={(e) => setAddRowCount(Math.max(1, parseInt(e.target.value) || 1))}
+                    className="w-12 px-1 py-1 text-xs border rounded text-center"
+                  />
+                  <button
+                    onClick={() => addBlankRows(addRowCount)}
+                    className="flex items-center gap-1 px-2 py-1.5 bg-green-100 text-green-700 rounded text-xs hover:bg-green-200 transition"
+                    type="button"
+                  >
+                    <Plus size={14} /> Row
+                  </button>
+                </div>
+
+                <div className="border-l border-gray-300 h-6 mx-1" />
 
                 <button
-                  onClick={addBlankColumn}
-                  className="flex items-center gap-1 px-2 py-1 bg-gray-200 text-gray-700 rounded text-xs hover:bg-gray-300 transition"
+                  onClick={removeLastColumn}
+                  className="flex items-center gap-1 px-2 py-1.5 bg-red-50 text-red-600 rounded text-xs hover:bg-red-100 transition"
                   type="button"
+                  title="Remove last column"
                 >
-                  <Plus size={14} /> Column
+                  <Trash2 size={14} /> Col
                 </button>
 
                 <button
-                  onClick={addBlankRow}
-                  className="flex items-center gap-1 px-2 py-1 bg-gray-200 text-gray-700 rounded text-xs hover:bg-gray-300 transition"
+                  onClick={removeLastRow}
+                  className="flex items-center gap-1 px-2 py-1.5 bg-red-50 text-red-600 rounded text-xs hover:bg-red-100 transition"
                   type="button"
+                  title="Remove last row"
                 >
-                  <Plus size={14} /> Row
+                  <Trash2 size={14} /> Row
                 </button>
               </div>
 
               {/* Grid Display */}
               <div className="border border-gray-300 rounded-lg p-4 bg-gray-50 overflow-x-auto">
-                <div className="space-y-3">
-                  {localGridLayout.map((row, rowIdx) => {
-                    const progress = getRowProgress(rowIdx);
+                <div className="space-y-2">
+                  {localGridLayout.map((row, rowIdx) => (
+                    <div key={rowIdx} className="flex gap-2">
+                      {row.map((plot, colIdx) => {
+                        const hasAssignment = !plot.isBlank && plot.block !== null && plot.treatment !== null;
+                        const availableCombos = getAvailableCombinations(plot.block, plot.treatment);
+                        const currentValue = hasAssignment ? `${plot.block}-${plot.treatment}` : '';
 
-                    return (
-                      <div key={rowIdx} className="space-y-1">
-                        {/* Row header */}
-                        <div className="flex items-center gap-2 text-xs">
-                          <span className="font-semibold text-gray-600">Block {rowIdx + 1}</span>
-                          <span className={`px-2 py-0.5 rounded ${
-                            progress.assigned >= progress.total
-                              ? 'bg-green-100 text-green-700'
-                              : 'bg-yellow-100 text-yellow-700'
-                          }`}>
-                            {progress.assigned}/{progress.total}
-                          </span>
-                          <button
-                            onClick={() => clearRow(rowIdx)}
-                            className="text-red-500 hover:text-red-700 text-xs underline"
-                            type="button"
-                          >
-                            Clear
-                          </button>
-                        </div>
+                        // Treatment colors (by treatment, not block)
+                        const treatmentColors = {
+                          0: '#FF6B6B', 1: '#4ECDC4', 2: '#45B7D1', 3: '#FFA07A',
+                          4: '#95E1D3', 5: '#F38181', 6: '#AA96DA', 7: '#FCBAD3',
+                          8: '#FFD93D', 9: '#6BCF7F', 10: '#FF85A2', 11: '#5DADE2'
+                        };
 
-                        {/* Row plots */}
-                        <div className="flex gap-2">
-                          {row.map((plot, colIdx) => {
-                            const availableTreatments = getAvailableTreatmentsForRow(rowIdx, plot.treatment);
-                            const hasAssignment = !plot.isBlank && plot.treatment !== null && plot.treatment !== undefined;
-
-                            // Treatment colors
-                            const treatmentColors = {
-                              0: '#FF6B6B', 1: '#4ECDC4', 2: '#45B7D1', 3: '#FFA07A',
-                              4: '#95E1D3', 5: '#F38181', 6: '#AA96DA', 7: '#FCBAD3',
-                              8: '#FFD93D', 9: '#6BCF7F', 10: '#FF85A2', 11: '#5DADE2'
-                            };
-
-                            return (
-                              <div
-                                key={colIdx}
-                                className={`
-                                  relative min-w-[100px] rounded-lg p-2 transition-all
-                                  ${hasAssignment
-                                    ? 'text-white shadow-md'
-                                    : 'bg-white border-2 border-dashed border-gray-300'
-                                  }
-                                `}
-                                style={{
-                                  backgroundColor: hasAssignment ? treatmentColors[plot.treatment] || '#6B7280' : undefined
-                                }}
-                              >
-                                {/* Treatment letter */}
-                                {hasAssignment && (
-                                  <div className="text-center font-bold text-lg mb-1">
-                                    {String.fromCharCode(65 + plot.treatment)}
-                                  </div>
-                                )}
-
-                                {/* Dropdown */}
-                                <select
-                                  value={hasAssignment ? plot.treatment : ''}
-                                  onChange={(e) => handlePlotSelect(rowIdx, colIdx, e.target.value)}
-                                  className={`w-full text-xs p-1 rounded border cursor-pointer ${
-                                    hasAssignment
-                                      ? 'bg-white/20 text-white border-white/30'
-                                      : 'bg-white text-gray-700 border-gray-300'
-                                  }`}
-                                >
-                                  <option value="">-- Select --</option>
-                                  {availableTreatments.map((t) => (
-                                    <option key={t.value} value={t.value}>
-                                      {String.fromCharCode(65 + t.value)} - {t.label}
-                                    </option>
-                                  ))}
-                                </select>
-                              </div>
-                            );
-                          })}
-
-                          {/* Add plot button */}
-                          <button
-                            onClick={() => {
-                              const newGrid = [...localGridLayout];
-                              newGrid[rowIdx] = [...newGrid[rowIdx], {
-                                id: `${rowIdx + 1}-${newGrid[rowIdx].length + 1}`,
-                                block: rowIdx + 1,
-                                treatment: null,
-                                treatmentName: '',
-                                isBlank: true,
-                                plotNumber: newGrid[rowIdx].length + 1
-                              }];
-                              setLocalGridLayout(newGrid);
+                        return (
+                          <div
+                            key={colIdx}
+                            className={`
+                              relative min-w-[90px] rounded-lg p-2 transition-all
+                              ${hasAssignment
+                                ? 'text-white shadow-md'
+                                : 'bg-white border-2 border-dashed border-gray-300'
+                              }
+                            `}
+                            style={{
+                              backgroundColor: hasAssignment ? treatmentColors[plot.treatment] || '#6B7280' : undefined
                             }}
-                            className="min-w-[60px] rounded-lg border-2 border-dashed border-gray-300 hover:border-green-500 hover:bg-green-50 flex items-center justify-center transition"
-                            type="button"
                           >
-                            <Plus size={16} className="text-gray-400" />
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })}
+                            {/* Block and Treatment display */}
+                            {hasAssignment && (
+                              <div className="text-center mb-1">
+                                <div className="font-bold text-lg">
+                                  {String.fromCharCode(65 + plot.treatment)}
+                                </div>
+                                <div className="text-xs opacity-80">
+                                  B{plot.block}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Dropdown */}
+                            <select
+                              value={currentValue}
+                              onChange={(e) => handlePlotSelect(rowIdx, colIdx, e.target.value)}
+                              className={`w-full text-xs p-1 rounded border cursor-pointer ${
+                                hasAssignment
+                                  ? 'bg-white/20 text-white border-white/30'
+                                  : 'bg-white text-gray-700 border-gray-300'
+                              }`}
+                            >
+                              <option value="">-- Empty --</option>
+                              {availableCombos.map((combo) => (
+                                <option key={combo.value} value={combo.value}>
+                                  {combo.label}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ))}
                 </div>
               </div>
 
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
                 <p className="text-sm text-blue-800">
-                  <strong>How to use:</strong> Select a treatment from each dropdown. Treatments disappear once assigned (per row). Use <strong>Auto-fill</strong> to quickly randomize, or <strong>Clear All</strong> to start over.
+                  <strong>Flexible layout:</strong> Place any block-treatment combination in any cell.
+                  Blocks can be scattered anywhere on the grid. Use <strong>Auto-fill</strong> to quickly fill empty cells,
+                  or <strong>Clear All</strong> to start over. Add/remove rows and columns as needed.
                 </p>
               </div>
             </div>
