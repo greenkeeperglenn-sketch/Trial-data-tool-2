@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ChevronLeft, ChevronRight, Calendar, Image as ImageIcon, FileText, TrendingUp, Eye, EyeOff, ArrowUp, ArrowDown, Maximize2, MapPin } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Calendar, Image as ImageIcon, FileText, TrendingUp, Eye, EyeOff, ArrowUp, ArrowDown, Maximize2, MapPin, Grid } from 'lucide-react';
 
 // Helper function to normalize date format to YYYY-MM-DD
 const normalizeDateFormat = (dateStr) => {
@@ -865,24 +865,6 @@ const PresentationMode = ({
             >
               {reverseColorScale ? 'Low=Good' : 'High=Good'}
             </button>
-
-            {/* Hold for data grid button */}
-            <button
-              onMouseDown={() => setShowDataGrid(true)}
-              onMouseUp={() => setShowDataGrid(false)}
-              onMouseLeave={() => setShowDataGrid(false)}
-              onTouchStart={() => setShowDataGrid(true)}
-              onTouchEnd={() => setShowDataGrid(false)}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg transition shadow-lg ${
-                showDataGrid
-                  ? 'bg-orange-500 hover:bg-orange-600 text-white'
-                  : 'bg-purple-600 hover:bg-purple-700 text-white'
-              }`}
-              title="Hold to show data grid layout"
-            >
-              <MapPin size={20} />
-              {showDataGrid ? 'Grid View' : 'Hold for Grid'}
-            </button>
           </div>
         </div>
 
@@ -1264,6 +1246,22 @@ const PresentationMode = ({
           title="Hold to auto-adjust chart axes to data"
         >
           <Maximize2 size={28} />
+        </button>
+
+        <button
+          onMouseDown={() => setShowDataGrid(true)}
+          onMouseUp={() => setShowDataGrid(false)}
+          onMouseLeave={() => setShowDataGrid(false)}
+          onTouchStart={() => setShowDataGrid(true)}
+          onTouchEnd={() => setShowDataGrid(false)}
+          className={`p-4 rounded-full transition shadow-2xl hover:scale-110 ${
+            showDataGrid
+              ? 'bg-orange-500 hover:bg-orange-600'
+              : 'bg-indigo-600 hover:bg-indigo-700'
+          }`}
+          title="Hold to show field map grid layout"
+        >
+          <Grid size={28} />
         </button>
 
         <button
