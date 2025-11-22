@@ -1244,8 +1244,9 @@ const PresentationMode = ({
           </div>
         ) : (
           // Default View - Treatment columns with photos/data
-          <div className="grid gap-4" style={{ gridTemplateColumns: `repeat(${config.treatments.length}, minmax(120px, 1fr))` }}>
-            {config.treatments.map((treatmentName, treatmentIdx) => {
+          <div className="overflow-x-auto pb-4">
+            <div className="grid gap-3" style={{ gridTemplateColumns: `repeat(${config.treatments.length}, minmax(100px, 1fr))`, minWidth: `${config.treatments.length * 110}px` }}>
+              {config.treatments.map((treatmentName, treatmentIdx) => {
               const color = treatmentColors[treatmentName];
 
               // Get plots for this treatment, sorted by block
@@ -1305,6 +1306,7 @@ const PresentationMode = ({
                 </div>
               );
             })}
+            </div>
           </div>
         )}
 
