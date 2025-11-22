@@ -478,9 +478,9 @@ function convertToTrialFormat(parsedSheets) {
     assessmentTypes.forEach(assessmentType => {
       assessments[assessmentType.name] = {};
 
-      // Add data for each plot
+      // Add data for each plot - ID is block-treatment (e.g., 1-1, 1-2, 2-1, 2-2)
       sheet.plots.forEach(plot => {
-        const plotId = `${plot.block}-${plot.plot}`;
+        const plotId = `${plot.block}-${plot.treatment}`;
         const value = plot.values[assessmentType.name];
 
         if (value !== undefined && value !== null && value !== '') {
@@ -567,7 +567,7 @@ function createGridLayout(plots, numBlocks, treatmentsList, treatmentNames) {
       }
 
       return {
-        id: `${plot.block}-${plot.plot}`,
+        id: `${plot.block}-${plot.treatment}`,  // block-treatment format (e.g., 1-1, 1-2)
         block: plot.block,
         treatment: treatmentIdx !== undefined ? treatmentIdx : 0,
         treatmentName: treatmentNames[treatmentIdx] || `Treatment ${plot.treatment}`,
