@@ -1009,20 +1009,11 @@ const PresentationMode = ({
                         >
                           {/* Show photo if available */}
                           {plotData.image ? (
-                            <div className="relative">
-                              <img
-                                src={plotData.image}
-                                alt={plotData.plotId}
-                                className="w-full aspect-square object-cover"
-                              />
-                              {/* Overlay with assessment data */}
-                              <div className="absolute inset-0 bg-black/40 flex flex-col items-center justify-center">
-                                <span className="text-3xl font-bold text-white drop-shadow-lg">
-                                  {assessmentValue !== null ? assessmentValue : '-'}
-                                </span>
-                                <span className="text-xs text-white/80">B{plotData.block}</span>
-                              </div>
-                            </div>
+                            <img
+                              src={plotData.image}
+                              alt={plotData.plotId}
+                              className="w-full aspect-square object-cover"
+                            />
                           ) : (
                             // No photo - show colored box with data
                             <div className="w-full aspect-square flex flex-col items-center justify-center">
