@@ -28,53 +28,67 @@ const Analysis = ({ config, gridLayout, assessmentDates, selectedAssessmentType 
     );
   }
 
-  // GenStat-style Fisher's LSD letter assignment algorithm
+  // GenStat-style Fisher's LSD letter assignment algorithm (multi-comparison)
   const assignLetters = (sortedTreatments, lsd, significant) => {
-    // Only assign letters if treatment effect is significant
+    // If treatment effect is NOT significant, all get 'NS'
     if (!significant) {
       return sortedTreatments.map(t => ({ ...t, group: 'NS' }));
     }
 
-    const letters = {};
-
-    if (sortedTreatments.length === 0) return [];
-
-    // First treatment (lowest mean) gets 'a'
-    letters[sortedTreatments[0].treatment] = 'a';
-
-    // Each subsequent treatment
-    for (let i = 1; i < sortedTreatments.length; i++) {
-      const curr = sortedTreatments[i];
-      const prev = sortedTreatments[i - 1];
-      const prevLetters = letters[prev.treatment];
-
-      // Compare with previous treatment
-      if (Math.abs(curr.mean - prev.mean) > lsd) {
-        // Significantly different: add new letter
-        const lastLetter = prevLetters[prevLetters.length - 1];
-        const nextLetter = String.fromCharCode(lastLetter.charCodeAt(0) + 1);
-        letters[curr.treatment] = prevLetters + nextLetter;
-      } else {
-        // Not significantly different: inherit letters + repeat last
-        const lastLetter = prevLetters[prevLetters.length - 1];
-        letters[curr.treatment] = prevLetters + lastLetter;
-      }
+    if (sortedTreatments.length === 0) {
+      return [];
     }
 
-    // Clean up duplicate consecutive letters (e.g., 'aab' -> 'ab')
-    const cleanLetters = (str) => {
-      const unique = [];
-      for (const char of str) {
-        if (unique.length === 0 || unique[unique.length - 1] !== char) {
-          unique.push(char);
+    const letters = {};
+    let nextLetterCode = 'a'.charCodeAt(0);
+
+    // Process each treatment (already sorted by mean ascending)
+    for (let i = 0; i < sortedTreatments.length; i++) {
+      const curr = sortedTreatments[i];
+      let assignedLetters = '';
+
+      // Try to assign letters from 'a' onwards
+      for (let letterCode = 'a'.charCodeAt(0); letterCode <= nextLetterCode; letterCode++) {
+        const letter = String.fromCharCode(letterCode);
+
+        // Check if current treatment can get this letter
+        // Key: It can ONLY if it's NOT significantly different from ALL
+        // treatments that already have this letter
+        let canHaveLetter = true;
+
+        for (let j = 0; j < i; j++) {
+          const prev = sortedTreatments[j];
+          // If previous treatment has this letter, check distance
+          if (letters[prev.treatment].includes(letter)) {
+            if (Math.abs(curr.mean - prev.mean) > lsd) {
+              // Too different! Can't have this letter
+              canHaveLetter = false;
+              break;
+            }
+          }
+        }
+
+        if (canHaveLetter) {
+          // Can assign this letter
+          assignedLetters += letter;
+        } else {
+          // Can't have this letter, so can't have any after it
+          break;
         }
       }
-      return unique.join('');
-    };
+
+      // If no letters assigned, get a new one
+      if (assignedLetters === '') {
+        nextLetterCode++;
+        assignedLetters = String.fromCharCode(nextLetterCode);
+      }
+
+      letters[curr.treatment] = assignedLetters;
+    }
 
     return sortedTreatments.map(t => ({
       ...t,
-      group: cleanLetters(letters[t.treatment])
+      group: letters[t.treatment]
     }));
   };
 
