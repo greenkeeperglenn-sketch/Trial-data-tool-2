@@ -703,7 +703,7 @@ export default function TrialConfigEditor({ config, gridLayout, orientation, onS
                           <div
                             key={colIdx}
                             className={`
-                              relative min-w-[90px] rounded-lg p-2 transition-all
+                              relative min-w-[100px] min-h-[100px] rounded-lg transition-all flex flex-col items-center justify-center
                               ${hasAssignment
                                 ? 'text-white shadow-md'
                                 : 'bg-white border-2 border-dashed border-gray-300'
@@ -713,26 +713,26 @@ export default function TrialConfigEditor({ config, gridLayout, orientation, onS
                               backgroundColor: hasAssignment ? treatmentColors[plot.treatment] || '#6B7280' : undefined
                             }}
                           >
-                            {/* Block and Treatment display */}
+                            {/* Block and Treatment display - larger and centered */}
                             {hasAssignment && (
-                              <div className="text-center mb-1">
-                                <div className="font-bold text-lg">
+                              <div className="text-center flex-1 flex flex-col items-center justify-center">
+                                <div className="font-bold text-3xl">
                                   {String.fromCharCode(65 + plot.treatment)}
                                 </div>
-                                <div className="text-xs opacity-80">
+                                <div className="text-sm opacity-90 font-medium">
                                   B{plot.block}
                                 </div>
                               </div>
                             )}
 
-                            {/* Dropdown */}
+                            {/* Dropdown - at bottom */}
                             <select
                               value={currentValue}
                               onChange={(e) => handlePlotSelect(rowIdx, colIdx, e.target.value)}
-                              className={`w-full text-xs p-1 rounded border cursor-pointer ${
+                              className={`w-full text-xs p-1 rounded border cursor-pointer mt-auto ${
                                 hasAssignment
                                   ? 'bg-white/20 text-white border-white/30'
-                                  : 'bg-white text-gray-700 border-gray-300'
+                                  : 'bg-white text-gray-700 border-gray-300 py-8'
                               }`}
                             >
                               <option value="">-- Empty --</option>
