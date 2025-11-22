@@ -28,9 +28,8 @@ const Analysis = ({ config, gridLayout, assessmentDates, selectedAssessmentType 
     );
   }
 
-  // GenStat-style Fisher's LSD letter assignment algorithm (multi-comparison, multi-letter)
+  // GenStat-style Fisher's LSD letter assignment algorithm
   const assignLetters = (sortedTreatments, lsd, significant) => {
-    // If treatment effect is NOT significant, all get 'NS'
     if (!significant) {
       return sortedTreatments.map(t => ({ ...t, group: 'NS' }));
     }
@@ -40,49 +39,47 @@ const Analysis = ({ config, gridLayout, assessmentDates, selectedAssessmentType 
     }
 
     const letters = {};
-    let maxLetterCode = 'a'.charCodeAt(0) - 1; // Start before 'a'
 
-    // Process each treatment (already sorted by mean ascending)
-    for (let i = 0; i < sortedTreatments.length; i++) {
+    // First treatment always gets 'a'
+    letters[sortedTreatments[0].treatment] = 'a';
+
+    // Track the maximum letter we've created
+    let nextNewLetterCode = 'b'.charCodeAt(0);
+
+    // Process each subsequent treatment
+    for (let i = 1; i < sortedTreatments.length; i++) {
       const curr = sortedTreatments[i];
-      let assignedLetters = '';
 
-      // Check each letter from 'a' up to the current maximum
-      for (let letterCode = 'a'.charCodeAt(0); letterCode <= maxLetterCode; letterCode++) {
-        const letter = String.fromCharCode(letterCode);
+      // For this treatment, determine which letters it can have
+      // by checking against all previous treatments
+      const letterSet = new Set();
 
-        // Can this treatment get this letter?
-        // YES if it's within LSD of at least ONE treatment with this letter
-        let canHaveLetter = false;
+      // Check against each previous treatment
+      for (let j = 0; j < i; j++) {
+        const prev = sortedTreatments[j];
+        const prevLetters = letters[prev.treatment];
+        const diff = Math.abs(curr.mean - prev.mean);
 
-        for (let j = 0; j < i; j++) {
-          const prev = sortedTreatments[j];
-          if (letters[prev.treatment].includes(letter)) {
-            if (Math.abs(curr.mean - prev.mean) <= lsd) {
-              // Within LSD of this treatment with this letter!
-              canHaveLetter = true;
-              break;
-            }
+        // If NOT significantly different from this previous treatment
+        if (diff <= lsd) {
+          // Current can have ALL letters that previous has
+          for (const letter of prevLetters) {
+            letterSet.add(letter);
           }
         }
-
-        if (canHaveLetter) {
-          assignedLetters += letter;
-        }
-        // NOTE: Don't break! Continue checking other letters independently
       }
 
-      // If no letters assigned, create a new one
-      if (assignedLetters === '') {
-        maxLetterCode++;
-        assignedLetters = String.fromCharCode(maxLetterCode);
+      let assignedLetters;
+      // Convert set to string
+      if (letterSet.size > 0) {
+        // Sort the letters to ensure 'a' comes before 'b', etc.
+        const sortedLetters = Array.from(letterSet).sort();
+        assignedLetters = sortedLetters.join('');
       } else {
-        // Update maxLetterCode if we need to track for next iterations
-        const lastLetter = assignedLetters[assignedLetters.length - 1];
-        const lastCode = lastLetter.charCodeAt(0);
-        if (lastCode > maxLetterCode) {
-          maxLetterCode = lastCode;
-        }
+        // This treatment is significantly different from all previous
+        // Give it a new letter
+        assignedLetters = String.fromCharCode(nextNewLetterCode);
+        nextNewLetterCode++;
       }
 
       letters[curr.treatment] = assignedLetters;
