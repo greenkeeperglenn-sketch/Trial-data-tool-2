@@ -1240,7 +1240,7 @@ const PresentationMode = ({
           </div>
         ) : (
           // Default View - Treatment columns with photos/data
-          <div className="grid gap-4" style={{ gridTemplateColumns: `repeat(${config.treatments.length}, minmax(0, 1fr))` }}>
+          <div className="grid gap-4" style={{ gridTemplateColumns: `repeat(${config.treatments.length}, minmax(120px, 1fr))` }}>
             {config.treatments.map((treatmentName, treatmentIdx) => {
               const color = treatmentColors[treatmentName];
 
@@ -1251,12 +1251,13 @@ const PresentationMode = ({
 
               return (
                 <div key={treatmentIdx} className="space-y-2">
-                  {/* Treatment Header */}
+                  {/* Treatment Header - Fixed height with truncation */}
                   <div
-                    className="text-center font-bold text-lg py-2 rounded-lg shadow-lg"
+                    className="text-center font-bold text-sm py-3 rounded-lg shadow-lg h-14 flex items-center justify-center overflow-hidden"
                     style={{ backgroundColor: color, color: 'white' }}
+                    title={treatmentName}
                   >
-                    {treatmentName}
+                    <span className="truncate px-2">{treatmentName}</span>
                   </div>
 
                   {/* Blocks for this treatment */}
@@ -1268,7 +1269,7 @@ const PresentationMode = ({
                       return (
                         <div
                           key={plotData.plotId}
-                          className="relative rounded-lg shadow-lg overflow-hidden cursor-pointer transition-all hover:scale-105"
+                          className="relative rounded-lg shadow-lg overflow-hidden cursor-pointer transition-all hover:scale-105 aspect-square"
                           style={{ backgroundColor: bgColor }}
                           onClick={() => {
                             if (plotData.image) {
@@ -1281,11 +1282,11 @@ const PresentationMode = ({
                             <img
                               src={plotData.image}
                               alt={plotData.plotId}
-                              className="w-full aspect-square object-cover"
+                              className="w-full h-full object-cover"
                             />
                           ) : (
                             // No photo - show colored box with data
-                            <div className="w-full aspect-square flex flex-col items-center justify-center">
+                            <div className="w-full h-full flex flex-col items-center justify-center">
                               <span className="text-3xl font-bold text-white drop-shadow-lg">
                                 {assessmentValue !== null ? assessmentValue : '-'}
                               </span>
