@@ -147,21 +147,24 @@ const Analysis = ({ config, gridLayout, assessmentDates, selectedAssessmentType 
 
   return (
     <div className="space-y-6">
-      {/* Summary Statistics Table */}
+      {/* Summary Statistics Table with Significance */}
       <div className="bg-white p-6 rounded-lg shadow">
         <h3 className="text-xl font-bold mb-4">Statistical Analysis - {selectedAssessmentType}</h3>
-        
+
         <div className="overflow-x-auto">
-          <table className="w-full text-sm border-collapse mb-6">
+          <table className="w-full text-sm border-collapse">
             <thead>
               <tr className="border-b-2 border-gray-300">
                 <th className="p-3 text-left bg-gray-100">Treatment</th>
-                {assessmentDates.map((dateObj, idx) => (
-                  <th key={idx} className="p-3 text-center bg-gray-100 min-w-40">
-                    <div className="font-semibold">{dateObj.date}</div>
-                    <div className="text-xs font-normal text-gray-600 mt-1">Mean ± SE (Group)</div>
-                  </th>
-                ))}
+                {assessmentDates.map((dateObj, idx) => {
+                  const stats = calculateStats(dateObj);
+                  return (
+                    <th key={idx} className="p-3 text-center bg-gray-100 min-w-40">
+                      <div className="font-semibold">{dateObj.date}</div>
+                      <div className="text-xs font-normal text-gray-600 mt-1">Mean ± SE (Group)</div>
+                    </th>
+                  );
+                })}
               </tr>
             </thead>
             <tbody>
@@ -173,12 +176,12 @@ const Analysis = ({ config, gridLayout, assessmentDates, selectedAssessmentType 
                     if (!stats) {
                       return <td key={dateIdx} className="p-3 text-center text-gray-400">-</td>;
                     }
-                    
+
                     const treatmentStat = stats.treatmentStats.find(ts => ts.treatment === treatmentIdx);
                     if (!treatmentStat) {
                       return <td key={dateIdx} className="p-3 text-center text-gray-400">-</td>;
                     }
-                    
+
                     return (
                       <td key={dateIdx} className="p-3 text-center">
                         <div className="font-medium">
@@ -192,107 +195,41 @@ const Analysis = ({ config, gridLayout, assessmentDates, selectedAssessmentType 
                   })}
                 </tr>
               ))}
+              {/* Significance row at bottom of table */}
+              <tr className="border-t-2 border-gray-300 bg-gray-50">
+                <td className="p-3 font-semibold">Significance</td>
+                {assessmentDates.map((dateObj, dateIdx) => {
+                  const stats = calculateStats(dateObj);
+                  if (!stats) {
+                    return <td key={dateIdx} className="p-3 text-center text-gray-400">-</td>;
+                  }
+
+                  return (
+                    <td key={dateIdx} className="p-3 text-center">
+                      <div className={`font-semibold ${stats.anova.significant ? 'text-green-600' : 'text-gray-500'}`}>
+                        {stats.anova.significant ? '✓ Sig.' : 'NS'}
+                      </div>
+                      <div className="text-xs text-gray-600 mt-1">
+                        p = {stats.anova.pValue.toFixed(3)}
+                      </div>
+                      <div className="text-xs text-gray-500">
+                        LSD: {stats.lsd.toFixed(2)}
+                      </div>
+                    </td>
+                  );
+                })}
+              </tr>
             </tbody>
           </table>
-          
-          {/* ANOVA Summary */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
-            {assessmentDates.map((dateObj, idx) => {
-              const stats = calculateStats(dateObj);
-              if (!stats) return null;
-              
-              return (
-                <div key={idx} className="p-4 bg-gray-50 rounded border">
-                  <div className="font-semibold mb-3 text-base">{dateObj.date}</div>
-                  <div className="space-y-2 text-xs">
-                    <div className="flex justify-between">
-                      <span>F-value:</span>
-                      <span className="font-mono">{stats.anova.fValue.toFixed(3)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>P-value:</span>
-                      <span className="font-mono">{stats.anova.pValue.toFixed(4)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>LSD (95%):</span>
-                      <span className="font-mono">{stats.lsd.toFixed(3)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>MS Error:</span>
-                      <span className="font-mono">{stats.anova.msError.toFixed(3)}</span>
-                    </div>
-                    <div className={`pt-2 border-t ${stats.anova.significant ? 'text-green-600' : 'text-gray-600'} font-medium`}>
-                      {stats.anova.significant ? '✓ Significant (p < 0.05)' : '○ Not Significant'}
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
+
+          <div className="mt-4 p-3 bg-blue-50 rounded text-sm">
+            <p className="text-gray-700">
+              <strong>Interpretation:</strong> Treatments with different letters are significantly different (p &lt; 0.05).
+              LSD = Fisher's Least Significant Difference.
+            </p>
           </div>
         </div>
       </div>
-
-      {/* ANOVA Table Detail for Latest Date */}
-      {assessmentDates.length > 0 && (() => {
-        const latestDate = assessmentDates[assessmentDates.length - 1];
-        const stats = calculateStats(latestDate);
-        if (!stats) return null;
-        
-        return (
-          <div className="bg-white p-6 rounded-lg shadow">
-            <h3 className="text-xl font-bold mb-4">
-              ANOVA Table - {latestDate.date}
-            </h3>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm border-collapse">
-                <thead>
-                  <tr className="border-b-2 border-gray-300 bg-gray-100">
-                    <th className="p-3 text-left">Source</th>
-                    <th className="p-3 text-right">DF</th>
-                    <th className="p-3 text-right">Sum of Squares</th>
-                    <th className="p-3 text-right">Mean Square</th>
-                    <th className="p-3 text-right">F-Value</th>
-                    <th className="p-3 text-right">P-Value</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr className="border-b">
-                    <td className="p-3 font-medium">Treatment</td>
-                    <td className="p-3 text-right font-mono">{stats.anova.dfTreatment}</td>
-                    <td className="p-3 text-right font-mono">{stats.anova.ssTreatment.toFixed(3)}</td>
-                    <td className="p-3 text-right font-mono">{stats.anova.msTreatment.toFixed(3)}</td>
-                    <td className="p-3 text-right font-mono">{stats.anova.fValue.toFixed(3)}</td>
-                    <td className="p-3 text-right font-mono">{stats.anova.pValue.toFixed(4)}</td>
-                  </tr>
-                  <tr className="border-b">
-                    <td className="p-3 font-medium">Error</td>
-                    <td className="p-3 text-right font-mono">{stats.anova.dfError}</td>
-                    <td className="p-3 text-right font-mono">{stats.anova.ssError.toFixed(3)}</td>
-                    <td className="p-3 text-right font-mono">{stats.anova.msError.toFixed(3)}</td>
-                    <td className="p-3 text-right">-</td>
-                    <td className="p-3 text-right">-</td>
-                  </tr>
-                  <tr className="bg-gray-50 font-semibold">
-                    <td className="p-3">Total</td>
-                    <td className="p-3 text-right font-mono">{stats.anova.dfTotal}</td>
-                    <td className="p-3 text-right font-mono">{stats.anova.ssTotal.toFixed(3)}</td>
-                    <td className="p-3 text-right">-</td>
-                    <td className="p-3 text-right">-</td>
-                    <td className="p-3 text-right">-</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-            <div className="mt-4 p-3 bg-blue-50 rounded text-sm">
-              <p className="font-medium mb-1">Interpretation:</p>
-              <p>
-                Fisher's LSD at 95% confidence: {stats.lsd.toFixed(3)}. 
-                Treatments with different letters are significantly different at p &lt; 0.05.
-              </p>
-            </div>
-          </div>
-        );
-      })()}
 
       {/* Box Plots */}
       <div className="bg-white p-6 rounded-lg shadow">
