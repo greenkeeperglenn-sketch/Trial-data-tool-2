@@ -60,9 +60,12 @@ export default function ExcelImport({ onImport, onCancel }) {
       if (data.dateInterpretations && data.dateInterpretations.length > 0) {
         setSelectedDates(data.dateInterpretations.map(interp => interp.detected));
 
-        // Only show date confirmation if there are ambiguous dates or fallbacks
-        const needsConfirmation = data.dateInterpretations.some(interp => interp.needsConfirmation);
-        setShowDateConfirmation(needsConfirmation);
+        // Only show date confirmation if there are fallback dates (parsing failures)
+        // Ambiguous dates (UK vs US) are fine - we default to UK format
+        const hasFallbacks = data.dateInterpretations.some(
+          interp => interp.options.length > 0 && interp.options[0].format === 'Fallback (today)'
+        );
+        setShowDateConfirmation(hasFallbacks);
       }
     } catch (err) {
       console.error('Parse error:', err);
@@ -175,16 +178,6 @@ export default function ExcelImport({ onImport, onCancel }) {
             </div>
           )}
 
-          {/* Debug Info */}
-          <div className="mb-4 p-3 bg-gray-100 rounded text-xs space-y-1">
-            <p><strong>Debug Info:</strong></p>
-            <p>File selected: {file ? 'Yes' : 'No'} {file && `(${file.name})`}</p>
-            <p>Parsing: {parsing ? 'Yes' : 'No'}</p>
-            <p>Has error: {error ? 'Yes' : 'No'}</p>
-            <p>Parsed data: {parsedData ? 'Yes' : 'No'}</p>
-            {parsedData && <p>Trial name: {parsedData.name}</p>}
-          </div>
-
           {/* Error Message */}
           {error && (
             <div className="border border-red-300 rounded-lg p-4 bg-red-50">
@@ -273,29 +266,36 @@ export default function ExcelImport({ onImport, onCancel }) {
                   </div>
                 )}
 
-                {/* Assessment Dates */}
+                {/* Assessment Dates - Compact display */}
                 {parsedData.assessmentDates && parsedData.assessmentDates.length > 0 && (
                   <div>
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-sm font-medium text-gray-600">
-                        Assessment Dates:
+                        Assessment Dates ({parsedData.assessmentDates.length}):
                       </span>
                       <button
                         onClick={() => setShowDateConfirmation(true)}
                         className="text-xs text-blue-600 hover:text-blue-800 underline"
                       >
-                        Review / Edit Dates
+                        Edit dates
                       </button>
                     </div>
-                    <div className="flex flex-wrap gap-2">
-                      {parsedData.assessmentDates.map((dateObj, idx) => (
-                        <span
-                          key={idx}
-                          className="px-3 py-1 bg-purple-100 text-purple-800 rounded-full text-sm"
-                        >
-                          {dateObj.date}
-                        </span>
-                      ))}
+                    <div className="bg-white rounded p-3 text-sm">
+                      <div className="flex flex-wrap gap-x-4 gap-y-1">
+                        {parsedData.assessmentDates.map((dateObj, idx) => {
+                          const interpretation = parsedData.dateInterpretations?.[idx];
+                          const isFallback = interpretation?.options?.[0]?.format === 'Fallback (today)';
+                          return (
+                            <span
+                              key={idx}
+                              className={`${isFallback ? 'text-red-600 font-medium' : 'text-gray-700'}`}
+                            >
+                              {new Date(dateObj.date + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
+                              {isFallback && ' ⚠️'}
+                            </span>
+                          );
+                        })}
+                      </div>
                     </div>
                   </div>
                 )}
@@ -323,105 +323,67 @@ export default function ExcelImport({ onImport, onCancel }) {
             </div>
           )}
 
-          {/* Date Confirmation Modal */}
+          {/* Date Confirmation Modal - Compact table format */}
           {showDateConfirmation && parsedData?.dateInterpretations && (
-            <div className="border border-yellow-300 rounded-lg p-6 bg-yellow-50">
-              <div className="flex items-start space-x-3 mb-4">
-                <AlertCircle className="h-6 w-6 text-yellow-600 flex-shrink-0 mt-0.5" />
-                <div className="flex-1">
-                  <h3 className="font-bold text-yellow-900 text-lg">Confirm Assessment Dates</h3>
-                  <p className="text-sm text-yellow-700 mt-1">
-                    Please verify the dates below are correct. Click the date to edit with a calendar picker.
-                  </p>
-                </div>
+            <div className="border border-yellow-300 rounded-lg p-4 bg-yellow-50">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="font-bold text-yellow-900">Review Assessment Dates</h3>
+                <button
+                  onClick={() => setShowDateConfirmation(false)}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <X size={20} />
+                </button>
               </div>
 
-              <div className="space-y-3">
-                {parsedData.dateInterpretations.map((interp, index) => {
-                  const hasMultipleOptions = interp.options.length > 1;
-                  const selectedOption = interp.options.find(opt => opt.date === selectedDates[index]);
-
-                  return (
-                    <div key={index} className="bg-white rounded-lg p-4 border border-gray-200">
-                      <div className="flex items-start gap-4">
-                        {/* Date number badge */}
-                        <div className="flex-shrink-0 w-8 h-8 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-sm">
-                          {index + 1}
-                        </div>
-
-                        {/* Original date from Excel */}
-                        <div className="flex-1 min-w-0">
-                          <div className="text-xs text-gray-500 mb-1">From Excel:</div>
-                          <div className="font-mono text-sm text-gray-700 mb-2">"{interp.original}"</div>
-
-                          {/* Quick date picker - most prominent */}
-                          <div className="flex items-center gap-3">
+              <div className="bg-white rounded border overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50 border-b">
+                    <tr>
+                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 w-8">#</th>
+                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Excel</th>
+                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">Parsed Date</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y">
+                    {parsedData.dateInterpretations.map((interp, index) => {
+                      const isFallback = interp.options?.[0]?.format === 'Fallback (today)';
+                      return (
+                        <tr key={index} className={isFallback ? 'bg-red-50' : ''}>
+                          <td className="px-3 py-2 text-gray-500">{index + 1}</td>
+                          <td className="px-3 py-2 font-mono text-gray-600">{interp.original}</td>
+                          <td className="px-3 py-2">
                             <input
                               type="date"
                               value={selectedDates[index] || ''}
                               onChange={(e) => handleDateChange(index, e.target.value)}
-                              className="px-3 py-2 text-base font-semibold border-2 border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-blue-50"
+                              className={`px-2 py-1 border rounded text-sm ${
+                                isFallback
+                                  ? 'border-red-300 bg-red-50 focus:ring-red-500'
+                                  : 'border-gray-300 focus:ring-blue-500'
+                              } focus:ring-1 focus:outline-none`}
                             />
-                            {selectedOption && (
-                              <div className="text-sm text-gray-600">
-                                {selectedOption.readable}
-                              </div>
-                            )}
-                          </div>
-
-                          {/* Show radio buttons only if ambiguous */}
-                          {hasMultipleOptions && (
-                            <details className="mt-3">
-                              <summary className="text-xs text-blue-600 cursor-pointer hover:text-blue-800">
-                                Date is ambiguous - choose interpretation
-                              </summary>
-                              <div className="mt-2 space-y-2 pl-4 border-l-2 border-gray-200">
-                                {interp.options.map((option, optIdx) => (
-                                  <label
-                                    key={optIdx}
-                                    className={`flex items-start p-2 rounded cursor-pointer transition ${
-                                      selectedDates[index] === option.date
-                                        ? 'bg-blue-50 border border-blue-300'
-                                        : 'hover:bg-gray-50'
-                                    }`}
-                                  >
-                                    <input
-                                      type="radio"
-                                      name={`date-${index}`}
-                                      value={option.date}
-                                      checked={selectedDates[index] === option.date}
-                                      onChange={(e) => handleDateChange(index, e.target.value)}
-                                      className="mt-0.5 mr-2"
-                                    />
-                                    <div className="text-xs">
-                                      <div className="font-semibold text-gray-900">{option.format}</div>
-                                      <div className="text-gray-600">{option.readable}</div>
-                                    </div>
-                                  </label>
-                                ))}
-                              </div>
-                            </details>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
+                            {isFallback && <span className="ml-2 text-red-600 text-xs">⚠️ Fix this</span>}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
               </div>
 
-              <div className="flex justify-end space-x-3 mt-6 pt-4 border-t border-yellow-200">
+              <div className="flex justify-end space-x-3 mt-4">
                 <button
                   onClick={() => setShowDateConfirmation(false)}
-                  className="px-4 py-2 text-yellow-700 hover:text-yellow-900 transition-colors"
+                  className="px-3 py-1.5 text-sm text-gray-600 hover:text-gray-800"
                 >
-                  Skip (Use Defaults)
+                  Cancel
                 </button>
                 <button
                   onClick={handleConfirmDates}
-                  className="px-6 py-2 bg-yellow-600 text-white rounded hover:bg-yellow-700 transition-colors flex items-center space-x-2"
+                  className="px-4 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700"
                 >
-                  <CheckCircle size={18} />
-                  <span>Confirm All Dates</span>
+                  Apply Changes
                 </button>
               </div>
             </div>
