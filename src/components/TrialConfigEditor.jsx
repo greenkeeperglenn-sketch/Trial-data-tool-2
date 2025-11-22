@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Save, Plus, Trash2, Edit2, Grip, RotateCw, Square, Columns, Rows } from 'lucide-react';
+import { X, Save, Plus, Trash2, Edit2, Grip, RotateCw, Square, Columns, Rows, Shuffle } from 'lucide-react';
 
 export default function TrialConfigEditor({ config, gridLayout, orientation, onSave, onCancel }) {
   // Debug logging
@@ -184,29 +184,27 @@ export default function TrialConfigEditor({ config, gridLayout, orientation, onS
     setLocalGridLayout(newGrid);
   };
 
-  // Handle plot selection from dropdown
+  // Handle plot selection from dropdown - simplified to just treatment selection
   const handlePlotSelect = (rowIdx, colIdx, value) => {
     const newGrid = localGridLayout.map(row => [...row]);
 
-    if (value === 'BLANK') {
-      // Set to blank
+    if (value === '' || value === 'BLANK') {
+      // Set to blank / unassigned
       newGrid[rowIdx][colIdx] = {
         id: `${rowIdx + 1}-${colIdx + 1}`,
         block: rowIdx + 1,
-        treatment: 0,
+        treatment: null,
         treatmentName: '',
         isBlank: true,
         plotNumber: colIdx + 1
       };
     } else {
-      // Parse the value: "block-treatment" format
-      const [blockStr, treatmentStr] = value.split('-');
-      const block = parseInt(blockStr);
-      const treatmentIdx = parseInt(treatmentStr);
+      // Value is just the treatment index
+      const treatmentIdx = parseInt(value, 10);
 
       newGrid[rowIdx][colIdx] = {
-        id: `${block}-${colIdx + 1}`,
-        block: block,
+        id: `${rowIdx + 1}-${treatmentIdx + 1}`,
+        block: rowIdx + 1,
         treatment: treatmentIdx,
         treatmentName: editedConfig.treatments[treatmentIdx] || `Treatment ${treatmentIdx + 1}`,
         isBlank: false,
@@ -217,24 +215,107 @@ export default function TrialConfigEditor({ config, gridLayout, orientation, onS
     setLocalGridLayout(newGrid);
   };
 
-  // Generate all possible plot combinations
-  const getAllPossiblePlots = () => {
-    const plots = [];
-    const numBlocks = Math.max(4, localGridLayout.length); // At least 4 blocks or current rows
+  // Get treatments already used in a specific row (block)
+  const getUsedTreatmentsInRow = (rowIdx) => {
+    const row = localGridLayout[rowIdx];
+    if (!row) return new Set();
 
-    for (let block = 1; block <= numBlocks; block++) {
-      editedConfig.treatments.forEach((treatment, treatmentIdx) => {
-        plots.push({
-          value: `${block}-${treatmentIdx}`,
-          label: `Block ${block} - ${treatment}`,
-          block,
-          treatmentIdx,
-          treatmentName: treatment
-        });
+    return new Set(
+      row
+        .filter(plot => !plot.isBlank && plot.treatment !== null && plot.treatment !== undefined)
+        .map(plot => plot.treatment)
+    );
+  };
+
+  // Get available treatments for a specific row (not yet assigned in that row)
+  const getAvailableTreatmentsForRow = (rowIdx, currentPlotTreatment) => {
+    const usedTreatments = getUsedTreatmentsInRow(rowIdx);
+
+    return editedConfig.treatments.map((treatment, idx) => ({
+      value: idx,
+      label: treatment,
+      isAvailable: !usedTreatments.has(idx) || idx === currentPlotTreatment
+    })).filter(t => t.isAvailable);
+  };
+
+  // Auto-fill all empty/blank plots with random treatments (RCBD style)
+  const autoFillAll = () => {
+    const newGrid = localGridLayout.map((row, rowIdx) => {
+      // Get treatments already assigned in this row
+      const usedTreatments = new Set(
+        row
+          .filter(plot => !plot.isBlank && plot.treatment !== null && plot.treatment !== undefined)
+          .map(plot => plot.treatment)
+      );
+
+      // Get unassigned treatments
+      const unassignedTreatments = editedConfig.treatments
+        .map((_, idx) => idx)
+        .filter(t => !usedTreatments.has(t));
+
+      // Shuffle unassigned treatments
+      const shuffled = [...unassignedTreatments].sort(() => Math.random() - 0.5);
+
+      let shuffleIdx = 0;
+      return row.map((plot, colIdx) => {
+        // Skip if already has a treatment assigned
+        if (!plot.isBlank && plot.treatment !== null && plot.treatment !== undefined) {
+          return plot;
+        }
+
+        // Assign next shuffled treatment
+        const treatmentIdx = shuffled[shuffleIdx++];
+        if (treatmentIdx === undefined) return plot; // No more treatments
+
+        return {
+          id: `${rowIdx + 1}-${treatmentIdx + 1}`,
+          block: rowIdx + 1,
+          treatment: treatmentIdx,
+          treatmentName: editedConfig.treatments[treatmentIdx],
+          isBlank: false,
+          plotNumber: colIdx + 1
+        };
       });
-    }
+    });
 
-    return plots;
+    setLocalGridLayout(newGrid);
+  };
+
+  // Clear all plot assignments (make all blank)
+  const clearAllPlots = () => {
+    const newGrid = localGridLayout.map((row, rowIdx) =>
+      row.map((plot, colIdx) => ({
+        id: `${rowIdx + 1}-${colIdx + 1}`,
+        block: rowIdx + 1,
+        treatment: null,
+        treatmentName: '',
+        isBlank: true,
+        plotNumber: colIdx + 1
+      }))
+    );
+    setLocalGridLayout(newGrid);
+  };
+
+  // Clear a single row
+  const clearRow = (rowIdx) => {
+    const newGrid = [...localGridLayout];
+    newGrid[rowIdx] = newGrid[rowIdx].map((plot, colIdx) => ({
+      id: `${rowIdx + 1}-${colIdx + 1}`,
+      block: rowIdx + 1,
+      treatment: null,
+      treatmentName: '',
+      isBlank: true,
+      plotNumber: colIdx + 1
+    }));
+    setLocalGridLayout(newGrid);
+  };
+
+  // Get progress for a row
+  const getRowProgress = (rowIdx) => {
+    const row = localGridLayout[rowIdx];
+    if (!row) return { assigned: 0, total: editedConfig.treatments.length };
+    const assigned = row.filter(p => !p.isBlank && p.treatment !== null && p.treatment !== undefined).length;
+    return { assigned, total: editedConfig.treatments.length };
   };
 
   // Add a row of blank plots
@@ -469,180 +550,183 @@ export default function TrialConfigEditor({ config, gridLayout, orientation, onS
               <div className="flex items-center justify-between">
                 <div>
                   <h3 className="text-lg font-semibold text-gray-800">Field Map Layout</h3>
-                  <p className="text-sm text-gray-600">Drag and drop plots to rearrange. Useful for odd trial configurations.</p>
+                  <p className="text-sm text-gray-600">Assign treatments using dropdowns. Treatments disappear once assigned per row.</p>
                 </div>
 
                 {/* Compass Control */}
                 <div className="flex flex-col items-center gap-2">
                   <div className="text-xs font-semibold text-gray-600">ORIENTATION</div>
-
-                  {/* Compass Display */}
-                  <div className="relative w-20 h-20 bg-gradient-to-br from-blue-50 to-blue-100 rounded-full shadow-lg border-4 border-blue-300">
+                  <div className="relative w-16 h-16 bg-gradient-to-br from-blue-50 to-blue-100 rounded-full shadow border-2 border-blue-300">
                     <div
                       className="absolute inset-0 flex items-center justify-center"
                       style={{ transform: `rotate(${localOrientation}deg)` }}
                     >
-                      {/* North Arrow */}
                       <div className="absolute top-0.5 left-1/2 -translate-x-1/2">
-                        <div className="w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-b-[12px] border-b-red-600"></div>
-                        <div className="text-xs font-bold text-red-600 text-center">N</div>
-                      </div>
-                      {/* South Marker */}
-                      <div className="absolute bottom-0.5 left-1/2 -translate-x-1/2">
-                        <div className="text-xs text-gray-500">S</div>
-                      </div>
-                      {/* East Marker */}
-                      <div className="absolute right-0.5 top-1/2 -translate-y-1/2">
-                        <div className="text-xs text-gray-500">E</div>
-                      </div>
-                      {/* West Marker */}
-                      <div className="absolute left-0.5 top-1/2 -translate-y-1/2">
-                        <div className="text-xs text-gray-500">W</div>
+                        <div className="w-0 h-0 border-l-[4px] border-l-transparent border-r-[4px] border-r-transparent border-b-[8px] border-b-red-600"></div>
                       </div>
                     </div>
                   </div>
-
-                  {/* Rotation Display */}
-                  <div className="text-sm font-mono text-gray-700 bg-gray-100 px-2 py-1 rounded">
-                    {localOrientation}°
-                  </div>
-
-                  {/* Rotation Controls */}
                   <div className="flex gap-1">
-                    <button
-                      onClick={() => rotateCompass(-5)}
-                      className="px-2 py-1 bg-blue-100 hover:bg-blue-200 text-blue-700 text-xs rounded transition"
-                      title="Rotate -5°"
-                      type="button"
-                    >
-                      ↺ 5°
-                    </button>
-                    <button
-                      onClick={() => rotateCompass(5)}
-                      className="px-2 py-1 bg-blue-100 hover:bg-blue-200 text-blue-700 text-xs rounded transition"
-                      title="Rotate +5°"
-                      type="button"
-                    >
-                      ↻ 5°
-                    </button>
+                    <button onClick={() => rotateCompass(-5)} className="px-2 py-1 bg-blue-100 hover:bg-blue-200 text-blue-700 text-xs rounded" type="button">-5°</button>
+                    <span className="px-2 py-1 text-xs bg-gray-100 rounded">{localOrientation}°</span>
+                    <button onClick={() => rotateCompass(5)} className="px-2 py-1 bg-blue-100 hover:bg-blue-200 text-blue-700 text-xs rounded" type="button">+5°</button>
                   </div>
-                  <button
-                    onClick={() => setLocalOrientation(0)}
-                    className="px-2 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs rounded transition"
-                    type="button"
-                  >
-                    Reset
-                  </button>
                 </div>
               </div>
 
-              {/* Grid Management Buttons */}
+              {/* Quick Actions */}
               <div className="flex gap-2 flex-wrap">
                 <button
-                  onClick={addBlankRow}
-                  className="flex items-center gap-2 px-3 py-2 bg-green-600 text-white rounded text-sm hover:bg-green-700 transition"
+                  onClick={autoFillAll}
+                  className="flex items-center gap-2 px-3 py-2 bg-purple-600 text-white rounded text-sm hover:bg-purple-700 transition"
                   type="button"
-                  title="Add a row of blank plots"
+                  title="Randomly assign all empty plots"
                 >
-                  <Plus size={16} />
-                  <Rows size={16} />
-                  Add Blank Row
+                  <Shuffle size={16} />
+                  Auto-fill (Randomize)
                 </button>
+
+                <button
+                  onClick={clearAllPlots}
+                  className="flex items-center gap-2 px-3 py-2 bg-red-100 text-red-700 rounded text-sm hover:bg-red-200 transition"
+                  type="button"
+                  title="Clear all assignments"
+                >
+                  <Trash2 size={16} />
+                  Clear All
+                </button>
+
+                <div className="flex-1" />
 
                 <button
                   onClick={addBlankColumn}
-                  className="flex items-center gap-2 px-3 py-2 bg-green-600 text-white rounded text-sm hover:bg-green-700 transition"
+                  className="flex items-center gap-1 px-2 py-1 bg-gray-200 text-gray-700 rounded text-xs hover:bg-gray-300 transition"
                   type="button"
-                  title="Add a column of blank plots"
                 >
-                  <Plus size={16} />
-                  <Columns size={16} />
-                  Add Blank Column
+                  <Plus size={14} /> Column
                 </button>
 
                 <button
-                  onClick={removeLastRow}
-                  className="flex items-center gap-2 px-3 py-2 bg-red-600 text-white rounded text-sm hover:bg-red-700 transition"
+                  onClick={addBlankRow}
+                  className="flex items-center gap-1 px-2 py-1 bg-gray-200 text-gray-700 rounded text-xs hover:bg-gray-300 transition"
                   type="button"
-                  title="Remove the last row"
                 >
-                  <Trash2 size={16} />
-                  Remove Last Row
-                </button>
-
-                <button
-                  onClick={removeLastColumn}
-                  className="flex items-center gap-2 px-3 py-2 bg-red-600 text-white rounded text-sm hover:bg-red-700 transition"
-                  type="button"
-                  title="Remove the last column"
-                >
-                  <Trash2 size={16} />
-                  Remove Last Column
+                  <Plus size={14} /> Row
                 </button>
               </div>
 
               {/* Grid Display */}
               <div className="border border-gray-300 rounded-lg p-4 bg-gray-50 overflow-x-auto">
-                <div className="space-y-2">
-                  {localGridLayout.map((row, rowIdx) => (
-                    <div key={rowIdx} className="flex gap-2">
-                      {row.map((plot, colIdx) => {
-                        const allPlots = getAllPossiblePlots();
-                        const currentValue = plot.isBlank
-                          ? 'BLANK'
-                          : `${plot.block}-${plot.treatment}`;
+                <div className="space-y-3">
+                  {localGridLayout.map((row, rowIdx) => {
+                    const progress = getRowProgress(rowIdx);
 
-                        return (
-                          <div
-                            key={colIdx}
-                            className={`
-                              relative min-w-[140px] rounded border-2 p-2
-                              ${plot.isBlank
-                                ? 'border-dashed border-gray-300 bg-gray-100'
-                                : 'border-solid border-blue-400 bg-white'
-                              }
-                            `}
+                    return (
+                      <div key={rowIdx} className="space-y-1">
+                        {/* Row header */}
+                        <div className="flex items-center gap-2 text-xs">
+                          <span className="font-semibold text-gray-600">Block {rowIdx + 1}</span>
+                          <span className={`px-2 py-0.5 rounded ${
+                            progress.assigned >= progress.total
+                              ? 'bg-green-100 text-green-700'
+                              : 'bg-yellow-100 text-yellow-700'
+                          }`}>
+                            {progress.assigned}/{progress.total}
+                          </span>
+                          <button
+                            onClick={() => clearRow(rowIdx)}
+                            className="text-red-500 hover:text-red-700 text-xs underline"
+                            type="button"
                           >
-                            {/* Dropdown for plot selection */}
-                            <select
-                              value={currentValue}
-                              onChange={(e) => handlePlotSelect(rowIdx, colIdx, e.target.value)}
-                              className="w-full text-xs p-1 border rounded bg-white hover:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            >
-                              <option value="BLANK">-- Blank --</option>
-                              {allPlots.map((plotOption) => (
-                                <option key={plotOption.value} value={plotOption.value}>
-                                  {plotOption.label}
-                                </option>
-                              ))}
-                            </select>
+                            Clear
+                          </button>
+                        </div>
 
-                            {/* Display current plot info */}
-                            {!plot.isBlank && (
-                              <div className="mt-1 text-xs text-center">
-                                <div className="font-semibold text-gray-600">{plot.id}</div>
-                                <div className="text-blue-700 truncate">{plot.treatmentName}</div>
+                        {/* Row plots */}
+                        <div className="flex gap-2">
+                          {row.map((plot, colIdx) => {
+                            const availableTreatments = getAvailableTreatmentsForRow(rowIdx, plot.treatment);
+                            const hasAssignment = !plot.isBlank && plot.treatment !== null && plot.treatment !== undefined;
+
+                            // Treatment colors
+                            const treatmentColors = {
+                              0: '#FF6B6B', 1: '#4ECDC4', 2: '#45B7D1', 3: '#FFA07A',
+                              4: '#95E1D3', 5: '#F38181', 6: '#AA96DA', 7: '#FCBAD3',
+                              8: '#FFD93D', 9: '#6BCF7F', 10: '#FF85A2', 11: '#5DADE2'
+                            };
+
+                            return (
+                              <div
+                                key={colIdx}
+                                className={`
+                                  relative min-w-[100px] rounded-lg p-2 transition-all
+                                  ${hasAssignment
+                                    ? 'text-white shadow-md'
+                                    : 'bg-white border-2 border-dashed border-gray-300'
+                                  }
+                                `}
+                                style={{
+                                  backgroundColor: hasAssignment ? treatmentColors[plot.treatment] || '#6B7280' : undefined
+                                }}
+                              >
+                                {/* Treatment letter */}
+                                {hasAssignment && (
+                                  <div className="text-center font-bold text-lg mb-1">
+                                    {String.fromCharCode(65 + plot.treatment)}
+                                  </div>
+                                )}
+
+                                {/* Dropdown */}
+                                <select
+                                  value={hasAssignment ? plot.treatment : ''}
+                                  onChange={(e) => handlePlotSelect(rowIdx, colIdx, e.target.value)}
+                                  className={`w-full text-xs p-1 rounded border cursor-pointer ${
+                                    hasAssignment
+                                      ? 'bg-white/20 text-white border-white/30'
+                                      : 'bg-white text-gray-700 border-gray-300'
+                                  }`}
+                                >
+                                  <option value="">-- Select --</option>
+                                  {availableTreatments.map((t) => (
+                                    <option key={t.value} value={t.value}>
+                                      {String.fromCharCode(65 + t.value)} - {t.label}
+                                    </option>
+                                  ))}
+                                </select>
                               </div>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  ))}
+                            );
+                          })}
+
+                          {/* Add plot button */}
+                          <button
+                            onClick={() => {
+                              const newGrid = [...localGridLayout];
+                              newGrid[rowIdx] = [...newGrid[rowIdx], {
+                                id: `${rowIdx + 1}-${newGrid[rowIdx].length + 1}`,
+                                block: rowIdx + 1,
+                                treatment: null,
+                                treatmentName: '',
+                                isBlank: true,
+                                plotNumber: newGrid[rowIdx].length + 1
+                              }];
+                              setLocalGridLayout(newGrid);
+                            }}
+                            className="min-w-[60px] rounded-lg border-2 border-dashed border-gray-300 hover:border-green-500 hover:bg-green-50 flex items-center justify-center transition"
+                            type="button"
+                          >
+                            <Plus size={16} className="text-gray-400" />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
 
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
                 <p className="text-sm text-blue-800">
-                  <strong>Tips:</strong>
+                  <strong>How to use:</strong> Select a treatment from each dropdown. Treatments disappear once assigned (per row). Use <strong>Auto-fill</strong> to quickly randomize, or <strong>Clear All</strong> to start over.
                 </p>
-                <ul className="text-sm text-blue-800 list-disc list-inside mt-1 space-y-1">
-                  <li>Use dropdown menus to assign plots to each position</li>
-                  <li>Select "-- Blank --" to make a position empty</li>
-                  <li>Choose any Block-Treatment combination from the dropdown</li>
-                  <li>Use buttons above to add/remove rows and columns</li>
-                  <li>Blank plots won't appear in data entry</li>
-                </ul>
               </div>
             </div>
           )}
