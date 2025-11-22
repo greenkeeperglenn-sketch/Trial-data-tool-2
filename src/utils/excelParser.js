@@ -221,6 +221,16 @@ export function parseExcelFile(file) {
 }
 
 /**
+ * Convert 2-digit year to 4-digit year
+ * Uses 2000-2099 range (assumes years 00-99 mean 2000-2099)
+ */
+function expandYear(yearStr) {
+  const year = parseInt(yearStr, 10);
+  if (year >= 100) return year; // Already 4-digit
+  return 2000 + year; // Convert 25 -> 2025
+}
+
+/**
  * Get all possible date interpretations for user to choose from
  * @param {string} dateStr - Original date string
  * @returns {Object} Object with original, ukFormat, usFormat, and isoFormat
@@ -254,12 +264,14 @@ function getDateInterpretations(dateStr) {
     };
   }
 
-  // Parse DD/MM/YYYY or MM/DD/YYYY format
-  const dateMatch = str.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+  // Parse dates with separators: supports /, -, or . (dot)
+  // Supports both 2-digit (YY) and 4-digit (YYYY) years
+  // Examples: DD/MM/YYYY, DD.MM.YY, D.M.YY, etc.
+  const dateMatch = str.match(/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2,4})$/);
   if (dateMatch) {
     const first = parseInt(dateMatch[1], 10);
     const second = parseInt(dateMatch[2], 10);
-    const year = parseInt(dateMatch[3], 10);
+    const year = expandYear(dateMatch[3]);
 
     // Determine if date is ambiguous
     const firstIsValidDay = first >= 1 && first <= 31;
@@ -267,28 +279,34 @@ function getDateInterpretations(dateStr) {
     const secondIsValidDay = second >= 1 && second <= 31;
     const secondIsValidMonth = second >= 1 && second <= 12;
 
-    // UK Format (DD/MM/YYYY) - PREFER THIS
+    // UK/European Format (DD/MM/YYYY or DD.MM.YY) - PREFER THIS
     if (secondIsValidMonth && firstIsValidDay) {
       const ukDate = `${year}-${String(second).padStart(2, '0')}-${String(first).padStart(2, '0')}`;
       const ukDateObj = new Date(year, second - 1, first);
-      options.push({
-        format: 'UK (DD/MM/YYYY)',
-        date: ukDate,
-        label: `${String(first).padStart(2, '0')}/${String(second).padStart(2, '0')}/${year}`,
-        readable: ukDateObj.toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' })
-      });
+      // Validate the date is real (e.g., catches 31 Feb)
+      if (ukDateObj.getDate() === first && ukDateObj.getMonth() === second - 1) {
+        options.push({
+          format: 'UK/EU (DD.MM.YY)',
+          date: ukDate,
+          label: `${String(first).padStart(2, '0')}/${String(second).padStart(2, '0')}/${year}`,
+          readable: ukDateObj.toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' })
+        });
+      }
     }
 
     // US Format (MM/DD/YYYY) - only add if DIFFERENT from UK and both are valid
     if (firstIsValidMonth && secondIsValidDay && first !== second) {
       const usDate = `${year}-${String(first).padStart(2, '0')}-${String(second).padStart(2, '0')}`;
       const usDateObj = new Date(year, first - 1, second);
-      options.push({
-        format: 'US (MM/DD/YYYY)',
-        date: usDate,
-        label: `${String(first).padStart(2, '0')}/${String(second).padStart(2, '0')}/${year}`,
-        readable: usDateObj.toLocaleDateString('en-US', { day: '2-digit', month: 'long', year: 'numeric' })
-      });
+      // Validate the date is real
+      if (usDateObj.getDate() === second && usDateObj.getMonth() === first - 1) {
+        options.push({
+          format: 'US (MM/DD/YY)',
+          date: usDate,
+          label: `${String(first).padStart(2, '0')}/${String(second).padStart(2, '0')}/${year}`,
+          readable: usDateObj.toLocaleDateString('en-US', { day: '2-digit', month: 'long', year: 'numeric' })
+        });
+      }
     }
 
     // Only need confirmation if genuinely ambiguous (both interpretations valid and different)
@@ -343,7 +361,7 @@ function getDateInterpretations(dateStr) {
 
 /**
  * Normalize date string to YYYY-MM-DD format
- * Handles both UK (DD/MM/YYYY) and US (MM/DD/YYYY) formats
+ * Handles UK (DD/MM/YYYY, DD.MM.YY) and US (MM/DD/YYYY) formats
  */
 function normalizeDateFormat(dateStr) {
   if (!dateStr) return new Date().toISOString().split('T')[0];
@@ -355,15 +373,15 @@ function normalizeDateFormat(dateStr) {
     return str;
   }
 
-  // Handle DD/MM/YYYY or DD-MM-YYYY (UK format)
-  const ukMatch = str.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
-  if (ukMatch) {
-    const day = parseInt(ukMatch[1], 10);
-    const month = parseInt(ukMatch[2], 10);
-    const year = parseInt(ukMatch[3], 10);
+  // Handle dates with various separators (/, -, .) and 2 or 4 digit years
+  // Examples: DD/MM/YYYY, DD.MM.YY, D.M.YY, etc.
+  const dateMatch = str.match(/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2,4})$/);
+  if (dateMatch) {
+    const day = parseInt(dateMatch[1], 10);
+    const month = parseInt(dateMatch[2], 10);
+    const year = expandYear(dateMatch[3]);
 
-    // If day > 12, it must be UK format (DD/MM/YYYY)
-    // Otherwise, ambiguous - assume UK format for consistency
+    // Assume UK/European format (DD.MM.YY) for consistency
     const paddedMonth = String(month).padStart(2, '0');
     const paddedDay = String(day).padStart(2, '0');
 
@@ -374,7 +392,7 @@ function normalizeDateFormat(dateStr) {
   }
 
   // Handle YYYY-MM-DD with different separators
-  const isoMatch = str.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})$/);
+  const isoMatch = str.match(/^(\d{4})[\/\-\.](\d{1,2})[\/\-\.](\d{1,2})$/);
   if (isoMatch) {
     const year = isoMatch[1];
     const month = String(parseInt(isoMatch[2], 10)).padStart(2, '0');
@@ -460,9 +478,9 @@ function convertToTrialFormat(parsedSheets) {
     assessmentTypes.forEach(assessmentType => {
       assessments[assessmentType.name] = {};
 
-      // Add data for each plot
+      // Add data for each plot - ID is block-treatment (e.g., 1-1, 1-2, 2-1, 2-2)
       sheet.plots.forEach(plot => {
-        const plotId = `${plot.block}-${plot.plot}`;
+        const plotId = `${plot.block}-${plot.treatment}`;
         const value = plot.values[assessmentType.name];
 
         if (value !== undefined && value !== null && value !== '') {
@@ -549,7 +567,7 @@ function createGridLayout(plots, numBlocks, treatmentsList, treatmentNames) {
       }
 
       return {
-        id: `${plot.block}-${plot.plot}`,
+        id: `${plot.block}-${plot.treatment}`,  // block-treatment format (e.g., 1-1, 1-2)
         block: plot.block,
         treatment: treatmentIdx !== undefined ? treatmentIdx : 0,
         treatmentName: treatmentNames[treatmentIdx] || `Treatment ${plot.treatment}`,

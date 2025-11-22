@@ -1,18 +1,17 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Minus, Shuffle, Lock } from 'lucide-react';
+import { Plus, Minus, Shuffle, Lock, Trash2 } from 'lucide-react';
 
-const TrialLayoutEditor = ({ 
-  config, 
-  gridLayout, 
-  orientation, 
-  onLayoutChange, 
+const TrialLayoutEditor = ({
+  config,
+  gridLayout,
+  orientation,
+  onLayoutChange,
   onOrientationChange,
   onFinalize,
-  onBack 
+  onBack
 }) => {
   const [localGridLayout, setLocalGridLayout] = useState(gridLayout);
   const [localOrientation, setLocalOrientation] = useState(orientation);
-  const [draggedItem, setDraggedItem] = useState(null);
 
   // Treatment colors (up to 17 treatments A-Q)
   const treatmentColors = {
@@ -23,90 +22,151 @@ const TrialLayoutEditor = ({
     16: '#EC4899'
   };
 
-  // Generate initial RCBD layout if empty
+  // Initialize with empty plots if no layout exists
   useEffect(() => {
     if (localGridLayout.length === 0) {
-      generateInitialLayout();
+      generateEmptyLayout();
     }
   }, []);
 
-  const generateInitialLayout = () => {
+  // Generate empty layout (all plots unassigned)
+  const generateEmptyLayout = () => {
     const grid = [];
     for (let block = 0; block < config.numBlocks; block++) {
       const row = [];
-      const treatments = [...Array(config.numTreatments).keys()];
-      const shuffled = [...treatments].sort(() => Math.random() - 0.5);
-      
-      shuffled.forEach(treatmentIdx => {
+      for (let plotIdx = 0; plotIdx < config.numTreatments; plotIdx++) {
         row.push({
-          id: `B${block + 1}-T${treatmentIdx}`,
+          id: `B${block + 1}-P${plotIdx + 1}`,
           block: block + 1,
-          treatment: treatmentIdx,
-          treatmentName: config.treatments[treatmentIdx],
+          treatment: null, // Unassigned
+          treatmentName: null,
           isBlank: false
         });
-      });
+      }
       grid.push(row);
     }
-    
+
     setLocalGridLayout(grid);
     onLayoutChange(grid);
   };
 
-  // Randomize all blocks
-  const randomizeAllBlocks = () => {
-    const newGrid = localGridLayout.map(row => {
-      const nonBlanks = row.filter(p => !p.isBlank);
-      const treatments = nonBlanks.map(p => p.treatment);
-      const shuffled = [...treatments].sort(() => Math.random() - 0.5);
-      
-      let treatmentIdx = 0;
-      return row.map(plot => {
+  // Get available treatments for a specific block (not yet assigned)
+  const getAvailableTreatments = (blockIdx) => {
+    const block = localGridLayout[blockIdx];
+    if (!block) return [...Array(config.numTreatments).keys()];
+
+    const usedTreatments = new Set(
+      block
+        .filter(plot => !plot.isBlank && plot.treatment !== null)
+        .map(plot => plot.treatment)
+    );
+
+    return [...Array(config.numTreatments).keys()].filter(t => !usedTreatments.has(t));
+  };
+
+  // Assign treatment to a plot
+  const assignTreatment = (blockIdx, plotIdx, treatmentIdx) => {
+    const newGrid = [...localGridLayout];
+    newGrid[blockIdx] = [...newGrid[blockIdx]];
+
+    if (treatmentIdx === null || treatmentIdx === '') {
+      // Clear assignment
+      newGrid[blockIdx][plotIdx] = {
+        ...newGrid[blockIdx][plotIdx],
+        treatment: null,
+        treatmentName: null
+      };
+    } else {
+      const tIdx = parseInt(treatmentIdx, 10);
+      newGrid[blockIdx][plotIdx] = {
+        ...newGrid[blockIdx][plotIdx],
+        treatment: tIdx,
+        treatmentName: config.treatments[tIdx]
+      };
+    }
+
+    setLocalGridLayout(newGrid);
+    onLayoutChange(newGrid);
+  };
+
+  // Auto-fill all empty plots with random treatments (RCBD style)
+  const autoFillAll = () => {
+    const newGrid = localGridLayout.map((block, blockIdx) => {
+      // Get treatments already assigned in this block
+      const assignedTreatments = new Set(
+        block
+          .filter(plot => !plot.isBlank && plot.treatment !== null)
+          .map(plot => plot.treatment)
+      );
+
+      // Get unassigned treatments
+      const unassignedTreatments = [...Array(config.numTreatments).keys()]
+        .filter(t => !assignedTreatments.has(t));
+
+      // Shuffle unassigned treatments
+      const shuffled = [...unassignedTreatments].sort(() => Math.random() - 0.5);
+
+      let shuffleIdx = 0;
+      return block.map(plot => {
         if (plot.isBlank) return plot;
+        if (plot.treatment !== null) return plot; // Already assigned
+
+        // Assign next shuffled treatment
+        const treatmentIdx = shuffled[shuffleIdx++];
+        if (treatmentIdx === undefined) return plot; // No more treatments
+
         return {
           ...plot,
-          treatment: shuffled[treatmentIdx++],
-          treatmentName: config.treatments[shuffled[treatmentIdx - 1]]
+          treatment: treatmentIdx,
+          treatmentName: config.treatments[treatmentIdx]
         };
       });
     });
-    
+
     setLocalGridLayout(newGrid);
     onLayoutChange(newGrid);
   };
 
-  // Randomize single block
-  const randomizeBlock = (blockIdx) => {
-    const newGrid = [...localGridLayout];
-    const row = newGrid[blockIdx];
-    const nonBlanks = row.filter(p => !p.isBlank);
-    const treatments = nonBlanks.map(p => p.treatment);
-    const shuffled = [...treatments].sort(() => Math.random() - 0.5);
-    
-    let treatmentIdx = 0;
-    newGrid[blockIdx] = row.map(plot => {
-      if (plot.isBlank) return plot;
-      return {
+  // Clear all assignments
+  const clearAll = () => {
+    const newGrid = localGridLayout.map(block =>
+      block.map(plot => ({
         ...plot,
-        treatment: shuffled[treatmentIdx++],
-        treatmentName: config.treatments[shuffled[treatmentIdx - 1]]
-      };
-    });
-    
+        treatment: plot.isBlank ? null : null,
+        treatmentName: null
+      }))
+    );
+
     setLocalGridLayout(newGrid);
     onLayoutChange(newGrid);
   };
 
-  // Add blank plot
+  // Clear single block
+  const clearBlock = (blockIdx) => {
+    const newGrid = [...localGridLayout];
+    newGrid[blockIdx] = newGrid[blockIdx].map(plot => ({
+      ...plot,
+      treatment: plot.isBlank ? null : null,
+      treatmentName: null
+    }));
+
+    setLocalGridLayout(newGrid);
+    onLayoutChange(newGrid);
+  };
+
+  // Add blank plot to block
   const addBlankToBlock = (blockIdx, position) => {
     const newGrid = [...localGridLayout];
     const blank = {
       id: `BLANK-${Date.now()}`,
       isBlank: true,
-      block: blockIdx + 1
+      block: blockIdx + 1,
+      treatment: null,
+      treatmentName: null
     };
+    newGrid[blockIdx] = [...newGrid[blockIdx]];
     newGrid[blockIdx].splice(position, 0, blank);
-    
+
     setLocalGridLayout(newGrid);
     onLayoutChange(newGrid);
   };
@@ -115,43 +175,27 @@ const TrialLayoutEditor = ({
   const removeBlank = (blockIdx, plotIdx) => {
     const newGrid = [...localGridLayout];
     newGrid[blockIdx] = newGrid[blockIdx].filter((_, idx) => idx !== plotIdx);
-    
-    setLocalGridLayout(newGrid);
-    onLayoutChange(newGrid);
-  };
-
-  // Drag handlers
-  const handleDragStart = (e, blockIdx, plotIdx) => {
-    setDraggedItem({ blockIdx, plotIdx });
-    e.dataTransfer.effectAllowed = 'move';
-  };
-
-  const handleDragOver = (e) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-  };
-
-  const handleDrop = (e, targetBlockIdx, targetPlotIdx) => {
-    e.preventDefault();
-    if (!draggedItem) return;
-
-    // Only allow swapping within same block
-    if (draggedItem.blockIdx !== targetBlockIdx) {
-      alert('Cannot move plots between blocks! Drag within the same row only.');
-      setDraggedItem(null);
-      return;
-    }
-
-    const newGrid = [...localGridLayout];
-    const block = [...newGrid[targetBlockIdx]];
-    const temp = block[draggedItem.plotIdx];
-    block[draggedItem.plotIdx] = block[targetPlotIdx];
-    block[targetPlotIdx] = temp;
-    newGrid[targetBlockIdx] = block;
 
     setLocalGridLayout(newGrid);
     onLayoutChange(newGrid);
-    setDraggedItem(null);
+  };
+
+  // Check if all treatments are assigned in all blocks
+  const isComplete = () => {
+    return localGridLayout.every(block => {
+      const nonBlankPlots = block.filter(p => !p.isBlank);
+      const assignedCount = nonBlankPlots.filter(p => p.treatment !== null).length;
+      return assignedCount >= config.numTreatments;
+    });
+  };
+
+  // Count assigned treatments per block
+  const getBlockProgress = (blockIdx) => {
+    const block = localGridLayout[blockIdx];
+    if (!block) return { assigned: 0, total: config.numTreatments };
+    const nonBlankPlots = block.filter(p => !p.isBlank);
+    const assigned = nonBlankPlots.filter(p => p.treatment !== null).length;
+    return { assigned, total: config.numTreatments };
   };
 
   // Rotate compass
@@ -167,31 +211,49 @@ const TrialLayoutEditor = ({
       <div className="mb-4 flex justify-between items-center">
         <div>
           <h1 className="text-3xl font-bold">Field Layout Builder</h1>
-          <p className="text-gray-600">Arrange your trial plots</p>
+          <p className="text-gray-600">Assign treatments to plots using the dropdown on each cell</p>
         </div>
-        <button 
-          onClick={onBack} 
+        <button
+          onClick={onBack}
           className="px-4 py-2 bg-gray-200 rounded hover:bg-gray-300 transition"
         >
-          ← Back to Setup
+          Back to Setup
         </button>
       </div>
 
       {/* Controls */}
-      <div className="bg-white p-4 rounded-lg shadow mb-4 flex gap-4 flex-wrap items-center">
-        <button 
-          onClick={randomizeAllBlocks}
+      <div className="bg-white p-4 rounded-lg shadow mb-4 flex gap-3 flex-wrap items-center">
+        <button
+          onClick={autoFillAll}
           className="flex items-center gap-2 px-4 py-2 bg-purple-500 hover:bg-purple-600 text-white rounded transition"
+          title="Randomly assign all unassigned plots"
         >
-          <Shuffle size={20} />
-          Randomize All Blocks
+          <Shuffle size={18} />
+          Auto-fill (Randomize)
         </button>
-        
-        <button 
-          onClick={onFinalize}
-          className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded transition ml-auto"
+
+        <button
+          onClick={clearAll}
+          className="flex items-center gap-2 px-4 py-2 bg-red-100 hover:bg-red-200 text-red-700 rounded transition"
+          title="Clear all treatment assignments"
         >
-          <Lock size={20} /> Finalize & Lock Layout
+          <Trash2 size={18} />
+          Clear All
+        </button>
+
+        <div className="flex-1" />
+
+        <button
+          onClick={onFinalize}
+          disabled={!isComplete()}
+          className={`flex items-center gap-2 px-4 py-2 rounded transition ${
+            isComplete()
+              ? 'bg-green-600 hover:bg-green-700 text-white'
+              : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+          }`}
+          title={isComplete() ? 'Lock layout and start data entry' : 'Assign all treatments first'}
+        >
+          <Lock size={18} /> Finalize & Lock Layout
         </button>
       </div>
 
@@ -203,191 +265,194 @@ const TrialLayoutEditor = ({
               Field Map (Each row = 1 Block)
             </h3>
             <p className="text-sm text-gray-500 mt-1">
-              Plots resize to fit screen width
+              Click dropdown to assign treatment. Each treatment can only be used once per block.
             </p>
           </div>
-          
+
           {/* Compass Control */}
           <div className="flex flex-col items-center gap-2">
             <div className="text-xs font-semibold text-gray-600">ORIENTATION</div>
-            
+
             {/* Compass Display */}
-            <div className="relative w-24 h-24 bg-gradient-to-br from-blue-50 to-blue-100 rounded-full shadow-lg border-4 border-blue-300">
-              <div 
+            <div className="relative w-20 h-20 bg-gradient-to-br from-blue-50 to-blue-100 rounded-full shadow-lg border-4 border-blue-300">
+              <div
                 className="absolute inset-0 flex items-center justify-center"
                 style={{ transform: `rotate(${localOrientation}deg)` }}
               >
-                {/* North Arrow */}
                 <div className="absolute top-1 left-1/2 -translate-x-1/2">
-                  <div className="w-0 h-0 border-l-[8px] border-l-transparent border-r-[8px] border-r-transparent border-b-[16px] border-b-red-600"></div>
-                  <div className="text-xs font-bold text-red-600 text-center mt-0.5">N</div>
+                  <div className="w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-b-[12px] border-b-red-600"></div>
+                  <div className="text-[10px] font-bold text-red-600 text-center">N</div>
                 </div>
-                
-                {/* South */}
-                <div className="absolute bottom-1 left-1/2 -translate-x-1/2">
-                  <div className="text-xs font-semibold text-gray-600 mb-0.5">S</div>
-                  <div className="w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-t-[12px] border-t-gray-600"></div>
-                </div>
-                
-                {/* East */}
-                <div className="absolute right-1 top-1/2 -translate-y-1/2">
-                  <div className="text-xs font-semibold text-gray-600">E</div>
-                </div>
-                
-                {/* West */}
-                <div className="absolute left-1 top-1/2 -translate-y-1/2">
-                  <div className="text-xs font-semibold text-gray-600">W</div>
-                </div>
-                
-                {/* Center Dot */}
-                <div className="w-2 h-2 bg-gray-800 rounded-full"></div>
+                <div className="w-1.5 h-1.5 bg-gray-800 rounded-full"></div>
               </div>
             </div>
-            
-            {/* Rotation Display */}
-            <div className="text-sm font-mono text-gray-700 bg-gray-100 px-3 py-1 rounded">
-              {localOrientation}°
-            </div>
-            
-            {/* Rotation Controls */}
+
             <div className="flex gap-1">
               <button
                 onClick={() => rotateCompass(-5)}
-                className="px-3 py-1 bg-blue-100 hover:bg-blue-200 text-blue-700 text-sm rounded transition"
-                title="Rotate -5°"
+                className="px-2 py-1 bg-blue-100 hover:bg-blue-200 text-blue-700 text-xs rounded transition"
               >
-                ↺ 5°
+                -5°
               </button>
+              <span className="px-2 py-1 text-xs font-mono bg-gray-100 rounded">{localOrientation}°</span>
               <button
                 onClick={() => rotateCompass(5)}
-                className="px-3 py-1 bg-blue-100 hover:bg-blue-200 text-blue-700 text-sm rounded transition"
-                title="Rotate +5°"
+                className="px-2 py-1 bg-blue-100 hover:bg-blue-200 text-blue-700 text-xs rounded transition"
               >
-                ↻ 5°
+                +5°
               </button>
             </div>
-            <button
-              onClick={() => {
-                setLocalOrientation(0);
-                onOrientationChange(0);
-              }}
-              className="text-xs text-gray-500 hover:text-gray-700 underline"
-            >
-              Reset to North
-            </button>
           </div>
         </div>
 
         {/* Grid Layout */}
-        <div className="space-y-3">
-          {localGridLayout.map((block, blockIdx) => (
-            <div key={blockIdx} className="flex items-start gap-2">
-              {/* Block Label */}
-              <div className="flex-shrink-0 w-24 text-right pr-2 sticky left-0 bg-white z-10">
-                <div className="text-sm font-semibold text-gray-700">
-                  Block {blockIdx + 1}
+        <div className="space-y-4">
+          {localGridLayout.map((block, blockIdx) => {
+            const progress = getBlockProgress(blockIdx);
+            const availableTreatments = getAvailableTreatments(blockIdx);
+
+            return (
+              <div key={blockIdx} className="border rounded-lg p-3 bg-gray-50">
+                {/* Block Header */}
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-3">
+                    <span className="font-semibold text-gray-700">Block {blockIdx + 1}</span>
+                    <span className={`text-xs px-2 py-0.5 rounded ${
+                      progress.assigned >= progress.total
+                        ? 'bg-green-100 text-green-700'
+                        : 'bg-yellow-100 text-yellow-700'
+                    }`}>
+                      {progress.assigned}/{progress.total} assigned
+                    </span>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => clearBlock(blockIdx)}
+                      className="text-xs px-2 py-1 text-red-600 hover:bg-red-100 rounded transition"
+                      title="Clear this block"
+                    >
+                      Clear
+                    </button>
+                    <button
+                      onClick={() => addBlankToBlock(blockIdx, block.length)}
+                      className="text-xs px-2 py-1 text-green-600 hover:bg-green-100 rounded transition flex items-center gap-1"
+                      title="Add blank space"
+                    >
+                      <Plus size={12} /> Blank
+                    </button>
+                  </div>
                 </div>
-                <div className="flex gap-1 justify-end mt-1">
-                  <button
-                    onClick={() => randomizeBlock(blockIdx)}
-                    className="p-1 bg-purple-100 hover:bg-purple-200 rounded transition"
-                    title="Randomize this block"
-                  >
-                    <Shuffle size={12} className="text-purple-600" />
-                  </button>
+
+                {/* Block Plots */}
+                <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${Math.min(block.length + 1, 12)}, minmax(0, 1fr))` }}>
+                  {block.map((plot, plotIdx) => (
+                    <div
+                      key={plot.id}
+                      className={`
+                        rounded-lg shadow transition-all min-h-[70px] flex flex-col items-center justify-center p-1
+                        ${plot.isBlank
+                          ? 'bg-gray-200 border-2 border-dashed border-gray-400'
+                          : plot.treatment !== null
+                            ? 'text-white'
+                            : 'bg-white border-2 border-gray-300'
+                        }
+                      `}
+                      style={{
+                        backgroundColor: !plot.isBlank && plot.treatment !== null
+                          ? treatmentColors[plot.treatment]
+                          : undefined,
+                      }}
+                    >
+                      {plot.isBlank ? (
+                        <button
+                          onClick={() => removeBlank(blockIdx, plotIdx)}
+                          className="w-full h-full flex items-center justify-center hover:bg-red-200 rounded transition"
+                          title="Remove blank"
+                        >
+                          <Minus size={16} className="text-gray-500" />
+                        </button>
+                      ) : (
+                        <>
+                          {/* Treatment Letter Display */}
+                          {plot.treatment !== null && (
+                            <div className="text-xl font-bold mb-1">
+                              {String.fromCharCode(65 + plot.treatment)}
+                            </div>
+                          )}
+
+                          {/* Dropdown Selector */}
+                          <select
+                            value={plot.treatment !== null ? plot.treatment : ''}
+                            onChange={(e) => assignTreatment(blockIdx, plotIdx, e.target.value)}
+                            className={`
+                              w-full text-xs rounded px-1 py-0.5 cursor-pointer
+                              ${plot.treatment !== null
+                                ? 'bg-white/20 text-white border-white/30'
+                                : 'bg-white text-gray-700 border-gray-300'
+                              } border
+                            `}
+                          >
+                            <option value="">-- Select --</option>
+                            {/* Show current treatment if assigned */}
+                            {plot.treatment !== null && (
+                              <option value={plot.treatment}>
+                                {String.fromCharCode(65 + plot.treatment)} - {config.treatments[plot.treatment]}
+                              </option>
+                            )}
+                            {/* Show available treatments */}
+                            {availableTreatments.map(tIdx => (
+                              <option key={tIdx} value={tIdx}>
+                                {String.fromCharCode(65 + tIdx)} - {config.treatments[tIdx]}
+                              </option>
+                            ))}
+                          </select>
+                        </>
+                      )}
+                    </div>
+                  ))}
+
+                  {/* Add plot button */}
                   <button
                     onClick={() => addBlankToBlock(blockIdx, block.length)}
-                    className="p-1 bg-green-100 hover:bg-green-200 rounded transition"
-                    title="Add blank to end"
+                    className="min-h-[70px] rounded-lg border-2 border-dashed border-gray-300 hover:border-green-500 hover:bg-green-50 transition flex items-center justify-center"
+                    title="Add blank space"
                   >
-                    <Plus size={12} className="text-green-600" />
+                    <Plus size={20} className="text-gray-400" />
                   </button>
                 </div>
               </div>
-
-              {/* Block Plots - Responsive grid */}
-              <div className="grid gap-1 flex-1" style={{ gridTemplateColumns: `repeat(${block.length + 1}, minmax(0, 1fr))` }}>
-                {block.map((plot, plotIdx) => (
-                  <div
-                    key={plot.id}
-                    draggable={!plot.isBlank}
-                    onDragStart={(e) => handleDragStart(e, blockIdx, plotIdx)}
-                    onDragOver={handleDragOver}
-                    onDrop={(e) => handleDrop(e, blockIdx, plotIdx)}
-                    className={`
-                      aspect-square rounded-lg shadow-md transition-all flex items-center justify-center
-                      ${plot.isBlank 
-                        ? 'bg-gray-100 border-2 border-dashed border-gray-300' 
-                        : 'cursor-move hover:shadow-xl hover:scale-105'
-                      }
-                    `}
-                    style={{ 
-                      backgroundColor: plot.isBlank ? undefined : treatmentColors[plot.treatment],
-                    }}
-                  >
-                    {plot.isBlank ? (
-                      <button
-                        onClick={() => removeBlank(blockIdx, plotIdx)}
-                        className="w-full h-full flex items-center justify-center hover:bg-red-100 rounded-lg transition group"
-                      >
-                        <Minus 
-                          className="text-gray-400 group-hover:text-red-500 transition"
-                          style={{ width: 'min(24px, 40%)', height: 'min(24px, 40%)' }}
-                        />
-                      </button>
-                    ) : (
-                      <div className="text-white font-bold text-center" style={{ fontSize: 'min(1.5rem, 6vw)' }}>
-                        {String.fromCharCode(65 + plot.treatment)}
-                      </div>
-                    )}
-                  </div>
-                ))}
-                
-                {/* Quick add blank at end */}
-                <button
-                  onClick={() => addBlankToBlock(blockIdx, block.length)}
-                  className="aspect-square rounded-lg hover:border-green-500 hover:bg-green-50 transition border-2 border-dashed border-gray-300 flex items-center justify-center group"
-                >
-                  <Plus 
-                    className="text-gray-400 group-hover:text-green-600"
-                    style={{ width: 'min(24px, 40%)', height: 'min(24px, 40%)' }}
-                  />
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {/* Instructions */}
-        <div className="mt-6 p-4 bg-blue-50 rounded">
-          <h4 className="font-medium mb-2">Instructions:</h4>
-          <ul className="text-sm space-y-1 text-gray-700">
-            <li>• <strong>Each row = 1 complete block</strong> containing all treatments (plots resize to fit)</li>
-            <li>• <strong>Compass:</strong> Adjust field orientation in 5° increments</li>
-            <li>• <strong>Drag & Drop:</strong> Swap plots within the same row only</li>
-            <li>• <strong>Randomize:</strong> Use shuffle button on each block or randomize all</li>
-            <li>• <strong>Add Blanks:</strong> Click + button or the dashed square at end of row</li>
-            <li>• <strong>Remove Blanks:</strong> Click − on any blank space</li>
-            <li>• <strong>Finalize:</strong> Lock layout when ready to start data entry</li>
-          </ul>
+            );
+          })}
         </div>
 
         {/* Treatment Legend */}
-        <div className="mt-6 p-4 bg-gray-50 rounded">
+        <div className="mt-6 p-4 bg-gray-50 rounded border">
           <h4 className="font-medium mb-3">Treatment Legend:</h4>
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
             {config.treatments.map((treatment, idx) => (
               <div key={idx} className="flex items-center gap-2">
-                <div 
-                  className="w-8 h-8 rounded flex items-center justify-center text-white font-bold shadow"
+                <div
+                  className="w-6 h-6 rounded flex items-center justify-center text-white font-bold text-sm shadow"
                   style={{ backgroundColor: treatmentColors[idx] }}
                 >
                   {String.fromCharCode(65 + idx)}
                 </div>
-                <span className="text-sm">{treatment}</span>
+                <span className="text-sm truncate">{treatment}</span>
               </div>
             ))}
           </div>
+        </div>
+
+        {/* Instructions */}
+        <div className="mt-4 p-4 bg-blue-50 rounded border border-blue-200">
+          <h4 className="font-medium mb-2 text-blue-800">How to use:</h4>
+          <ul className="text-sm space-y-1 text-blue-700">
+            <li>1. Click the dropdown on each plot to assign a treatment</li>
+            <li>2. Treatments disappear from the list once assigned (per block)</li>
+            <li>3. Use <strong>Auto-fill</strong> to randomly assign all remaining plots</li>
+            <li>4. Use <strong>Clear All</strong> to start over</li>
+            <li>5. Click <strong>Finalize</strong> when all treatments are assigned</li>
+          </ul>
         </div>
       </div>
     </div>
