@@ -28,7 +28,7 @@ const Analysis = ({ config, gridLayout, assessmentDates, selectedAssessmentType 
     );
   }
 
-  // GenStat-style Fisher's LSD letter assignment algorithm (multi-comparison)
+  // GenStat-style Fisher's LSD letter assignment algorithm (multi-comparison, multi-letter)
   const assignLetters = (sortedTreatments, lsd, significant) => {
     // If treatment effect is NOT significant, all get 'NS'
     if (!significant) {
@@ -40,47 +40,49 @@ const Analysis = ({ config, gridLayout, assessmentDates, selectedAssessmentType 
     }
 
     const letters = {};
-    let nextLetterCode = 'a'.charCodeAt(0);
+    let maxLetterCode = 'a'.charCodeAt(0) - 1; // Start before 'a'
 
     // Process each treatment (already sorted by mean ascending)
     for (let i = 0; i < sortedTreatments.length; i++) {
       const curr = sortedTreatments[i];
       let assignedLetters = '';
 
-      // Try to assign letters from 'a' onwards
-      for (let letterCode = 'a'.charCodeAt(0); letterCode <= nextLetterCode; letterCode++) {
+      // Check each letter from 'a' up to the current maximum
+      for (let letterCode = 'a'.charCodeAt(0); letterCode <= maxLetterCode; letterCode++) {
         const letter = String.fromCharCode(letterCode);
 
-        // Check if current treatment can get this letter
-        // Key: It can ONLY if it's NOT significantly different from ALL
-        // treatments that already have this letter
-        let canHaveLetter = true;
+        // Can this treatment get this letter?
+        // YES if it's within LSD of at least ONE treatment with this letter
+        let canHaveLetter = false;
 
         for (let j = 0; j < i; j++) {
           const prev = sortedTreatments[j];
-          // If previous treatment has this letter, check distance
           if (letters[prev.treatment].includes(letter)) {
-            if (Math.abs(curr.mean - prev.mean) > lsd) {
-              // Too different! Can't have this letter
-              canHaveLetter = false;
+            if (Math.abs(curr.mean - prev.mean) <= lsd) {
+              // Within LSD of this treatment with this letter!
+              canHaveLetter = true;
               break;
             }
           }
         }
 
         if (canHaveLetter) {
-          // Can assign this letter
           assignedLetters += letter;
-        } else {
-          // Can't have this letter, so can't have any after it
-          break;
         }
+        // NOTE: Don't break! Continue checking other letters independently
       }
 
-      // If no letters assigned, get a new one
+      // If no letters assigned, create a new one
       if (assignedLetters === '') {
-        nextLetterCode++;
-        assignedLetters = String.fromCharCode(nextLetterCode);
+        maxLetterCode++;
+        assignedLetters = String.fromCharCode(maxLetterCode);
+      } else {
+        // Update maxLetterCode if we need to track for next iterations
+        const lastLetter = assignedLetters[assignedLetters.length - 1];
+        const lastCode = lastLetter.charCodeAt(0);
+        if (lastCode > maxLetterCode) {
+          maxLetterCode = lastCode;
+        }
       }
 
       letters[curr.treatment] = assignedLetters;
