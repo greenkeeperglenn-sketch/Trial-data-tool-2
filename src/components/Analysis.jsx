@@ -32,7 +32,7 @@ const Analysis = ({ config, gridLayout, assessmentDates, selectedAssessmentType 
   const assignLetters = (sortedTreatments, lsd, significant) => {
     // Only assign letters if treatment effect is significant
     if (!significant) {
-      return sortedTreatments.map(t => ({ ...t, group: '-' }));
+      return sortedTreatments.map(t => ({ ...t, group: 'NS' }));
     }
 
     const letters = {};
