@@ -1245,8 +1245,9 @@ const PresentationMode = ({
               const color = treatmentColors[treatmentName];
 
               // Get plots for this treatment, sorted by block
+              // Use == for comparison to handle string/number type mismatch
               const treatmentPlots = Object.values(plotDataMap)
-                .filter(p => p.treatmentIdx === treatmentIdx)
+                .filter(p => p.treatmentIdx == treatmentIdx)
                 .sort((a, b) => a.block - b.block);
 
               return (
