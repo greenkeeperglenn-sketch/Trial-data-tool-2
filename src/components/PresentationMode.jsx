@@ -1211,7 +1211,7 @@ const PresentationMode = ({
                   return (
                     <div
                       key={colIdx}
-                      className="w-20 h-20 rounded-lg shadow-lg flex flex-col items-center justify-center transition-all hover:scale-110 cursor-pointer relative"
+                      className="w-20 h-20 rounded-lg shadow-lg overflow-hidden transition-all hover:scale-110 cursor-pointer relative"
                       style={{ backgroundColor: bgColor }}
                       onClick={() => {
                         if (plotData?.image) {
@@ -1219,17 +1219,21 @@ const PresentationMode = ({
                         }
                       }}
                     >
-                      {/* Large assessment value */}
-                      <span className="text-2xl font-bold text-white drop-shadow-lg">
-                        {assessmentValue !== null ? assessmentValue : '-'}
-                      </span>
-                      {/* Small block-treatment info */}
-                      <span className="text-xs text-white/70">{plot.id}</span>
-
-                      {/* Photo indicator */}
-                      {plotData?.image && (
-                        <div className="absolute top-1 right-1">
-                          <ImageIcon size={12} className="text-white/70" />
+                      {/* Show photo if available, otherwise show data */}
+                      {plotData?.image ? (
+                        <img
+                          src={plotData.image}
+                          alt={plot.id}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <div className="w-full h-full flex flex-col items-center justify-center">
+                          {/* Large assessment value */}
+                          <span className="text-2xl font-bold text-white drop-shadow-lg">
+                            {assessmentValue !== null ? assessmentValue : '-'}
+                          </span>
+                          {/* Small block-treatment info */}
+                          <span className="text-xs text-white/70">{plot.id}</span>
                         </div>
                       )}
                     </div>
