@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Minus, Shuffle, Lock, Trash2, Wand2 } from 'lucide-react';
+import { Plus, Minus, Shuffle, Lock, Trash2 } from 'lucide-react';
 
 const TrialLayoutEditor = ({
   config,
@@ -228,7 +228,7 @@ const TrialLayoutEditor = ({
           className="flex items-center gap-2 px-4 py-2 bg-purple-500 hover:bg-purple-600 text-white rounded transition"
           title="Randomly assign all unassigned plots"
         >
-          <Wand2 size={18} />
+          <Shuffle size={18} />
           Auto-fill (Randomize)
         </button>
 
