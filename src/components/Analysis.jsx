@@ -28,16 +28,93 @@ const Analysis = ({ config, gridLayout, assessmentDates, selectedAssessmentType 
     );
   }
 
-  // Calculate comprehensive statistics for a single date
+  // GenStat-style Compact Letter Display (CLD) algorithm
+  // Key: Two treatments share a letter ONLY if they are NOT significantly different from EACH OTHER
+  // No transitive inheritance allowed!
+  const assignLetters = (sortedTreatments, lsd, significant) => {
+    if (!significant) {
+      return sortedTreatments.map(t => ({ ...t, group: 'NS' }));
+    }
+
+    if (sortedTreatments.length === 0) {
+      return [];
+    }
+
+    // Sort by mean descending (standard for CLD)
+    const treatments = [...sortedTreatments].sort((a, b) => b.mean - a.mean);
+
+    // Groups: each group contains treatments that are ALL within LSD of each other
+    let groups = [];
+
+    // Step 1: Insert each treatment into applicable groups
+    for (const t of treatments) {
+      // Find groups where t fits (within LSD of ALL members)
+      for (const group of groups) {
+        let fits = true;
+        for (const member of group) {
+          if (Math.abs(t.mean - member.mean) > lsd) {
+            fits = false;
+            break;
+          }
+        }
+        if (fits) {
+          group.push(t);
+        }
+      }
+      // Always create singleton group (may become larger group later)
+      groups.push([t]);
+    }
+
+    // Step 2: Remove redundant groups (groups that are subsets of other groups)
+    groups = groups.filter(g => {
+      const gSet = new Set(g.map(t => t.treatment));
+      for (const other of groups) {
+        if (other === g) continue;
+        if (other.length > g.length) {
+          const otherSet = new Set(other.map(t => t.treatment));
+          let isSubset = true;
+          for (const gt of gSet) {
+            if (!otherSet.has(gt)) {
+              isSubset = false;
+              break;
+            }
+          }
+          if (isSubset) return false; // g is redundant
+        }
+      }
+      return true;
+    });
+
+    // Step 3: Assign letters to groups
+    const letterMap = new Map();
+    treatments.forEach(t => letterMap.set(t.treatment, ''));
+
+    groups.forEach((group, idx) => {
+      const letter = String.fromCharCode('a'.charCodeAt(0) + idx);
+      for (const member of group) {
+        letterMap.set(member.treatment, letterMap.get(member.treatment) + letter);
+      }
+    });
+
+    // Return with letters sorted alphabetically
+    return sortedTreatments.map(t => ({
+      ...t,
+      group: letterMap.get(t.treatment).split('').sort().join('')
+    }));
+  };
+
+  // Calculate RCBD ANOVA statistics for a single date
   const calculateStats = (dateObj) => {
     const assessmentData = dateObj.assessments[selectedAssessmentType];
+    if (!assessmentData) return null;
+
     const allPlots = gridLayout.flat().filter(p => !p.isBlank);
-    
-    // Get all values with treatment info
+
+    // Get all values with treatment and block info
     const values = allPlots
       .map(plot => {
         const v = assessmentData[plot.id];
-        if (!v?.entered || isNaN(parseFloat(v.value))) return null;
+        if (!v?.entered || v.value === '' || isNaN(parseFloat(v.value))) return null;
         return {
           treatment: plot.treatment,
           value: parseFloat(v.value),
@@ -45,114 +122,162 @@ const Analysis = ({ config, gridLayout, assessmentDates, selectedAssessmentType 
         };
       })
       .filter(v => v !== null);
-    
+
     if (values.length === 0) return null;
-    
-    // Group by treatment
-    const treatmentGroups = {};
-    values.forEach(v => {
-      if (!treatmentGroups[v.treatment]) treatmentGroups[v.treatment] = [];
-      treatmentGroups[v.treatment].push(v.value);
-    });
-    
-    // Calculate means, std dev, and std error for each treatment
-    const treatmentStats = Object.entries(treatmentGroups).map(([treatment, vals]) => {
-      const mean = ss.mean(vals);
-      const stdDev = ss.standardDeviation(vals);
-      const stdError = stdDev / Math.sqrt(vals.length);
-      
-      return {
-        treatment: parseInt(treatment),
-        treatmentName: config.treatments[treatment],
-        mean,
-        stdDev,
-        stdError,
-        n: vals.length,
-        values: vals
+
+    // Get unique blocks and treatments
+    const blocks = [...new Set(values.map(v => v.block))];
+    const treatments = [...new Set(values.map(v => v.treatment))];
+    const numBlocks = blocks.length;
+    const numTreatments = treatments.length;
+    const totalN = values.length;
+
+    // Calculate grand mean and total
+    const grandTotal = values.reduce((sum, v) => sum + v.value, 0);
+    const grandMean = grandTotal / totalN;
+    const correctionFactor = (grandTotal * grandTotal) / totalN;
+
+    // Calculate block totals and means
+    const blockTotals = {};
+    blocks.forEach(b => {
+      const blockValues = values.filter(v => v.block === b);
+      blockTotals[b] = {
+        total: blockValues.reduce((sum, v) => sum + v.value, 0),
+        n: blockValues.length
       };
     });
-    
-    // ANOVA calculation
-    const grandMean = ss.mean(values.map(v => v.value));
-    const numTreatments = Object.keys(treatmentGroups).length;
-    const totalN = values.length;
-    
-    // Sum of squares between treatments (SST)
+
+    // Calculate treatment totals and means
+    const treatmentTotals = {};
+    treatments.forEach(t => {
+      const treatValues = values.filter(v => v.treatment === t);
+      treatmentTotals[t] = {
+        total: treatValues.reduce((sum, v) => sum + v.value, 0),
+        values: treatValues.map(v => v.value),
+        n: treatValues.length,
+        mean: treatValues.reduce((sum, v) => sum + v.value, 0) / treatValues.length
+      };
+    });
+
+    // Sum of Squares calculations (RCBD method)
+    // Total SS = Σ(Y²) - CF
+    const ssTotal = values.reduce((sum, v) => sum + v.value * v.value, 0) - correctionFactor;
+
+    // Block SS = Σ(Block totals² / n_treatments) - CF
+    let ssBlock = 0;
+    blocks.forEach(b => {
+      const bt = blockTotals[b];
+      ssBlock += (bt.total * bt.total) / bt.n;
+    });
+    ssBlock -= correctionFactor;
+
+    // Treatment SS = Σ(Treatment totals² / n_blocks) - CF
     let ssTreatment = 0;
-    treatmentStats.forEach(ts => {
-      ssTreatment += ts.n * Math.pow(ts.mean - grandMean, 2);
+    treatments.forEach(t => {
+      const tt = treatmentTotals[t];
+      ssTreatment += (tt.total * tt.total) / tt.n;
     });
-    
-    // Sum of squares within treatments (SSE)
-    let ssError = 0;
-    values.forEach(v => {
-      const treatmentMean = treatmentStats.find(ts => ts.treatment === v.treatment).mean;
-      ssError += Math.pow(v.value - treatmentMean, 2);
-    });
-    
-    // Degrees of freedom
+    ssTreatment -= correctionFactor;
+
+    // Residual SS = Total SS - Block SS - Treatment SS
+    const ssResidual = ssTotal - ssBlock - ssTreatment;
+
+    // Degrees of freedom (RCBD)
+    const dfBlock = numBlocks - 1;
     const dfTreatment = numTreatments - 1;
-    const dfError = totalN - numTreatments;
+    const dfResidual = (numBlocks - 1) * (numTreatments - 1);
     const dfTotal = totalN - 1;
-    
+
     // Mean squares
-    const msTreatment = ssTreatment / dfTreatment;
-    const msError = ssError / dfError;
-    
-    // F-statistic
-    const fValue = msTreatment / msError;
-    
-    // P-value using F-distribution
-    const pValue = 1 - jStat.centralF.cdf(fValue, dfTreatment, dfError);
+    const msBlock = dfBlock > 0 ? ssBlock / dfBlock : 0;
+    const msTreatment = dfTreatment > 0 ? ssTreatment / dfTreatment : 0;
+    const msResidual = dfResidual > 0 ? ssResidual / dfResidual : 0;
+
+    // F-statistics (variance ratios)
+    const fBlock = msResidual > 0 ? msBlock / msResidual : 0;
+    const fTreatment = msResidual > 0 ? msTreatment / msResidual : 0;
+
+    // P-value for treatment effect
+    const pValue = dfTreatment > 0 && dfResidual > 0 && fTreatment > 0
+      ? 1 - jStat.centralF.cdf(fTreatment, dfTreatment, dfResidual)
+      : 1;
     const significant = pValue < 0.05;
-    
+
+    // Standard errors (GenStat formulas)
+    const replicates = numBlocks;
+    const ese = msResidual > 0 ? Math.sqrt(msResidual / replicates) : 0;  // e.s.e.
+    const sed = msResidual > 0 ? Math.sqrt(2 * msResidual / replicates) : 0;  // s.e.d.
+
     // Fisher's LSD
-    const tCritical = jStat.studentt.inv(0.975, dfError); // 95% confidence
-    const lsd = tCritical * Math.sqrt(2 * msError / config.numBlocks);
-    
-    // Assign letter groups based on LSD
-    const sortedStats = [...treatmentStats].sort((a, b) => b.mean - a.mean);
-    const groups = sortedStats.map((stat, idx) => {
-      let group = String.fromCharCode(97 + idx); // Start with 'a', 'b', etc.
-      
-      // Check if this treatment is not significantly different from any higher-ranked treatment
-      for (let i = 0; i < idx; i++) {
-        if (Math.abs(stat.mean - sortedStats[i].mean) <= lsd) {
-          group = String.fromCharCode(97 + i);
-          break;
-        }
-      }
-      
-      return { ...stat, group };
+    const tCritical = dfResidual > 0 ? jStat.studentt.inv(0.975, dfResidual) : 2.064;
+    const lsd = sed * tCritical;
+
+    // Build treatment stats and assign letter groups
+    const treatmentStats = treatments.map(t => ({
+      treatment: t,
+      treatmentName: config.treatments[t] || `Treatment ${t + 1}`,
+      mean: treatmentTotals[t].mean,
+      n: treatmentTotals[t].n,
+      values: treatmentTotals[t].values
+    }));
+
+    // Sort by mean ASCENDING for GenStat-style letter assignment
+    const sortedStats = [...treatmentStats].sort((a, b) => a.mean - b.mean);
+
+    // Assign letters using GenStat algorithm
+    const statsWithLetters = assignLetters(sortedStats, lsd, significant);
+
+    // Create lookup for letters by treatment
+    const letterLookup = {};
+    statsWithLetters.forEach(s => {
+      letterLookup[s.treatment] = s.group;
     });
-    
+
+    // Add letters back to original treatment order
+    const finalStats = treatmentStats.map(ts => ({
+      ...ts,
+      group: letterLookup[ts.treatment],
+      stdError: ese
+    }));
+
     return {
-      treatmentStats: groups,
+      treatmentStats: finalStats,
+      sortedStats: statsWithLetters,
       anova: {
+        ssBlock,
         ssTreatment,
-        ssError,
-        ssTotal: ssTreatment + ssError,
+        ssResidual,
+        ssTotal,
+        dfBlock,
         dfTreatment,
-        dfError,
+        dfResidual,
         dfTotal,
+        msBlock,
         msTreatment,
-        msError,
-        fValue,
+        msResidual,
+        fBlock,
+        fTreatment,
         pValue,
         significant
       },
-      lsd
+      standardErrors: {
+        ese,
+        sed,
+        lsd,
+        replicates
+      },
+      grandMean
     };
   };
 
   return (
     <div className="space-y-6">
-      {/* Summary Statistics Table */}
+      {/* Summary Statistics Table with Significance */}
       <div className="bg-white p-6 rounded-lg shadow">
         <h3 className="text-xl font-bold mb-4">Statistical Analysis - {selectedAssessmentType}</h3>
-        
+
         <div className="overflow-x-auto">
-          <table className="w-full text-sm border-collapse mb-6">
+          <table className="w-full text-sm border-collapse">
             <thead>
               <tr className="border-b-2 border-gray-300">
                 <th className="p-3 text-left bg-gray-100">Treatment</th>
@@ -173,126 +298,71 @@ const Analysis = ({ config, gridLayout, assessmentDates, selectedAssessmentType 
                     if (!stats) {
                       return <td key={dateIdx} className="p-3 text-center text-gray-400">-</td>;
                     }
-                    
+
                     const treatmentStat = stats.treatmentStats.find(ts => ts.treatment === treatmentIdx);
                     if (!treatmentStat) {
                       return <td key={dateIdx} className="p-3 text-center text-gray-400">-</td>;
                     }
-                    
+
                     return (
                       <td key={dateIdx} className="p-3 text-center">
                         <div className="font-medium">
-                          {treatmentStat.mean.toFixed(2)} ± {treatmentStat.stdError.toFixed(2)}
+                          {treatmentStat.mean.toFixed(2)} ± {treatmentStat.stdError.toFixed(3)}
                         </div>
-                        <div className="text-xs font-bold text-blue-600">
-                          ({treatmentStat.group})
-                        </div>
+                        {stats.anova.significant ? (
+                          <div className="text-xs font-bold text-blue-600">
+                            ({treatmentStat.group})
+                          </div>
+                        ) : (
+                          <div className="text-xs text-gray-400">
+                            (NS)
+                          </div>
+                        )}
                       </td>
                     );
                   })}
                 </tr>
               ))}
+              {/* Significance row at bottom of table */}
+              <tr className="border-t-2 border-gray-300 bg-gray-50">
+                <td className="p-3 font-semibold">Significance</td>
+                {assessmentDates.map((dateObj, dateIdx) => {
+                  const stats = calculateStats(dateObj);
+                  if (!stats) {
+                    return <td key={dateIdx} className="p-3 text-center text-gray-400">-</td>;
+                  }
+
+                  return (
+                    <td key={dateIdx} className="p-3 text-center">
+                      <div className={`font-semibold ${stats.anova.significant ? 'text-green-600' : 'text-gray-500'}`}>
+                        {stats.anova.significant ? '✓ Sig.' : 'NS'}
+                      </div>
+                      <div className="text-xs text-gray-600 mt-1">
+                        p = {stats.anova.pValue < 0.001 ? '<0.001' : stats.anova.pValue.toFixed(3)}
+                      </div>
+                      <div className="text-xs text-gray-500">
+                        F = {stats.anova.fTreatment.toFixed(2)}
+                      </div>
+                      {stats.anova.significant && (
+                        <div className="text-xs text-gray-500">
+                          LSD: {stats.standardErrors.lsd.toFixed(3)}
+                        </div>
+                      )}
+                    </td>
+                  );
+                })}
+              </tr>
             </tbody>
           </table>
-          
-          {/* ANOVA Summary */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
-            {assessmentDates.map((dateObj, idx) => {
-              const stats = calculateStats(dateObj);
-              if (!stats) return null;
-              
-              return (
-                <div key={idx} className="p-4 bg-gray-50 rounded border">
-                  <div className="font-semibold mb-3 text-base">{dateObj.date}</div>
-                  <div className="space-y-2 text-xs">
-                    <div className="flex justify-between">
-                      <span>F-value:</span>
-                      <span className="font-mono">{stats.anova.fValue.toFixed(3)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>P-value:</span>
-                      <span className="font-mono">{stats.anova.pValue.toFixed(4)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>LSD (95%):</span>
-                      <span className="font-mono">{stats.lsd.toFixed(3)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>MS Error:</span>
-                      <span className="font-mono">{stats.anova.msError.toFixed(3)}</span>
-                    </div>
-                    <div className={`pt-2 border-t ${stats.anova.significant ? 'text-green-600' : 'text-gray-600'} font-medium`}>
-                      {stats.anova.significant ? '✓ Significant (p < 0.05)' : '○ Not Significant'}
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
+
+          <div className="mt-4 p-3 bg-blue-50 rounded text-sm">
+            <p className="text-gray-700">
+              <strong>RCBD Analysis:</strong> Treatments with different letters are significantly different (p &lt; 0.05).
+              Letters only shown when treatment effect is significant. LSD = Fisher's Least Significant Difference.
+            </p>
           </div>
         </div>
       </div>
-
-      {/* ANOVA Table Detail for Latest Date */}
-      {assessmentDates.length > 0 && (() => {
-        const latestDate = assessmentDates[assessmentDates.length - 1];
-        const stats = calculateStats(latestDate);
-        if (!stats) return null;
-        
-        return (
-          <div className="bg-white p-6 rounded-lg shadow">
-            <h3 className="text-xl font-bold mb-4">
-              ANOVA Table - {latestDate.date}
-            </h3>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm border-collapse">
-                <thead>
-                  <tr className="border-b-2 border-gray-300 bg-gray-100">
-                    <th className="p-3 text-left">Source</th>
-                    <th className="p-3 text-right">DF</th>
-                    <th className="p-3 text-right">Sum of Squares</th>
-                    <th className="p-3 text-right">Mean Square</th>
-                    <th className="p-3 text-right">F-Value</th>
-                    <th className="p-3 text-right">P-Value</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr className="border-b">
-                    <td className="p-3 font-medium">Treatment</td>
-                    <td className="p-3 text-right font-mono">{stats.anova.dfTreatment}</td>
-                    <td className="p-3 text-right font-mono">{stats.anova.ssTreatment.toFixed(3)}</td>
-                    <td className="p-3 text-right font-mono">{stats.anova.msTreatment.toFixed(3)}</td>
-                    <td className="p-3 text-right font-mono">{stats.anova.fValue.toFixed(3)}</td>
-                    <td className="p-3 text-right font-mono">{stats.anova.pValue.toFixed(4)}</td>
-                  </tr>
-                  <tr className="border-b">
-                    <td className="p-3 font-medium">Error</td>
-                    <td className="p-3 text-right font-mono">{stats.anova.dfError}</td>
-                    <td className="p-3 text-right font-mono">{stats.anova.ssError.toFixed(3)}</td>
-                    <td className="p-3 text-right font-mono">{stats.anova.msError.toFixed(3)}</td>
-                    <td className="p-3 text-right">-</td>
-                    <td className="p-3 text-right">-</td>
-                  </tr>
-                  <tr className="bg-gray-50 font-semibold">
-                    <td className="p-3">Total</td>
-                    <td className="p-3 text-right font-mono">{stats.anova.dfTotal}</td>
-                    <td className="p-3 text-right font-mono">{stats.anova.ssTotal.toFixed(3)}</td>
-                    <td className="p-3 text-right">-</td>
-                    <td className="p-3 text-right">-</td>
-                    <td className="p-3 text-right">-</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-            <div className="mt-4 p-3 bg-blue-50 rounded text-sm">
-              <p className="font-medium mb-1">Interpretation:</p>
-              <p>
-                Fisher's LSD at 95% confidence: {stats.lsd.toFixed(3)}. 
-                Treatments with different letters are significantly different at p &lt; 0.05.
-              </p>
-            </div>
-          </div>
-        );
-      })()}
 
       {/* Box Plots */}
       <div className="bg-white p-6 rounded-lg shadow">
@@ -306,10 +376,10 @@ const Analysis = ({ config, gridLayout, assessmentDates, selectedAssessmentType 
                   {assessmentDates.map((dateObj, dateIdx) => {
                     const stats = calculateStats(dateObj);
                     if (!stats) return null;
-                    
+
                     const treatmentStat = stats.treatmentStats.find(ts => ts.treatment === treatmentIdx);
-                    if (!treatmentStat) return null;
-                    
+                    if (!treatmentStat || !treatmentStat.values || treatmentStat.values.length === 0) return null;
+
                     const vals = treatmentStat.values;
                     const min = Math.min(...vals);
                     const max = Math.max(...vals);
@@ -317,18 +387,20 @@ const Analysis = ({ config, gridLayout, assessmentDates, selectedAssessmentType 
                     const q1 = ss.quantile(sorted, 0.25);
                     const q3 = ss.quantile(sorted, 0.75);
                     const median = ss.median(sorted);
-                    
+
                     // Get global min/max for scaling
                     const allStats = assessmentDates
                       .map(d => calculateStats(d))
                       .filter(s => s !== null);
-                    const allValues = allStats.flatMap(s => s.treatmentStats.flatMap(ts => ts.values));
+                    const allValues = allStats.flatMap(s => s.treatmentStats.flatMap(ts => ts.values || []));
+                    if (allValues.length === 0) return null;
+
                     const globalMin = Math.min(...allValues);
                     const globalMax = Math.max(...allValues);
-                    const range = globalMax - globalMin;
-                    
+                    const range = globalMax - globalMin || 1;
+
                     const scale = (val) => ((val - globalMin) / range) * 200;
-                    
+
                     const colors = [
                       'bg-blue-200 border-blue-400',
                       'bg-purple-200 border-purple-400',
@@ -337,7 +409,7 @@ const Analysis = ({ config, gridLayout, assessmentDates, selectedAssessmentType 
                       'bg-teal-200 border-teal-400'
                     ];
                     const colorClass = colors[dateIdx % colors.length];
-                    
+
                     return (
                       <div key={dateIdx} className="flex flex-col items-center">
                         <div className="relative h-48 w-12 bg-gray-100 rounded border">
@@ -359,7 +431,7 @@ const Analysis = ({ config, gridLayout, assessmentDates, selectedAssessmentType 
                             className="absolute left-1/2 w-0.5 bg-black -translate-x-1/2"
                             style={{
                               bottom: `${scale(min)}px`,
-                              height: `${scale(q1) - scale(min)}px`
+                              height: `${Math.max(0, scale(q1) - scale(min))}px`
                             }}
                           />
                           {/* Whisker to max */}
@@ -367,7 +439,7 @@ const Analysis = ({ config, gridLayout, assessmentDates, selectedAssessmentType 
                             className="absolute left-1/2 w-0.5 bg-black -translate-x-1/2"
                             style={{
                               bottom: `${scale(q3)}px`,
-                              height: `${scale(max) - scale(q3)}px`
+                              height: `${Math.max(0, scale(max) - scale(q3))}px`
                             }}
                           />
                         </div>
@@ -384,7 +456,7 @@ const Analysis = ({ config, gridLayout, assessmentDates, selectedAssessmentType 
         <div className="mt-4 text-xs text-gray-600">
           <p>Each treatment shows box plots for all assessment dates side by side</p>
           <p>Different colors represent different assessment dates</p>
-          <p>Letters below indicate statistical groupings (LSD test)</p>
+          <p>Letters below indicate statistical groupings (Fisher's protected LSD test)</p>
         </div>
       </div>
     </div>

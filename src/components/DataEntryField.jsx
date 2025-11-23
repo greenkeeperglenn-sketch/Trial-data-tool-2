@@ -137,13 +137,15 @@ const DataEntryField = ({
                 const plotPhotos = photos[photoKey] || [];
                 
                 return (
-                  <div key={colIdx} className={`aspect-square p-1 border-2 rounded ${colorClass} transition-colors flex flex-col`}>
-                    <div className="text-xs font-medium truncate">{plot.id}</div>
+                  <div key={colIdx} className={`aspect-square p-2 border-2 rounded ${colorClass} transition-colors flex flex-col items-center justify-center`}>
+                    {/* Large centered plot ID */}
+                    <div className="text-2xl font-bold text-center">{plot.id}</div>
                     {showTreatments && (
-                      <div className="text-xs font-semibold bg-white/90 px-1 rounded truncate">
+                      <div className="text-xs font-semibold bg-white/90 px-1 rounded truncate mt-1">
                         {plot.treatmentName}
                       </div>
                     )}
+                    {/* Input field */}
                     <input
                       type="number"
                       step="0.1"
@@ -156,18 +158,19 @@ const DataEntryField = ({
                           onUpdateData(currentDateObj.date, selectedAssessmentType, plot.id, val);
                         }
                       }}
-                      className="w-full p-0.5 text-xs border rounded bg-white text-black flex-1"
+                      className="w-full p-1 text-sm border rounded bg-white text-black text-center mt-1"
                       placeholder={`${assessment?.min}-${assessment?.max}`}
                     />
-                    <label className="block">
-                      <input 
-                        type="file" 
-                        accept="image/*" 
-                        onChange={(e) => handlePhotoUpload(plot.id, e)} 
-                        className="hidden" 
+                    {/* Photo upload button */}
+                    <label className="block mt-1">
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={(e) => handlePhotoUpload(plot.id, e)}
+                        className="hidden"
                       />
-                      <div className="text-xs text-center bg-blue-100 hover:bg-blue-200 p-0.5 rounded cursor-pointer">
-                        <Camera size={10} className="inline" /> {plotPhotos.length > 0 ? plotPhotos.length : '+'}
+                      <div className="text-xs text-center bg-blue-100 hover:bg-blue-200 px-2 py-0.5 rounded cursor-pointer">
+                        <Camera size={12} className="inline" /> {plotPhotos.length > 0 ? plotPhotos.length : '+'}
                       </div>
                     </label>
                   </div>

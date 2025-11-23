@@ -42,12 +42,22 @@ const ImageryAnalyzer = ({
   const fileInputRef = useRef(null);
   const canvasRef = useRef(null);
   const imageRef = useRef(null);
+  const cornersRef = useRef(corners); // Keep corners in ref for fast access during drag
+  const animationFrameRef = useRef(null);
 
-  // Cleanup blob URLs on unmount
+  // Keep cornersRef in sync
+  useEffect(() => {
+    cornersRef.current = corners;
+  }, [corners]);
+
+  // Cleanup blob URLs and animation frame on unmount
   useEffect(() => {
     return () => {
       if (imageSrc && imageSrc.startsWith('blob:')) {
         URL.revokeObjectURL(imageSrc);
+      }
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
       }
     };
   }, [imageSrc]);
@@ -182,39 +192,39 @@ const ImageryAnalyzer = ({
       ctx.stroke();
     }
 
-    // Draw corner markers
+    // Draw corner markers - BIGGER for easier grabbing
     corners.forEach((corner, idx) => {
       const isActive = draggingCorner === idx;
+      const radius = isActive ? 50 : 45; // Much bigger corners
+
+      // Draw outer ring for better visibility
+      ctx.strokeStyle = 'white';
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.arc(corner.x, corner.y, radius + 4, 0, 2 * Math.PI);
+      ctx.stroke();
 
       if (isActive) {
         // Active state - yellow
-        ctx.fillStyle = 'rgba(255, 255, 0, 0.9)';
-        ctx.beginPath();
-        ctx.arc(corner.x, corner.y, 30, 0, 2 * Math.PI);
-        ctx.fill();
-        
-        ctx.fillStyle = 'white';
-        ctx.font = 'bold 16px Arial';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(corner.label, corner.x, corner.y);
+        ctx.fillStyle = 'rgba(255, 255, 0, 0.95)';
       } else {
         // Normal state - red
         ctx.fillStyle = 'rgba(255, 0, 0, 0.9)';
-        ctx.beginPath();
-        ctx.arc(corner.x, corner.y, 25, 0, 2 * Math.PI);
-        ctx.fill();
-        
-        ctx.fillStyle = 'white';
-        ctx.font = 'bold 16px Arial';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(corner.label, corner.x, corner.y);
       }
+
+      ctx.beginPath();
+      ctx.arc(corner.x, corner.y, radius, 0, 2 * Math.PI);
+      ctx.fill();
+
+      ctx.fillStyle = 'white';
+      ctx.font = 'bold 20px Arial';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(corner.label, corner.x, corner.y);
     });
   };
 
-  // Mouse handlers for corner dragging
+  // Mouse handlers for corner dragging - optimized with requestAnimationFrame
   const handleMouseDown = (e) => {
     if (!canvasRef.current) return;
     const rect = canvasRef.current.getBoundingClientRect();
@@ -223,9 +233,10 @@ const ImageryAnalyzer = ({
     const x = (e.clientX - rect.left) * scaleX;
     const y = (e.clientY - rect.top) * scaleY;
 
-    const clickedCorner = corners.findIndex(corner => {
+    // Larger hit area (70px) for easier grabbing
+    const clickedCorner = cornersRef.current.findIndex(corner => {
       const distance = Math.sqrt(Math.pow(corner.x - x, 2) + Math.pow(corner.y - y, 2));
-      return distance < 40;
+      return distance < 70;
     });
 
     if (clickedCorner >= 0) {
@@ -242,15 +253,98 @@ const ImageryAnalyzer = ({
     const x = (e.clientX - rect.left) * scaleX;
     const y = (e.clientY - rect.top) * scaleY;
 
-    setCorners(prev => {
-      const newCorners = [...prev];
-      newCorners[draggingCorner] = { ...newCorners[draggingCorner], x, y };
-      return newCorners;
+    // Update ref immediately for smooth drawing
+    const newCorners = [...cornersRef.current];
+    newCorners[draggingCorner] = { ...newCorners[draggingCorner], x, y };
+    cornersRef.current = newCorners;
+
+    // Use requestAnimationFrame to batch canvas redraws
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current);
+    }
+
+    animationFrameRef.current = requestAnimationFrame(() => {
+      // Directly redraw canvas without triggering React state
+      if (canvasRef.current && imageRef.current) {
+        const canvas = canvasRef.current;
+        const ctx = canvas.getContext('2d');
+        const img = imageRef.current;
+
+        // Clear and redraw
+        ctx.drawImage(img, 0, 0);
+        drawGridDirect(ctx, cornersRef.current);
+      }
     });
   };
 
   const handleMouseUp = () => {
+    // Sync state with ref when drag ends
+    if (draggingCorner !== null) {
+      setCorners([...cornersRef.current]);
+    }
     setDraggingCorner(null);
+  };
+
+  // Direct draw function that takes corners as parameter (for fast updates)
+  const drawGridDirect = (ctx, cornerPositions) => {
+    if (cornerPositions.length < 4) return;
+
+    const [tl, tr, br, bl] = cornerPositions;
+
+    // Draw grid lines
+    ctx.strokeStyle = 'rgba(0, 255, 0, 0.8)';
+    ctx.lineWidth = 2;
+
+    // Vertical lines
+    for (let i = 0; i <= cols; i++) {
+      const t = i / cols;
+      const topX = tl.x + (tr.x - tl.x) * t;
+      const topY = tl.y + (tr.y - tl.y) * t;
+      const bottomX = bl.x + (br.x - bl.x) * t;
+      const bottomY = bl.y + (br.y - bl.y) * t;
+
+      ctx.beginPath();
+      ctx.moveTo(topX, topY);
+      ctx.lineTo(bottomX, bottomY);
+      ctx.stroke();
+    }
+
+    // Horizontal lines
+    for (let i = 0; i <= rows; i++) {
+      const t = i / rows;
+      const leftX = tl.x + (bl.x - tl.x) * t;
+      const leftY = tl.y + (bl.y - tl.y) * t;
+      const rightX = tr.x + (br.x - tr.x) * t;
+      const rightY = tr.y + (br.y - tr.y) * t;
+
+      ctx.beginPath();
+      ctx.moveTo(leftX, leftY);
+      ctx.lineTo(rightX, rightY);
+      ctx.stroke();
+    }
+
+    // Draw corners - bigger
+    cornerPositions.forEach((corner, idx) => {
+      const isActive = draggingCorner === idx;
+      const radius = isActive ? 50 : 45;
+
+      ctx.strokeStyle = 'white';
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.arc(corner.x, corner.y, radius + 4, 0, 2 * Math.PI);
+      ctx.stroke();
+
+      ctx.fillStyle = isActive ? 'rgba(255, 255, 0, 0.95)' : 'rgba(255, 0, 0, 0.9)';
+      ctx.beginPath();
+      ctx.arc(corner.x, corner.y, radius, 0, 2 * Math.PI);
+      ctx.fill();
+
+      ctx.fillStyle = 'white';
+      ctx.font = 'bold 20px Arial';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(corner.label, corner.x, corner.y);
+    });
   };
 
   // Extract individual plot images from the grid

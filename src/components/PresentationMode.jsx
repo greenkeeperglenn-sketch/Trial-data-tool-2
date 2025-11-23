@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { ChevronLeft, ChevronRight, Calendar, Image as ImageIcon, FileText, TrendingUp, Eye, EyeOff, ArrowUp, ArrowDown, Maximize2, MapPin } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Calendar, Image as ImageIcon, FileText, TrendingUp, Eye, EyeOff, ArrowUp, ArrowDown, Maximize2, MapPin, Grid } from 'lucide-react';
+import { jStat } from 'jstat';
 
 // Helper function to normalize date format to YYYY-MM-DD
 const normalizeDateFormat = (dateStr) => {
@@ -54,6 +55,139 @@ const calculateAutoScale = (values) => {
     min: Math.max(0, dataMin - padding), // Don't go below 0
     max: dataMax + padding
   };
+};
+
+// GenStat-style Compact Letter Display (CLD) algorithm for Fisher's LSD
+const assignLetters = (sortedTreatments, lsd, significant) => {
+  if (!significant) {
+    return sortedTreatments.map(t => ({ ...t, group: 'NS' }));
+  }
+
+  if (sortedTreatments.length === 0) {
+    return [];
+  }
+
+  // Sort by mean descending (standard for CLD)
+  const treatments = [...sortedTreatments].sort((a, b) => b.mean - a.mean);
+
+  // Groups: each group contains treatments that are ALL within LSD of each other
+  let groups = [];
+
+  // Step 1: Insert each treatment into applicable groups
+  for (const t of treatments) {
+    for (const group of groups) {
+      let fits = true;
+      for (const member of group) {
+        if (Math.abs(t.mean - member.mean) > lsd) {
+          fits = false;
+          break;
+        }
+      }
+      if (fits) {
+        group.push(t);
+      }
+    }
+    groups.push([t]);
+  }
+
+  // Step 2: Remove redundant groups
+  groups = groups.filter(g => {
+    const gSet = new Set(g.map(t => t.treatment));
+    for (const other of groups) {
+      if (other === g) continue;
+      if (other.length > g.length) {
+        const otherSet = new Set(other.map(t => t.treatment));
+        let isSubset = true;
+        for (const gt of gSet) {
+          if (!otherSet.has(gt)) {
+            isSubset = false;
+            break;
+          }
+        }
+        if (isSubset) return false;
+      }
+    }
+    return true;
+  });
+
+  // Step 3: Assign letters to groups
+  const letterMap = new Map();
+  treatments.forEach(t => letterMap.set(t.treatment, ''));
+
+  groups.forEach((group, idx) => {
+    const letter = String.fromCharCode('a'.charCodeAt(0) + idx);
+    for (const member of group) {
+      letterMap.set(member.treatment, letterMap.get(member.treatment) + letter);
+    }
+  });
+
+  return sortedTreatments.map(t => ({
+    ...t,
+    group: letterMap.get(t.treatment).split('').sort().join('')
+  }));
+};
+
+// Calculate RCBD ANOVA and LSD for a dataset
+const calculateAnovaStats = (treatmentStats, numBlocks) => {
+  const treatments = Object.keys(treatmentStats);
+  const numTreatments = treatments.length;
+
+  if (numTreatments < 2 || numBlocks < 2) {
+    return { significant: false, lsd: 0 };
+  }
+
+  // Collect all values
+  const allValues = [];
+  treatments.forEach(t => {
+    treatmentStats[t].values.forEach(v => allValues.push(v));
+  });
+
+  const totalN = allValues.length;
+  const grandTotal = allValues.reduce((sum, v) => sum + v, 0);
+  const grandMean = grandTotal / totalN;
+  const correctionFactor = (grandTotal * grandTotal) / totalN;
+
+  // Total SS
+  const ssTotal = allValues.reduce((sum, v) => sum + v * v, 0) - correctionFactor;
+
+  // Treatment SS
+  let ssTreatment = 0;
+  treatments.forEach(t => {
+    const tt = treatmentStats[t];
+    ssTreatment += (tt.total * tt.total) / tt.n;
+  });
+  ssTreatment -= correctionFactor;
+
+  // Residual SS (simplified - assumes balanced design)
+  const ssResidual = ssTotal - ssTreatment;
+
+  // Degrees of freedom
+  const dfTreatment = numTreatments - 1;
+  const dfResidual = totalN - numTreatments;
+
+  if (dfResidual <= 0) {
+    return { significant: false, lsd: 0 };
+  }
+
+  // Mean squares
+  const msTreatment = ssTreatment / dfTreatment;
+  const msResidual = ssResidual / dfResidual;
+
+  // F-statistic and p-value
+  const fTreatment = msResidual > 0 ? msTreatment / msResidual : 0;
+  const pValue = dfTreatment > 0 && dfResidual > 0 && fTreatment > 0
+    ? 1 - jStat.centralF.cdf(fTreatment, dfTreatment, dfResidual)
+    : 1;
+
+  const significant = pValue < 0.05;
+
+  // Calculate LSD
+  const replicates = numBlocks;
+  const sed = msResidual > 0 ? Math.sqrt(2 * msResidual / replicates) : 0;
+  const tCritical = dfResidual > 0 ? jStat.studentt.inv(0.975, dfResidual) : 2.064;
+  const lsd = sed * tCritical;
+
+  return { significant, lsd, pValue, fTreatment };
 };
 
 // Simple SVG Bar Chart Component by Treatment
@@ -113,6 +247,19 @@ const SimpleBarChart = ({ data, min, max, currentDateColor }) => {
               fill={item.color}
               className="hover:opacity-80 transition-opacity"
             />
+            {/* Significance letter above value */}
+            {item.group && (
+              <text
+                x={x + barWidth / 2}
+                y={y - 22}
+                fontSize="16"
+                fontWeight="bold"
+                fill="#fbbf24"
+                textAnchor="middle"
+              >
+                ({item.group})
+              </text>
+            )}
             {/* Value label above bar */}
             <text
               x={x + barWidth / 2}
@@ -158,12 +305,12 @@ const SimpleBarChart = ({ data, min, max, currentDateColor }) => {
 };
 
 // Multi-Line Chart Component - One line per treatment
-const MultiLineChart = ({ treatmentData, treatmentColors, currentDate, min, max, allDates }) => {
-  const width = 1000;  // Increased to make room for legend on right
-  const height = 400;  // Increased to accommodate rotated labels
+const MultiLineChart = ({ treatmentData, treatmentColors, currentDate, min, max, allDates, statsData }) => {
+  const width = 1100;  // Increased to make room for bigger legend
+  const height = 450;  // Increased for better proportions
   const padding = 60;
   const bottomPadding = 80;  // Extra space for rotated labels
-  const legendWidth = 200;  // Space reserved for legend on right
+  const legendWidth = 300;  // Increased space for legend with grouping lines
   const chartWidth = width - padding * 2 - legendWidth;  // Chart area excludes legend space
   const chartHeight = height - padding - bottomPadding;
 
@@ -219,6 +366,45 @@ const MultiLineChart = ({ treatmentData, treatmentColors, currentDate, min, max,
   };
 
   const currentDateX = getCurrentDatePosition();
+
+  // Get sorted treatments with their stats for legend
+  const getSortedTreatmentsWithStats = () => {
+    const treatmentValuesAtCurrentDate = Object.entries(treatmentData).map(([treatment, dataPoints]) => {
+      const currentDataPoint = dataPoints.find(d => d.date === currentDate);
+      const value = currentDataPoint ? parseFloat(currentDataPoint.value) : -Infinity;
+      // Find stats for this treatment
+      const stat = statsData?.find(s => s.treatment === treatment);
+      return {
+        treatment,
+        value,
+        group: stat?.group || '',
+        displayValue: currentDataPoint ? currentDataPoint.value : '-'
+      };
+    });
+
+    return treatmentValuesAtCurrentDate.sort((a, b) => b.value - a.value);
+  };
+
+  const sortedTreatments = getSortedTreatmentsWithStats();
+
+  // Get unique letters and which treatments have each letter
+  const getLetterGroups = () => {
+    const letterGroups = {};
+    sortedTreatments.forEach((t, idx) => {
+      if (t.group && t.group !== 'NS') {
+        for (const letter of t.group) {
+          if (!letterGroups[letter]) {
+            letterGroups[letter] = [];
+          }
+          letterGroups[letter].push({ treatment: t.treatment, index: idx });
+        }
+      }
+    });
+    return letterGroups;
+  };
+
+  const letterGroups = getLetterGroups();
+  const letters = Object.keys(letterGroups).sort();
 
   return (
     <svg width="100%" height={height} viewBox={`0 0 ${width} ${height}`} className="text-gray-300">
@@ -283,7 +469,7 @@ const MultiLineChart = ({ treatmentData, treatmentColors, currentDate, min, max,
             fill="#00BFB8"
             textAnchor="middle"
           >
-            Current ({currentDate})
+            {currentDate}
           </text>
         </g>
       )}
@@ -302,7 +488,6 @@ const MultiLineChart = ({ treatmentData, treatmentColors, currentDate, min, max,
 
         // Still show in legend even if no points
         if (points.length === 0) {
-          console.log(`No points for treatment: ${treatment}`);
           return null;
         }
 
@@ -337,54 +522,136 @@ const MultiLineChart = ({ treatmentData, treatmentColors, currentDate, min, max,
         );
       })}
 
-      {/* Legend - show all treatments vertically on the right, sorted by current date value */}
+      {/* Enhanced Legend with Statistical Groupings */}
       <g>
-        {(() => {
-          // Get current date values for each treatment to sort by
-          const treatmentValuesAtCurrentDate = Object.entries(treatmentData).map(([treatment, dataPoints]) => {
-            const currentDataPoint = dataPoints.find(d => d.date === currentDate);
-            const value = currentDataPoint ? parseFloat(currentDataPoint.value) : -Infinity;
-            return { treatment, value };
-          });
+        {/* Legend background */}
+        <rect
+          x={padding + chartWidth + 15}
+          y={padding - 20}
+          width={legendWidth - 20}
+          height={sortedTreatments.length * 36 + 50}
+          fill="#1f2937"
+          rx="8"
+          opacity="0.9"
+        />
 
-          // Sort by value (highest to lowest)
-          const sortedTreatments = treatmentValuesAtCurrentDate
-            .sort((a, b) => b.value - a.value)
-            .map(item => item.treatment);
+        {/* Legend title */}
+        <text
+          x={padding + chartWidth + 25}
+          y={padding}
+          fontSize="14"
+          fontWeight="bold"
+          fill="#fbbf24"
+        >
+          Treatments (ranked)
+        </text>
 
-          return sortedTreatments.map((treatment, idx) => {
-            const color = treatmentColors[treatment];
-            const x = padding + chartWidth + 30;  // Legend starts 30px after chart
-            const y = padding + (idx * 25);  // 25px spacing between items
+        {/* Statistical grouping brackets on the left */}
+        {letters.map((letter, letterIdx) => {
+          const group = letterGroups[letter];
+          if (group.length < 1) return null;
 
-            return (
-              <g key={treatment}>
-                <line
-                  x1={x}
-                  y1={y}
-                  x2={x + 20}
-                  y2={y}
-                  stroke={color}
-                  strokeWidth="3"
-                />
-                <circle
-                  cx={x + 10}
-                  cy={y}
-                  r="4"
-                  fill={color}
-                />
-                <text
-                  x={x + 25}
-                  y={y + 4}
-                  fontSize="12"
-                  fill="#9ca3af"
-                >
-                  {treatment}
-                </text>
-              </g>
-            );
-          });
-        })()}
+          const minIdx = Math.min(...group.map(g => g.index));
+          const maxIdx = Math.max(...group.map(g => g.index));
+
+          const bracketX = padding + chartWidth + 25 + (letterIdx * 12);
+          const topY = padding + 18 + (minIdx * 36);
+          const bottomY = padding + 18 + (maxIdx * 36);
+
+          // Colors for different letters
+          const bracketColors = ['#00BFB8', '#43B12E', '#00B6ED', '#E2E200', '#8ED8B2', '#0072BC'];
+          const bracketColor = bracketColors[letterIdx % bracketColors.length];
+
+          return (
+            <g key={letter}>
+              {/* Vertical line */}
+              <line
+                x1={bracketX}
+                y1={topY}
+                x2={bracketX}
+                y2={bottomY}
+                stroke={bracketColor}
+                strokeWidth="3"
+                strokeLinecap="round"
+              />
+              {/* Top cap */}
+              <line
+                x1={bracketX}
+                y1={topY}
+                x2={bracketX + 6}
+                y2={topY}
+                stroke={bracketColor}
+                strokeWidth="3"
+                strokeLinecap="round"
+              />
+              {/* Bottom cap */}
+              <line
+                x1={bracketX}
+                y1={bottomY}
+                x2={bracketX + 6}
+                y2={bottomY}
+                stroke={bracketColor}
+                strokeWidth="3"
+                strokeLinecap="round"
+              />
+              {/* Letter label */}
+              <text
+                x={bracketX}
+                y={bottomY + 18}
+                fontSize="12"
+                fontWeight="bold"
+                fill={bracketColor}
+                textAnchor="middle"
+              >
+                {letter}
+              </text>
+            </g>
+          );
+        })}
+
+        {/* Treatment items */}
+        {sortedTreatments.map((item, idx) => {
+          const color = treatmentColors[item.treatment];
+          const x = padding + chartWidth + 55 + (letters.length * 12);  // Offset for brackets
+          const y = padding + 20 + (idx * 36);
+
+          return (
+            <g key={item.treatment}>
+              {/* Color indicator */}
+              <rect
+                x={x}
+                y={y - 10}
+                width={16}
+                height={16}
+                rx="3"
+                fill={color}
+              />
+
+              {/* Treatment name */}
+              <text
+                x={x + 22}
+                y={y + 2}
+                fontSize="14"
+                fontWeight="600"
+                fill="#ffffff"
+              >
+                {item.treatment}
+              </text>
+            </g>
+          );
+        })}
+
+        {/* Legend footer - explanation */}
+        {letters.length > 0 && (
+          <text
+            x={padding + chartWidth + 25}
+            y={padding + 30 + (sortedTreatments.length * 36)}
+            fontSize="10"
+            fill="#6b7280"
+          >
+            Brackets = not significantly different
+          </text>
+        )}
       </g>
     </svg>
   );
@@ -430,8 +697,10 @@ const PresentationMode = ({
   const [visibleAssessments, setVisibleAssessments] = useState({});
   const [sectionOrder, setSectionOrder] = useState(['barCharts', 'photos', 'notes', 'graphs']);
   const [useAutoScale, setUseAutoScale] = useState(false);
-  const [sortPhotosByPosition, setSortPhotosByPosition] = useState(false);
+  const [showDataGrid, setShowDataGrid] = useState(false);
   const [expandedPhoto, setExpandedPhoto] = useState(null);
+  const [selectedGridAssessment, setSelectedGridAssessment] = useState(null);
+  const [reverseColorScale, setReverseColorScale] = useState(false);
 
   // Get all dates sorted chronologically
   const sortedDates = [...assessmentDates].sort((a, b) =>
@@ -475,6 +744,11 @@ const PresentationMode = ({
       assessments[type.name] = true;
     });
     setVisibleAssessments(assessments);
+
+    // Initialize selected grid assessment if not set
+    if (!selectedGridAssessment && config.assessmentTypes.length > 0) {
+      setSelectedGridAssessment(config.assessmentTypes[0].name);
+    }
   }, [treatmentNames.join(','), config.assessmentTypes.map(t => t.name).join(',')]);
   const treatmentColors = {};
   // STRI Brand Color Palette for treatments
@@ -494,6 +768,58 @@ const PresentationMode = ({
 
   // Color for current date across all charts - STRI Teal
   const currentDateColor = '#00BFB8'; // STRI Primary Teal
+
+  // Calculate color based on assessment value (green = high/good, red = low/bad)
+  const getScoreColor = (value, min, max) => {
+    if (value === null || value === undefined || value === '') return '#4B5563'; // Gray for no data
+
+    const numVal = parseFloat(value);
+    if (isNaN(numVal)) return '#4B5563';
+
+    // Normalize value to 0-1 range
+    const range = max - min;
+    let normalized = range > 0 ? (numVal - min) / range : 0.5;
+
+    // Reverse if needed (so low = green, high = red)
+    if (reverseColorScale) {
+      normalized = 1 - normalized;
+    }
+
+    const clamped = Math.max(0, Math.min(1, normalized));
+
+    // Interpolate from red (low) to yellow (mid) to green (high)
+    let r, g, b;
+    if (clamped < 0.5) {
+      // Red to Yellow
+      const t = clamped * 2;
+      r = 220;
+      g = Math.round(50 + t * 170); // 50 to 220
+      b = 50;
+    } else {
+      // Yellow to Green
+      const t = (clamped - 0.5) * 2;
+      r = Math.round(220 - t * 180); // 220 to 40
+      g = Math.round(220 - t * 20); // 220 to 200
+      b = Math.round(50 + t * 30); // 50 to 80
+    }
+
+    return `rgb(${r}, ${g}, ${b})`;
+  };
+
+  // Get assessment value for a plot on current date
+  const getPlotAssessmentValue = (plotId, assessmentName) => {
+    if (!currentDate || !assessmentName) return null;
+    const assessment = currentDate.assessments[assessmentName];
+    if (!assessment) return null;
+    const plotData = assessment[plotId];
+    if (!plotData?.entered || plotData.value === '') return null;
+    return plotData.value;
+  };
+
+  // Get assessment type config by name
+  const getAssessmentTypeConfig = (name) => {
+    return config.assessmentTypes.find(t => t.name === name);
+  };
 
   // Toggle functions
   const toggleTreatment = (treatment) => {
@@ -635,7 +961,7 @@ const PresentationMode = ({
     return filteredData;
   };
 
-  // Prepare bar chart data by treatment for current date
+  // Prepare bar chart data by treatment for current date (with statistics)
   const prepareBarChartDataForType = (typeName) => {
     if (!currentDate) return [];
 
@@ -644,11 +970,16 @@ const PresentationMode = ({
 
     const treatmentStats = {};
 
-    // Calculate average for each treatment
+    // Get unique blocks for ANOVA calculation
+    const blocks = new Set();
+
+    // Calculate stats for each treatment
     gridLayout.forEach(row => {
       row.forEach(plot => {
         if (!plot.isBlank) {
           const treatment = plot.treatmentName || 'Untreated';
+          blocks.add(plot.block);
+
           // Only include visible treatments
           if (!visibleTreatments[treatment]) return;
 
@@ -656,25 +987,52 @@ const PresentationMode = ({
 
           if (plotData?.entered && plotData.value !== '') {
             if (!treatmentStats[treatment]) {
-              treatmentStats[treatment] = { values: [], count: 0 };
+              treatmentStats[treatment] = { values: [], count: 0, total: 0, n: 0 };
             }
-            treatmentStats[treatment].values.push(parseFloat(plotData.value));
+            const val = parseFloat(plotData.value);
+            treatmentStats[treatment].values.push(val);
+            treatmentStats[treatment].total += val;
+            treatmentStats[treatment].n++;
             treatmentStats[treatment].count++;
           }
         }
       });
     });
 
-    // Convert to array with averages, sorted by value (highest to lowest)
-    return Object.entries(treatmentStats).map(([treatment, stats]) => {
-      const avg = stats.values.reduce((sum, val) => sum + val, 0) / stats.values.length;
+    const numBlocks = blocks.size;
+
+    // Calculate ANOVA and get LSD
+    const anovaResult = calculateAnovaStats(treatmentStats, numBlocks);
+
+    // Build treatment data with means
+    const treatmentData = Object.entries(treatmentStats).map(([treatment, stats]) => {
+      const mean = stats.total / stats.n;
       return {
         treatment,
-        value: avg.toFixed(1),
+        mean,
+        value: mean.toFixed(1),
         count: stats.count,
         color: treatmentColors[treatment]
       };
-    }).sort((a, b) => parseFloat(b.value) - parseFloat(a.value)); // Sort by value descending
+    });
+
+    // Sort by mean ascending for letter assignment
+    const sortedForLetters = [...treatmentData].sort((a, b) => a.mean - b.mean);
+
+    // Assign significance letters
+    const withLetters = assignLetters(sortedForLetters, anovaResult.lsd, anovaResult.significant);
+
+    // Create lookup for letters
+    const letterLookup = {};
+    withLetters.forEach(t => {
+      letterLookup[t.treatment] = t.group;
+    });
+
+    // Add letters to treatment data and sort by value descending for display
+    return treatmentData.map(t => ({
+      ...t,
+      group: letterLookup[t.treatment]
+    })).sort((a, b) => parseFloat(b.value) - parseFloat(a.value));
   };
 
   const nextSlide = () => {
@@ -742,100 +1100,110 @@ const PresentationMode = ({
   };
 
   const renderPhotos = () => {
-    if (Object.keys(currentPhotos).length === 0) return null;
+    // Get selected assessment config for color scoring
+    const selectedAssessmentConfig = getAssessmentTypeConfig(selectedGridAssessment);
+    const assessmentMin = selectedAssessmentConfig?.min ?? 0;
+    const assessmentMax = selectedAssessmentConfig?.max ?? 10;
 
-    // Collect all photos with their plot info including treatment index
-    const allPhotos = [];
+    // Collect all plot data with photos
+    const plotDataMap = {};
     Object.entries(treatmentGroups)
       .filter(([treatment]) => visibleTreatments[treatment])
       .forEach(([treatment, plots]) => {
         plots.forEach(plot => {
           const plotPhotos = currentPhotos[plot.id];
-          if (plotPhotos && plotPhotos.length > 0) {
-            // Find position in gridLayout (including blanks)
-            let rowIdx = -1;
-            let colIdx = -1;
-            for (let r = 0; r < gridLayout.length; r++) {
-              for (let c = 0; c < gridLayout[r].length; c++) {
-                if (gridLayout[r][c].id === plot.id) {
-                  rowIdx = r;
-                  colIdx = c;
-                  break;
-                }
-              }
-              if (rowIdx !== -1) break;
-            }
-
-            allPhotos.push({
-              plotId: plot.id,
-              treatment: treatment,
-              treatmentName: plot.treatmentName,
-              treatmentIdx: plot.treatment, // The treatment index (0, 1, 2, etc.)
-              block: plot.block,
-              color: treatmentColors[treatment],
-              image: plotPhotos[0],
-              rowIdx,
-              colIdx
-            });
-          }
+          plotDataMap[plot.id] = {
+            plotId: plot.id,
+            treatment: treatment,
+            treatmentName: plot.treatmentName,
+            treatmentIdx: plot.treatment,
+            block: plot.block,
+            color: treatmentColors[treatment],
+            image: plotPhotos && plotPhotos.length > 0 ? plotPhotos[0] : null
+          };
         });
       });
 
+    // Get expanded photo data for modal (rendered once, outside loops)
+    const expandedPhotoData = expandedPhoto ? plotDataMap[expandedPhoto] : null;
+
     return (
       <div className="bg-gray-800 rounded-xl p-6 shadow-2xl">
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center justify-between mb-6 flex-wrap gap-4">
           <h3 className="text-2xl font-bold flex items-center gap-2">
             <ImageIcon size={24} className="text-stri-teal" />
-            Plot Images
+            Field Map
           </h3>
 
-          {/* Sort button */}
-          <button
-            onMouseDown={() => setSortPhotosByPosition(true)}
-            onMouseUp={() => setSortPhotosByPosition(false)}
-            onMouseLeave={() => setSortPhotosByPosition(false)}
-            onTouchStart={() => setSortPhotosByPosition(true)}
-            onTouchEnd={() => setSortPhotosByPosition(false)}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg transition shadow-lg ${
-              sortPhotosByPosition
-                ? 'bg-orange-500 hover:bg-orange-600 text-white'
-                : 'bg-purple-600 hover:bg-purple-700 text-white'
-            }`}
-            title="Hold to show field map layout"
-          >
-            <MapPin size={20} />
-            {sortPhotosByPosition ? 'Field Map View' : 'Hold for Field Map View'}
-          </button>
+          <div className="flex items-center gap-4 flex-wrap">
+            {/* Assessment dropdown for color scoring */}
+            <div className="flex items-center gap-2">
+              <label className="text-sm text-gray-400">Color by:</label>
+              <select
+                value={selectedGridAssessment || ''}
+                onChange={(e) => setSelectedGridAssessment(e.target.value)}
+                className="bg-gray-700 text-white px-3 py-2 rounded-lg border border-gray-600 text-sm focus:outline-none focus:ring-2 focus:ring-stri-teal"
+              >
+                {config.assessmentTypes.map(type => (
+                  <option key={type.name} value={type.name}>
+                    {type.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Reverse scale toggle */}
+            <button
+              onClick={() => setReverseColorScale(!reverseColorScale)}
+              className={`px-3 py-2 rounded-lg text-sm transition ${
+                reverseColorScale
+                  ? 'bg-orange-500 text-white'
+                  : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+              }`}
+              title="Reverse color scale (low=green, high=red)"
+            >
+              {reverseColorScale ? 'Low=Good' : 'High=Good'}
+            </button>
+          </div>
         </div>
 
-        {sortPhotosByPosition ? (
-          // Field Map Layout - Show grid with blanks
-          <div className="space-y-2">
+        {/* Color legend */}
+        {selectedGridAssessment && (
+          <div className="mb-4 flex items-center gap-4 justify-center">
+            <span className="text-sm text-gray-400">{selectedGridAssessment}:</span>
+            <div className="flex items-center gap-1">
+              <span className="text-xs text-gray-500">{reverseColorScale ? 'Good' : 'Bad'} {assessmentMin}</span>
+              <div className="flex h-4 rounded overflow-hidden">
+                {[0, 0.25, 0.5, 0.75, 1].map((pct, i) => (
+                  <div
+                    key={i}
+                    className="w-8 h-4"
+                    style={{ backgroundColor: getScoreColor(assessmentMin + pct * (assessmentMax - assessmentMin), assessmentMin, assessmentMax) }}
+                  />
+                ))}
+              </div>
+              <span className="text-xs text-gray-500">{assessmentMax} {reverseColorScale ? 'Bad' : 'Good'}</span>
+            </div>
+          </div>
+        )}
+
+        {showDataGrid ? (
+          // Data Grid View - Original field map layout
+          <div className="space-y-3">
             {gridLayout.map((row, rowIdx) => (
-              <div key={rowIdx} className="flex gap-2 justify-center">
+              <div key={rowIdx} className="flex gap-3 justify-center">
                 {row.map((plot, colIdx) => {
-                  const photo = allPhotos.find(p => p.plotId === plot.id);
+                  const assessmentValue = getPlotAssessmentValue(plot.id, selectedGridAssessment);
+                  const bgColor = getScoreColor(assessmentValue, assessmentMin, assessmentMax);
+                  const plotData = plotDataMap[plot.id];
 
                   if (plot.isBlank) {
-                    // Grey square for blank plots
                     return (
                       <div
                         key={colIdx}
-                        className="w-24 h-24 rounded-lg border-2 border-dashed border-gray-600 bg-gray-700 flex items-center justify-center"
+                        className="w-20 h-20 rounded-lg border-2 border-dashed border-gray-600 bg-gray-700 flex items-center justify-center"
                       >
-                        <span className="text-gray-500 text-xs">Blank</span>
-                      </div>
-                    );
-                  }
-
-                  if (!photo) {
-                    // No photo for this plot
-                    return (
-                      <div
-                        key={colIdx}
-                        className="w-24 h-24 rounded-lg border-2 border-gray-600 bg-gray-700 flex items-center justify-center"
-                      >
-                        <span className="text-gray-400 text-xs">{plot.id}</span>
+                        <span className="text-gray-500 text-xs">-</span>
                       </div>
                     );
                   }
@@ -843,64 +1211,29 @@ const PresentationMode = ({
                   return (
                     <div
                       key={colIdx}
-                      className="relative group cursor-pointer"
-                      onClick={() => setExpandedPhoto(expandedPhoto === photo.plotId ? null : photo.plotId)}
+                      className="w-20 h-20 rounded-lg shadow-lg overflow-hidden transition-all hover:scale-110 cursor-pointer relative"
+                      style={{ backgroundColor: bgColor }}
+                      onClick={() => {
+                        if (plotData?.image) {
+                          setExpandedPhoto(plot.id);
+                        }
+                      }}
                     >
-                      {/* Thumbnail */}
-                      <div
-                        className="w-24 h-24 rounded-lg overflow-hidden shadow-lg transition-all hover:scale-105"
-                        style={{
-                          border: `3px solid ${photo.color}`
-                        }}
-                      >
+                      {/* Show photo if available, otherwise show data */}
+                      {plotData?.image ? (
                         <img
-                          src={photo.image}
-                          alt={photo.plotId}
+                          src={plotData.image}
+                          alt={plot.id}
                           className="w-full h-full object-cover"
                         />
-                      </div>
-
-                      {/* Label */}
-                      <div
-                        className="absolute bottom-0 left-0 right-0 text-center text-xs font-semibold text-white px-1 py-0.5"
-                        style={{ backgroundColor: photo.color }}
-                      >
-                        {photo.plotId}
-                      </div>
-
-                      {/* Expanded view on click */}
-                      {expandedPhoto === photo.plotId && (
-                        <div
-                          className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setExpandedPhoto(null);
-                          }}
-                        >
-                          <div className="relative w-full h-full flex items-center justify-center">
-                            <img
-                              src={photo.image}
-                              alt={photo.plotId}
-                              className="max-w-full max-h-full object-contain rounded-lg shadow-2xl"
-                              style={{ border: `8px solid ${photo.color}` }}
-                              onClick={(e) => e.stopPropagation()}
-                            />
-                            <div
-                              className="absolute top-4 left-1/2 -translate-x-1/2 text-center text-3xl font-bold text-white px-6 py-3 rounded-lg shadow-xl"
-                              style={{ backgroundColor: photo.color }}
-                            >
-                              Plot {photo.plotId} - {photo.treatment}
-                            </div>
-                            <button
-                              className="absolute top-4 right-4 bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg font-semibold shadow-xl"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setExpandedPhoto(null);
-                              }}
-                            >
-                              Close (X)
-                            </button>
-                          </div>
+                      ) : (
+                        <div className="w-full h-full flex flex-col items-center justify-center">
+                          {/* Large assessment value */}
+                          <span className="text-2xl font-bold text-white drop-shadow-lg">
+                            {assessmentValue !== null ? assessmentValue : '-'}
+                          </span>
+                          {/* Small block-treatment info */}
+                          <span className="text-xs text-white/70">{plot.id}</span>
                         </div>
                       )}
                     </div>
@@ -910,100 +1243,100 @@ const PresentationMode = ({
             ))}
           </div>
         ) : (
-          // Treatment Column Layout
-          <div className="grid gap-6" style={{ gridTemplateColumns: `repeat(${config.treatments.length}, minmax(0, 1fr))` }}>
-            {config.treatments.map((treatment, treatmentIdx) => {
-              const color = treatmentColors[treatment];
-              const treatmentPhotos = allPhotos
-                .filter(p => p.treatmentIdx === treatmentIdx)
+          // Default View - Treatment columns with photos/data
+          <div className="overflow-x-auto pb-4">
+            <div className="grid gap-3" style={{ gridTemplateColumns: `repeat(${config.treatments.length}, minmax(100px, 1fr))`, minWidth: `${config.treatments.length * 110}px` }}>
+              {config.treatments.map((treatmentName, treatmentIdx) => {
+              const color = treatmentColors[treatmentName];
+
+              // Get plots for this treatment, sorted by block
+              // Use == for comparison to handle string/number type mismatch
+              const treatmentPlots = Object.values(plotDataMap)
+                .filter(p => p.treatmentIdx == treatmentIdx)
                 .sort((a, b) => a.block - b.block);
 
-              if (treatmentPhotos.length === 0) return null;
-
               return (
-                <div key={treatmentIdx} className="space-y-3">
-                  {/* Treatment Header */}
+                <div key={treatmentIdx} className="space-y-2">
+                  {/* Treatment Header - Fixed height with truncation */}
                   <div
-                    className="text-center font-bold text-lg py-3 rounded-lg shadow-lg"
-                    style={{
-                      backgroundColor: color,
-                      color: 'white'
-                    }}
+                    className="text-center font-bold text-sm py-3 rounded-lg shadow-lg h-14 flex items-center justify-center overflow-hidden"
+                    style={{ backgroundColor: color, color: 'white' }}
+                    title={treatmentName}
                   >
-                    {treatment}
+                    <span className="truncate px-2">{treatmentName}</span>
                   </div>
 
-                  {/* Photos for this treatment */}
-                  <div className="space-y-3">
-                    {treatmentPhotos.map((photo) => (
-                      <div
-                        key={photo.plotId}
-                        className="relative group cursor-pointer"
-                        onClick={() => setExpandedPhoto(expandedPhoto === photo.plotId ? null : photo.plotId)}
-                      >
-                        {/* Thumbnail */}
+                  {/* Blocks for this treatment */}
+                  <div className="space-y-2">
+                    {treatmentPlots.map((plotData) => {
+                      const assessmentValue = getPlotAssessmentValue(plotData.plotId, selectedGridAssessment);
+                      const bgColor = getScoreColor(assessmentValue, assessmentMin, assessmentMax);
+
+                      return (
                         <div
-                          className="w-full aspect-square rounded-lg overflow-hidden shadow-lg transition-all hover:scale-105"
-                          style={{
-                            border: `3px solid ${photo.color}`
+                          key={plotData.plotId}
+                          className="relative rounded-lg shadow-lg overflow-hidden cursor-pointer transition-all hover:scale-105 aspect-square"
+                          style={{ backgroundColor: bgColor }}
+                          onClick={() => {
+                            if (plotData.image) {
+                              setExpandedPhoto(plotData.plotId);
+                            }
                           }}
                         >
-                          <img
-                            src={photo.image}
-                            alt={photo.plotId}
-                            className="w-full h-full object-cover"
-                          />
-                        </div>
-
-                        {/* Label */}
-                        <div
-                          className="absolute bottom-0 left-0 right-0 text-center text-sm font-semibold text-white px-2 py-1"
-                          style={{ backgroundColor: photo.color }}
-                        >
-                          {photo.plotId}
-                        </div>
-
-                        {/* Expanded view on click */}
-                        {expandedPhoto === photo.plotId && (
-                          <div
-                            className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setExpandedPhoto(null);
-                            }}
-                          >
-                            <div className="relative w-full h-full flex items-center justify-center">
-                              <img
-                                src={photo.image}
-                                alt={photo.plotId}
-                                className="max-w-full max-h-full object-contain rounded-lg shadow-2xl"
-                                style={{ border: `8px solid ${photo.color}` }}
-                                onClick={(e) => e.stopPropagation()}
-                              />
-                              <div
-                                className="absolute top-4 left-1/2 -translate-x-1/2 text-center text-3xl font-bold text-white px-6 py-3 rounded-lg shadow-xl"
-                                style={{ backgroundColor: photo.color }}
-                              >
-                                Plot {photo.plotId} - {photo.treatment}
-                              </div>
-                              <button
-                                className="absolute top-4 right-4 bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg font-semibold shadow-xl"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setExpandedPhoto(null);
-                                }}
-                              >
-                                Close (X)
-                              </button>
+                          {/* Show photo if available */}
+                          {plotData.image ? (
+                            <img
+                              src={plotData.image}
+                              alt={plotData.plotId}
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            // No photo - show colored box with data
+                            <div className="w-full h-full flex flex-col items-center justify-center">
+                              <span className="text-3xl font-bold text-white drop-shadow-lg">
+                                {assessmentValue !== null ? assessmentValue : '-'}
+                              </span>
+                              <span className="text-xs text-white/80">B{plotData.block}</span>
                             </div>
-                          </div>
-                        )}
-                      </div>
-                    ))}
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               );
             })}
+            </div>
+          </div>
+        )}
+
+        {/* Single expanded photo modal - rendered once outside loops */}
+        {expandedPhoto && expandedPhotoData?.image && (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4"
+            onClick={() => setExpandedPhoto(null)}
+          >
+            <div className="relative w-full h-full flex items-center justify-center">
+              <img
+                src={expandedPhotoData.image}
+                alt={expandedPhotoData.plotId}
+                className="max-w-full max-h-full object-contain rounded-lg shadow-2xl"
+                style={{ border: `8px solid ${expandedPhotoData.color}` }}
+                onClick={(e) => e.stopPropagation()}
+              />
+              <div
+                className="absolute top-4 left-1/2 -translate-x-1/2 text-center text-3xl font-bold text-white px-6 py-3 rounded-lg shadow-xl"
+                style={{ backgroundColor: expandedPhotoData.color }}
+              >
+                Plot {expandedPhotoData.plotId} - {expandedPhotoData.treatment}
+              </div>
+              <button
+                className="absolute top-4 right-4 bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg font-semibold shadow-xl"
+                onClick={() => setExpandedPhoto(null)}
+              >
+                Close (X)
+              </button>
+            </div>
           </div>
         )}
       </div>
@@ -1054,6 +1387,9 @@ const PresentationMode = ({
 
             const allDates = sortedDates.map(d => d.date);
 
+            // Get stats for current date (includes letter groups)
+            const statsData = prepareBarChartDataForType(type.name);
+
             // Use config min/max by default, or auto-calculated when button is held
             let minValue = type.min;
             let maxValue = type.max;
@@ -1078,6 +1414,7 @@ const PresentationMode = ({
                     min={minValue}
                     max={maxValue}
                     allDates={allDates}
+                    statsData={statsData}
                   />
                 </div>
               </div>
@@ -1181,6 +1518,22 @@ const PresentationMode = ({
           title="Hold to auto-adjust chart axes to data"
         >
           <Maximize2 size={28} />
+        </button>
+
+        <button
+          onMouseDown={() => setShowDataGrid(true)}
+          onMouseUp={() => setShowDataGrid(false)}
+          onMouseLeave={() => setShowDataGrid(false)}
+          onTouchStart={() => setShowDataGrid(true)}
+          onTouchEnd={() => setShowDataGrid(false)}
+          className={`p-4 rounded-full transition shadow-2xl hover:scale-110 ${
+            showDataGrid
+              ? 'bg-orange-500 hover:bg-orange-600'
+              : 'bg-indigo-600 hover:bg-indigo-700'
+          }`}
+          title="Hold to show field map grid layout"
+        >
+          <Grid size={28} />
         </button>
 
         <button
