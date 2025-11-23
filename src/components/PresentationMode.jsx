@@ -695,12 +695,14 @@ const PresentationMode = ({
   const [currentSlide, setCurrentSlide] = useState(0);
   const [visibleTreatments, setVisibleTreatments] = useState({});
   const [visibleAssessments, setVisibleAssessments] = useState({});
-  const [sectionOrder, setSectionOrder] = useState(['barCharts', 'photos', 'notes', 'graphs']);
+  const [sectionOrder, setSectionOrder] = useState(['barCharts', 'photos', 'notes', 'graphs', 'treatmentProgression']);
   const [useAutoScale, setUseAutoScale] = useState(false);
   const [showDataGrid, setShowDataGrid] = useState(false);
   const [expandedPhoto, setExpandedPhoto] = useState(null);
   const [selectedGridAssessment, setSelectedGridAssessment] = useState(null);
   const [reverseColorScale, setReverseColorScale] = useState(false);
+  const [selectedProgressionTreatment, setSelectedProgressionTreatment] = useState(null);
+  const [expandedProgressionPhoto, setExpandedProgressionPhoto] = useState(null);
 
   // Get all dates sorted chronologically
   const sortedDates = [...assessmentDates].sort((a, b) =>
@@ -748,6 +750,11 @@ const PresentationMode = ({
     // Initialize selected grid assessment if not set
     if (!selectedGridAssessment && config.assessmentTypes.length > 0) {
       setSelectedGridAssessment(config.assessmentTypes[0].name);
+    }
+
+    // Initialize selected progression treatment if not set
+    if (!selectedProgressionTreatment && treatmentNames.length > 0) {
+      setSelectedProgressionTreatment(treatmentNames[0]);
     }
   }, [treatmentNames.join(','), config.assessmentTypes.map(t => t.name).join(',')]);
   const treatmentColors = {};
@@ -1425,11 +1432,194 @@ const PresentationMode = ({
     );
   };
 
+  const renderTreatmentProgression = () => {
+    if (!selectedProgressionTreatment) return null;
+
+    // Get plots for the selected treatment
+    const treatmentPlots = treatmentGroups[selectedProgressionTreatment] || [];
+    if (treatmentPlots.length === 0) return null;
+
+    // Get photos for each plot across all dates
+    const getPhotosForPlotOnDate = (plotId, dateStr) => {
+      const normalizedDate = normalizeDateFormat(dateStr);
+      const photoKey = `${normalizedDate}_${plotId}`;
+
+      // Try exact match first
+      if (photos[photoKey] && photos[photoKey].length > 0) {
+        return photos[photoKey][0];
+      }
+
+      // Search through all photo keys
+      for (const [key, photoArray] of Object.entries(photos)) {
+        const keyParts = key.split('_');
+        if (keyParts.length >= 2) {
+          const photoDate = normalizeDateFormat(keyParts[0]);
+          const photoPlotId = keyParts.slice(1).join('_');
+          if (photoDate === normalizedDate && photoPlotId === plotId && photoArray.length > 0) {
+            return photoArray[0];
+          }
+        }
+      }
+      return null;
+    };
+
+    const treatmentColor = treatmentColors[selectedProgressionTreatment];
+
+    return (
+      <div className="bg-gray-800 rounded-xl p-6 shadow-2xl">
+        <div className="flex items-center justify-between mb-6 flex-wrap gap-4">
+          <h3 className="text-2xl font-bold flex items-center gap-2">
+            <Calendar size={24} className="text-stri-green-success" />
+            Treatment Progression
+          </h3>
+
+          {/* Treatment dropdown */}
+          <div className="flex items-center gap-2">
+            <label className="text-sm text-gray-400">Treatment:</label>
+            <select
+              value={selectedProgressionTreatment}
+              onChange={(e) => setSelectedProgressionTreatment(e.target.value)}
+              className="bg-gray-700 text-white px-4 py-2 rounded-lg border border-gray-600 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-stri-teal"
+            >
+              {treatmentNames.map(treatment => (
+                <option key={treatment} value={treatment}>
+                  {treatment}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {/* Treatment color indicator */}
+        <div className="mb-4 flex items-center gap-3">
+          <div
+            className="w-6 h-6 rounded-full"
+            style={{ backgroundColor: treatmentColor }}
+          />
+          <span className="text-lg font-semibold" style={{ color: treatmentColor }}>
+            {selectedProgressionTreatment}
+          </span>
+          <span className="text-gray-400 text-sm">
+            ({treatmentPlots.length} plots across {sortedDates.length} dates)
+          </span>
+        </div>
+
+        {/* Photo grid - dates as columns, plots as rows */}
+        <div className="overflow-x-auto">
+          <table className="w-full border-collapse">
+            <thead>
+              <tr>
+                <th className="p-2 text-left text-sm font-semibold text-gray-400 sticky left-0 bg-gray-800 z-10 min-w-[80px]">
+                  Plot
+                </th>
+                {sortedDates.map((dateObj) => (
+                  <th key={dateObj.date} className="p-2 text-center text-sm font-semibold text-gray-300 min-w-[120px]">
+                    {dateObj.date}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {treatmentPlots.sort((a, b) => a.block - b.block).map((plot) => (
+                <tr key={plot.id} className="border-t border-gray-700">
+                  <td className="p-2 text-sm font-medium text-gray-300 sticky left-0 bg-gray-800 z-10">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-gray-500">B{plot.block}</span>
+                      <span>{plot.id}</span>
+                    </div>
+                  </td>
+                  {sortedDates.map((dateObj) => {
+                    const photo = getPhotosForPlotOnDate(plot.id, dateObj.date);
+
+                    return (
+                      <td key={dateObj.date} className="p-2">
+                        <div
+                          className={`w-28 h-28 rounded-lg overflow-hidden ${
+                            photo ? 'cursor-pointer hover:scale-105 transition-transform' : ''
+                          }`}
+                          style={{
+                            backgroundColor: photo ? 'transparent' : '#374151',
+                            border: `3px solid ${treatmentColor}`
+                          }}
+                          onClick={() => {
+                            if (photo) {
+                              setExpandedProgressionPhoto({
+                                image: photo,
+                                plotId: plot.id,
+                                date: dateObj.date,
+                                treatment: selectedProgressionTreatment,
+                                block: plot.block
+                              });
+                            }
+                          }}
+                        >
+                          {photo ? (
+                            <img
+                              src={photo}
+                              alt={`${plot.id} - ${dateObj.date}`}
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center">
+                              <span className="text-gray-500 text-xs">No photo</span>
+                            </div>
+                          )}
+                        </div>
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Expanded photo modal */}
+        {expandedProgressionPhoto && (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4"
+            onClick={() => setExpandedProgressionPhoto(null)}
+          >
+            <div className="relative w-full h-full flex items-center justify-center">
+              <img
+                src={expandedProgressionPhoto.image}
+                alt={`${expandedProgressionPhoto.plotId} - ${expandedProgressionPhoto.date}`}
+                className="max-w-full max-h-full object-contain rounded-lg shadow-2xl"
+                style={{ border: `8px solid ${treatmentColor}` }}
+                onClick={(e) => e.stopPropagation()}
+              />
+              <div
+                className="absolute top-4 left-1/2 -translate-x-1/2 text-center text-2xl font-bold text-white px-6 py-3 rounded-lg shadow-xl"
+                style={{ backgroundColor: treatmentColor }}
+              >
+                <div>{expandedProgressionPhoto.treatment}</div>
+                <div className="text-lg font-normal">
+                  Plot {expandedProgressionPhoto.plotId} (Block {expandedProgressionPhoto.block}) - {expandedProgressionPhoto.date}
+                </div>
+              </div>
+              <button
+                className="absolute top-4 right-4 bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg font-semibold shadow-xl"
+                onClick={() => setExpandedProgressionPhoto(null)}
+              >
+                Close (X)
+              </button>
+            </div>
+          </div>
+        )}
+
+        <div className="mt-4 text-sm text-gray-400 text-center">
+          Click any photo to enlarge. Photos shown in date order from left to right.
+        </div>
+      </div>
+    );
+  };
+
   const sectionRenderers = {
     barCharts: renderBarCharts,
     photos: renderPhotos,
     notes: renderNotes,
-    graphs: renderGraphs
+    graphs: renderGraphs,
+    treatmentProgression: renderTreatmentProgression
   };
 
   return (
