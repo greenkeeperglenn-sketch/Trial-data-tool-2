@@ -725,7 +725,7 @@ const Analysis = ({ config, gridLayout, assessmentDates, selectedAssessmentType 
               ];
 
               if (groupBy === 'treatment') {
-                // Group by treatment: X-axis is dates, each line is a treatment
+                // Group by treatment: X-axis is dates, each line is a treatment (all on one graph)
                 const chartWidth = Math.max(600, assessmentDates.length * 100);
                 const xScale = (idx) => marginLeft + (idx / (assessmentDates.length - 1 || 1)) * (chartWidth - marginLeft - marginRight);
 
@@ -779,56 +779,66 @@ const Analysis = ({ config, gridLayout, assessmentDates, selectedAssessmentType 
                   </div>
                 );
               } else {
-                // Group by date: X-axis is treatments, each line is a date
-                const chartWidth = Math.max(600, config.treatments.length * 100);
-                const xScale = (idx) => marginLeft + (idx / (config.treatments.length - 1 || 1)) * (chartWidth - marginLeft - marginRight);
+                // Group by date: Individual line graph for each treatment
+                const chartWidth = Math.max(400, assessmentDates.length * 80);
+                const xScale = (idx) => marginLeft + (idx / (assessmentDates.length - 1 || 1)) * (chartWidth - marginLeft - marginRight);
 
                 return (
-                  <div>
-                    <svg width={chartWidth} height={chartHeight} className="overflow-visible">
-                      {[0, 0.25, 0.5, 0.75, 1].map((pct, i) => {
-                        const val = (globalMin - padding) + pct * (range + 2 * padding);
-                        const y = yScale(val);
-                        return (
-                          <g key={i}>
-                            <line x1={marginLeft} y1={y} x2={chartWidth - marginRight} y2={y} stroke="#e5e7eb" strokeDasharray="4 4" />
-                            <text x={marginLeft - 8} y={y + 4} fontSize="10" fill="#6b7280" textAnchor="end">{val.toFixed(1)}</text>
-                          </g>
-                        );
-                      })}
-                      {config.treatments.map((treatment, idx) => (
-                        <text key={idx} x={xScale(idx)} y={chartHeight - marginBottom + 20} fontSize="10" fill="#6b7280" textAnchor="middle" transform={`rotate(-45, ${xScale(idx)}, ${chartHeight - marginBottom + 20})`}>{treatment.substring(0, 10)}</text>
-                      ))}
-                      {assessmentDates.map((dateObj, dateIdx) => {
+                  <div className="space-y-8">
+                    {config.treatments.map((treatment, treatmentIdx) => {
+                      const points = assessmentDates.map((dateObj, dateIdx) => {
                         const stats = calculateStats(dateObj);
                         if (!stats) return null;
-                        const points = config.treatments.map((treatment, treatmentIdx) => {
-                          const ts = stats.treatmentStats.find(t => t.treatment === treatmentIdx);
-                          if (!ts) return null;
-                          return { x: xScale(treatmentIdx), y: yScale(ts.mean), mean: ts.mean };
-                        }).filter(p => p !== null);
-                        if (points.length < 2) return null;
-                        const pathData = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ');
-                        const color = dateColors[dateIdx % dateColors.length];
-                        return (
-                          <g key={dateIdx}>
-                            <path d={pathData} fill="none" stroke={color} strokeWidth="2" />
-                            {points.map((p, i) => <circle key={i} cx={p.x} cy={p.y} r="4" fill={color} />)}
-                          </g>
-                        );
-                      })}
-                    </svg>
-                    <div className="flex flex-wrap gap-4 mt-4 justify-center">
-                      {assessmentDates.map((dateObj, idx) => (
-                        <div key={idx} className="flex items-center gap-2">
-                          <div className="w-4 h-4 rounded" style={{ backgroundColor: dateColors[idx % dateColors.length] }} />
-                          <span className="text-sm">{dateObj.date}</span>
+                        const ts = stats.treatmentStats.find(t => t.treatment === treatmentIdx);
+                        if (!ts) return null;
+                        return { x: xScale(dateIdx), y: yScale(ts.mean), mean: ts.mean, group: ts.group, date: dateObj.date };
+                      }).filter(p => p !== null);
+
+                      if (points.length < 1) return null;
+                      const color = treatmentColors[treatmentIdx % treatmentColors.length];
+
+                      return (
+                        <div key={treatmentIdx} className="border-b pb-6">
+                          <div className="font-medium mb-3 flex items-center gap-2">
+                            <div className="w-4 h-4 rounded" style={{ backgroundColor: color }} />
+                            {treatment}
+                          </div>
+                          <svg width={chartWidth} height={chartHeight} className="overflow-visible">
+                            {[0, 0.25, 0.5, 0.75, 1].map((pct, i) => {
+                              const val = (globalMin - padding) + pct * (range + 2 * padding);
+                              const y = yScale(val);
+                              return (
+                                <g key={i}>
+                                  <line x1={marginLeft} y1={y} x2={chartWidth - marginRight} y2={y} stroke="#e5e7eb" strokeDasharray="4 4" />
+                                  <text x={marginLeft - 8} y={y + 4} fontSize="10" fill="#6b7280" textAnchor="end">{val.toFixed(1)}</text>
+                                </g>
+                              );
+                            })}
+                            {assessmentDates.map((dateObj, idx) => (
+                              <text key={idx} x={xScale(idx)} y={chartHeight - marginBottom + 20} fontSize="10" fill="#6b7280" textAnchor="middle" transform={`rotate(-45, ${xScale(idx)}, ${chartHeight - marginBottom + 20})`}>{dateObj.date}</text>
+                            ))}
+                            {points.length >= 2 && (
+                              <path
+                                d={points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ')}
+                                fill="none"
+                                stroke={color}
+                                strokeWidth="2"
+                              />
+                            )}
+                            {points.map((p, i) => (
+                              <g key={i}>
+                                <circle cx={p.x} cy={p.y} r="5" fill={color} />
+                                <text x={p.x} y={p.y - 10} fontSize="10" fill="#374151" textAnchor="middle">{p.mean.toFixed(1)}</text>
+                                <text x={p.x} y={p.y - 22} fontSize="9" fill="#2563eb" textAnchor="middle" fontWeight="bold">({p.group})</text>
+                              </g>
+                            ))}
+                          </svg>
                         </div>
-                      ))}
-                    </div>
+                      );
+                    })}
                     <div className="mt-4 text-xs text-gray-600">
-                      <p>Each line shows one date across all treatments</p>
-                      <p>X-axis: Treatments, Y-axis: Treatment means</p>
+                      <p>Individual line graph for each treatment across all dates</p>
+                      <p>Letters indicate statistical groupings at each date (Fisher's protected LSD test)</p>
                     </div>
                   </div>
                 );
