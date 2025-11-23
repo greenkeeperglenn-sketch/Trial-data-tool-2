@@ -5,7 +5,7 @@ import { supabase } from './supabase';
  * Uses Supabase Storage for reliable photo persistence
  */
 
-const BUCKET_NAME = 'trial-photos';
+const BUCKET_NAME = 'plot-images';
 
 /**
  * Upload a photo to Supabase Storage
@@ -252,25 +252,25 @@ export const ensureBucketExists = async () => {
 
 -- Create the storage bucket
 INSERT INTO storage.buckets (id, name, public)
-VALUES ('trial-photos', 'trial-photos', true)
+VALUES ('plot-images', 'plot-images', true)
 ON CONFLICT (id) DO NOTHING;
 
 -- Create policy to allow authenticated users to upload
 CREATE POLICY "Users can upload photos"
 ON storage.objects FOR INSERT
 TO authenticated
-WITH CHECK (bucket_id = 'trial-photos');
+WITH CHECK (bucket_id = 'plot-images');
 
 -- Create policy to allow public read access
 CREATE POLICY "Photos are publicly viewable"
 ON storage.objects FOR SELECT
 TO public
-USING (bucket_id = 'trial-photos');
+USING (bucket_id = 'plot-images');
 
 -- Create policy to allow users to delete their own photos
 CREATE POLICY "Users can delete their photos"
 ON storage.objects FOR DELETE
 TO authenticated
-USING (bucket_id = 'trial-photos');
+USING (bucket_id = 'plot-images');
   `);
 };

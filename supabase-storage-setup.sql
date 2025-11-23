@@ -5,11 +5,11 @@
 -- STORAGE BUCKET SETUP
 -- =====================================================
 
--- Create the storage bucket for trial photos
+-- Create the storage bucket for plot images
 INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 VALUES (
-  'trial-photos',
-  'trial-photos',
+  'plot-images',
+  'plot-images',
   true,
   10485760, -- 10MB max file size
   ARRAY['image/jpeg', 'image/png', 'image/gif', 'image/webp']
@@ -33,32 +33,32 @@ DROP POLICY IF EXISTS "Users can delete photos" ON storage.objects;
 CREATE POLICY "Users can upload photos"
 ON storage.objects FOR INSERT
 TO authenticated
-WITH CHECK (bucket_id = 'trial-photos');
+WITH CHECK (bucket_id = 'plot-images');
 
 -- Policy: Allow public read access to all photos
 CREATE POLICY "Photos are publicly viewable"
 ON storage.objects FOR SELECT
 TO public
-USING (bucket_id = 'trial-photos');
+USING (bucket_id = 'plot-images');
 
 -- Policy: Allow authenticated users to update their photos
 CREATE POLICY "Users can update photos"
 ON storage.objects FOR UPDATE
 TO authenticated
-USING (bucket_id = 'trial-photos');
+USING (bucket_id = 'plot-images');
 
 -- Policy: Allow authenticated users to delete their photos
 CREATE POLICY "Users can delete photos"
 ON storage.objects FOR DELETE
 TO authenticated
-USING (bucket_id = 'trial-photos');
+USING (bucket_id = 'plot-images');
 
 -- =====================================================
 -- VERIFICATION
 -- =====================================================
 
 -- Check that the bucket was created
-SELECT id, name, public, file_size_limit FROM storage.buckets WHERE id = 'trial-photos';
+SELECT id, name, public, file_size_limit FROM storage.buckets WHERE id = 'plot-images';
 
 -- Check that policies were created
 SELECT policyname FROM pg_policies WHERE tablename = 'objects' AND schemaname = 'storage';

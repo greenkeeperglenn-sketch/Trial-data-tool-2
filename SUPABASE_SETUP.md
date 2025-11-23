@@ -47,34 +47,34 @@ This will create:
 Photos are stored in Supabase Storage for reliable persistence. Run this SQL in the SQL Editor:
 
 ```sql
--- Create the storage bucket for trial photos
+-- Create the storage bucket for plot images
 INSERT INTO storage.buckets (id, name, public)
-VALUES ('trial-photos', 'trial-photos', true)
+VALUES ('plot-images', 'plot-images', true)
 ON CONFLICT (id) DO NOTHING;
 
 -- Create policy to allow authenticated users to upload photos
 CREATE POLICY "Users can upload photos"
 ON storage.objects FOR INSERT
 TO authenticated
-WITH CHECK (bucket_id = 'trial-photos');
+WITH CHECK (bucket_id = 'plot-images');
 
 -- Create policy to allow public read access to photos
 CREATE POLICY "Photos are publicly viewable"
 ON storage.objects FOR SELECT
 TO public
-USING (bucket_id = 'trial-photos');
+USING (bucket_id = 'plot-images');
 
 -- Create policy to allow users to update their photos
 CREATE POLICY "Users can update photos"
 ON storage.objects FOR UPDATE
 TO authenticated
-USING (bucket_id = 'trial-photos');
+USING (bucket_id = 'plot-images');
 
 -- Create policy to allow users to delete their photos
 CREATE POLICY "Users can delete photos"
 ON storage.objects FOR DELETE
 TO authenticated
-USING (bucket_id = 'trial-photos');
+USING (bucket_id = 'plot-images');
 ```
 
 **Important**: Without this storage bucket, photos will not persist between sessions!
