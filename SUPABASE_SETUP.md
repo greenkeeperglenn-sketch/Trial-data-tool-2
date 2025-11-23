@@ -42,7 +42,44 @@ This will create:
 - Row Level Security (RLS) policies for user data isolation
 - Indexes for performance
 
-## Step 5: Enable Authentication (Optional but Recommended)
+## Step 5: Set Up Storage for Photos
+
+Photos are stored in Supabase Storage for reliable persistence. Run this SQL in the SQL Editor:
+
+```sql
+-- Create the storage bucket for trial photos
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('trial-photos', 'trial-photos', true)
+ON CONFLICT (id) DO NOTHING;
+
+-- Create policy to allow authenticated users to upload photos
+CREATE POLICY "Users can upload photos"
+ON storage.objects FOR INSERT
+TO authenticated
+WITH CHECK (bucket_id = 'trial-photos');
+
+-- Create policy to allow public read access to photos
+CREATE POLICY "Photos are publicly viewable"
+ON storage.objects FOR SELECT
+TO public
+USING (bucket_id = 'trial-photos');
+
+-- Create policy to allow users to update their photos
+CREATE POLICY "Users can update photos"
+ON storage.objects FOR UPDATE
+TO authenticated
+USING (bucket_id = 'trial-photos');
+
+-- Create policy to allow users to delete their photos
+CREATE POLICY "Users can delete photos"
+ON storage.objects FOR DELETE
+TO authenticated
+USING (bucket_id = 'trial-photos');
+```
+
+**Important**: Without this storage bucket, photos will not persist between sessions!
+
+## Step 6: Enable Authentication (Optional but Recommended)
 
 1. In Supabase dashboard, go to **Authentication** > **Providers**
 2. Enable **Email** provider (it's enabled by default)

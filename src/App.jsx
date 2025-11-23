@@ -20,6 +20,7 @@ import {
   deleteTrial as deleteTrialDB,
   migrateFromLocalStorage
 } from './services/database';
+import { migratePhotosToStorage, needsMigration } from './services/storage';
 
 // Loading fallback component for lazy-loaded routes
 const LoadingFallback = () => (
@@ -233,7 +234,7 @@ const App = () => {
   };
 
   // Load existing trial
-  const loadTrial = (trialId) => {
+  const loadTrial = async (trialId) => {
     const trial = trials[trialId];
     if (!trial) return;
 
@@ -243,9 +244,37 @@ const App = () => {
     setOrientation(trial.orientation || 0);
     setLayoutLocked(trial.layoutLocked || false);
     setAssessmentDates(trial.assessmentDates || []);
-    setPhotos(trial.photos || {});
     setNotes(trial.notes || {});
     setStep('entry');
+
+    // Check if photos need migration from base64 to storage
+    const trialPhotos = trial.photos || {};
+    if (needsMigration(trialPhotos)) {
+      console.log('[App] Photos need migration to storage, starting migration...');
+      setPhotos(trialPhotos); // Set photos immediately so UI shows something
+
+      // Migrate in background
+      try {
+        const migratedPhotos = await migratePhotosToStorage(trialId, trialPhotos);
+        console.log('[App] Photos migrated successfully');
+        setPhotos(migratedPhotos);
+
+        // Save the migrated photos back to the database
+        const updatedTrial = {
+          ...trial,
+          photos: migratedPhotos,
+          lastModified: new Date().toISOString()
+        };
+        await updateTrial(trialId, updatedTrial);
+        setTrials(prev => ({ ...prev, [trialId]: updatedTrial }));
+        console.log('[App] Migrated photos saved to database');
+      } catch (error) {
+        console.error('[App] Photo migration failed:', error);
+        // Continue with base64 photos as fallback
+      }
+    } else {
+      setPhotos(trialPhotos);
+    }
   };
 
   // Delete trial
@@ -665,6 +694,7 @@ const App = () => {
           assessmentDates={assessmentDates}
           photos={photos}
           notes={notes}
+          trialId={currentTrialId}
           onAssessmentDatesChange={setAssessmentDates}
           onPhotosChange={setPhotos}
           onNotesChange={setNotes}

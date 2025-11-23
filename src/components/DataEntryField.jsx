@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { Eye, Camera, Plus, RotateCw } from 'lucide-react';
+import { Eye, Camera, Plus, RotateCw, Loader } from 'lucide-react';
+import { uploadPhoto } from '../services/storage';
 
 const DataEntryField = ({
   config,
@@ -7,9 +8,11 @@ const DataEntryField = ({
   currentDateObj,
   selectedAssessmentType,
   photos,
+  trialId,
   onUpdateData,
   onPhotosChange
 }) => {
+  const [uploadingPhoto, setUploadingPhoto] = useState(null); // Track which plot is uploading
   const [showTreatments, setShowTreatments] = useState(false);
   const [reverseColorScale, setReverseColorScale] = useState(false);
 
@@ -68,19 +71,53 @@ const DataEntryField = ({
   };
 
   // Handle photo upload
-  const handlePhotoUpload = (plotId, e) => {
+  const handlePhotoUpload = async (plotId, e) => {
     const file = e.target.files[0];
     if (!file) return;
-    
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const key = `${currentDateObj.date}_${plotId}`;
-      onPhotosChange({
-        ...photos,
-        [key]: [...(photos[key] || []), event.target.result]
-      });
-    };
-    reader.readAsDataURL(file);
+
+    const key = `${currentDateObj.date}_${plotId}`;
+    setUploadingPhoto(plotId);
+
+    try {
+      const reader = new FileReader();
+      reader.onload = async (event) => {
+        const base64Data = event.target.result;
+
+        // If we have a trial ID, upload to Supabase Storage
+        if (trialId && !trialId.startsWith('temp-')) {
+          try {
+            const existingPhotos = photos[key] || [];
+            const photoUrl = await uploadPhoto(trialId, key, base64Data, existingPhotos.length);
+            console.log('[DataEntryField] Photo uploaded to storage:', photoUrl);
+
+            onPhotosChange({
+              ...photos,
+              [key]: [...existingPhotos, photoUrl]
+            });
+          } catch (uploadError) {
+            console.error('[DataEntryField] Storage upload failed, saving base64:', uploadError);
+            // Fallback to base64 if storage upload fails
+            onPhotosChange({
+              ...photos,
+              [key]: [...(photos[key] || []), base64Data]
+            });
+          }
+        } else {
+          // No trial ID yet (new trial), store base64 temporarily
+          console.log('[DataEntryField] No trial ID, storing base64 temporarily');
+          onPhotosChange({
+            ...photos,
+            [key]: [...(photos[key] || []), base64Data]
+          });
+        }
+
+        setUploadingPhoto(null);
+      };
+      reader.readAsDataURL(file);
+    } catch (error) {
+      console.error('[DataEntryField] Error handling photo upload:', error);
+      setUploadingPhoto(null);
+    }
   };
 
   return (
@@ -168,9 +205,18 @@ const DataEntryField = ({
                         accept="image/*"
                         onChange={(e) => handlePhotoUpload(plot.id, e)}
                         className="hidden"
+                        disabled={uploadingPhoto === plot.id}
                       />
-                      <div className="text-xs text-center bg-blue-100 hover:bg-blue-200 px-2 py-0.5 rounded cursor-pointer">
-                        <Camera size={12} className="inline" /> {plotPhotos.length > 0 ? plotPhotos.length : '+'}
+                      <div className={`text-xs text-center px-2 py-0.5 rounded cursor-pointer ${
+                        uploadingPhoto === plot.id
+                          ? 'bg-yellow-100 text-yellow-700'
+                          : 'bg-blue-100 hover:bg-blue-200'
+                      }`}>
+                        {uploadingPhoto === plot.id ? (
+                          <><Loader size={12} className="inline animate-spin" /> ...</>
+                        ) : (
+                          <><Camera size={12} className="inline" /> {plotPhotos.length > 0 ? plotPhotos.length : '+'}</>
+                        )}
                       </div>
                     </label>
                   </div>

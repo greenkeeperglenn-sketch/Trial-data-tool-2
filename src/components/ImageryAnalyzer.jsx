@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import piexif from 'piexifjs';
+import { uploadPhotos } from '../services/storage';
 
 const ImageryAnalyzer = ({
   gridLayout,
@@ -8,6 +9,7 @@ const ImageryAnalyzer = ({
   currentDateObj,
   selectedAssessmentType,
   photos,
+  trialId,
   onSelectAssessmentType,
   onBulkUpdateData,
   onPhotosChange,
@@ -452,6 +454,21 @@ const ImageryAnalyzer = ({
           newPhotos[photoKey] = [dataUrl]; // Array to support multiple photos per plot
 
           extractedCount++;
+        }
+      }
+
+      // If we have a valid trial ID, upload photos to storage
+      if (trialId && !trialId.startsWith('temp-')) {
+        console.log('[ImageryAnalyzer] Uploading extracted photos to storage...');
+        try {
+          for (const [photoKey, photoArray] of Object.entries(newPhotos)) {
+            const urls = await uploadPhotos(trialId, photoKey, photoArray);
+            newPhotos[photoKey] = urls;
+          }
+          console.log('[ImageryAnalyzer] Photos uploaded successfully');
+        } catch (uploadError) {
+          console.error('[ImageryAnalyzer] Storage upload failed:', uploadError);
+          // Continue with base64 data if storage fails
         }
       }
 

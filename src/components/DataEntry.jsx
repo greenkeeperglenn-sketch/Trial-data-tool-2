@@ -18,6 +18,7 @@ const DataEntry = ({
   assessmentDates,
   photos,
   notes,
+  trialId,
   onAssessmentDatesChange,
   onPhotosChange,
   onNotesChange,
@@ -380,6 +381,7 @@ const DataEntry = ({
               currentDateObj={currentDateObj}
               selectedAssessmentType={selectedAssessmentType}
               photos={photos}
+              trialId={trialId}
               onUpdateData={updateData}
               onPhotosChange={onPhotosChange}
             />
@@ -427,6 +429,7 @@ const DataEntry = ({
                 currentDateObj={currentDateObj}
                 selectedAssessmentType={selectedAssessmentType}
                 photos={photos}
+                trialId={trialId}
                 onSelectAssessmentType={setSelectedAssessmentType}
                 onBulkUpdateData={handleBulkUpdateData}
                 onPhotosChange={onPhotosChange}
