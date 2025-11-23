@@ -1,10 +1,17 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import * as ss from 'simple-statistics';
 import { jStat } from 'jstat';
 
 const Analysis = ({ config, gridLayout, assessmentDates, selectedAssessmentType }) => {
   const [chartType, setChartType] = useState('boxplot'); // 'boxplot', 'line', 'bar'
   const [localAssessmentType, setLocalAssessmentType] = useState(selectedAssessmentType);
+
+  // Sync local state when prop changes
+  useEffect(() => {
+    if (selectedAssessmentType && selectedAssessmentType !== localAssessmentType) {
+      setLocalAssessmentType(selectedAssessmentType);
+    }
+  }, [selectedAssessmentType]);
 
   // Use local state for assessment type selection
   const currentAssessmentType = localAssessmentType || selectedAssessmentType;
@@ -288,11 +295,14 @@ const Analysis = ({ config, gridLayout, assessmentDates, selectedAssessmentType 
               onChange={(e) => setLocalAssessmentType(e.target.value)}
               className="px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
-              {config.assessmentTypes && config.assessmentTypes.map((type) => (
-                <option key={type} value={type}>
-                  {type}
-                </option>
-              ))}
+              {config.assessmentTypes && config.assessmentTypes.map((type) => {
+                const typeName = typeof type === 'string' ? type : type.name;
+                return (
+                  <option key={typeName} value={typeName}>
+                    {typeName}
+                  </option>
+                );
+              })}
             </select>
           </div>
         </div>
