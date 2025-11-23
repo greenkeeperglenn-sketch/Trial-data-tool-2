@@ -4,6 +4,10 @@ import { jStat } from 'jstat';
 
 const Analysis = ({ config, gridLayout, assessmentDates, selectedAssessmentType }) => {
   const [chartType, setChartType] = useState('boxplot'); // 'boxplot', 'line', 'bar'
+  const [localAssessmentType, setLocalAssessmentType] = useState(selectedAssessmentType);
+
+  // Use local state for assessment type selection
+  const currentAssessmentType = localAssessmentType || selectedAssessmentType;
 
   // Safety checks
   if (!config || !gridLayout || !assessmentDates || !selectedAssessmentType) {
@@ -106,7 +110,7 @@ const Analysis = ({ config, gridLayout, assessmentDates, selectedAssessmentType 
 
   // Calculate RCBD ANOVA statistics for a single date
   const calculateStats = (dateObj) => {
-    const assessmentData = dateObj.assessments[selectedAssessmentType];
+    const assessmentData = dateObj.assessments[currentAssessmentType];
     if (!assessmentData) return null;
 
     const allPlots = gridLayout.flat().filter(p => !p.isBlank);
@@ -275,7 +279,23 @@ const Analysis = ({ config, gridLayout, assessmentDates, selectedAssessmentType 
     <div className="space-y-6">
       {/* Summary Statistics Table with Significance */}
       <div className="bg-white p-6 rounded-lg shadow">
-        <h3 className="text-xl font-bold mb-4">Statistical Analysis - {selectedAssessmentType}</h3>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-xl font-bold">Statistical Analysis</h3>
+          <div className="flex items-center gap-2">
+            <label className="text-sm font-medium text-gray-600">Assessment Type:</label>
+            <select
+              value={currentAssessmentType}
+              onChange={(e) => setLocalAssessmentType(e.target.value)}
+              className="px-3 py-2 border border-gray-300 rounded-lg text-sm font-medium bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              {config.assessmentTypes && config.assessmentTypes.map((type) => (
+                <option key={type} value={type}>
+                  {type}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
 
         <div className="overflow-x-auto">
           <table className="w-full text-sm border-collapse">
