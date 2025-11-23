@@ -1465,6 +1465,43 @@ const PresentationMode = ({
 
     const treatmentColor = treatmentColors[selectedProgressionTreatment];
 
+    // Filter dates to only show those with at least one photo for this treatment
+    const datesWithPhotos = sortedDates.filter(dateObj => {
+      return treatmentPlots.some(plot => getPhotosForPlotOnDate(plot.id, dateObj.date) !== null);
+    });
+
+    if (datesWithPhotos.length === 0) {
+      return (
+        <div className="bg-gray-800 rounded-xl p-6 shadow-2xl">
+          <div className="flex items-center justify-between mb-6 flex-wrap gap-4">
+            <h3 className="text-2xl font-bold flex items-center gap-2">
+              <Calendar size={24} className="text-stri-green-success" />
+              Treatment Progression
+            </h3>
+
+            {/* Treatment dropdown */}
+            <div className="flex items-center gap-2">
+              <label className="text-sm text-gray-400">Treatment:</label>
+              <select
+                value={selectedProgressionTreatment}
+                onChange={(e) => setSelectedProgressionTreatment(e.target.value)}
+                className="bg-gray-700 text-white px-4 py-2 rounded-lg border border-gray-600 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-stri-teal"
+              >
+                {treatmentNames.map(treatment => (
+                  <option key={treatment} value={treatment}>
+                    {treatment}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <div className="text-center text-gray-400 py-8">
+            No photos available for {selectedProgressionTreatment}
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div className="bg-gray-800 rounded-xl p-6 shadow-2xl">
         <div className="flex items-center justify-between mb-6 flex-wrap gap-4">
@@ -1500,7 +1537,7 @@ const PresentationMode = ({
             {selectedProgressionTreatment}
           </span>
           <span className="text-gray-400 text-sm">
-            ({treatmentPlots.length} plots across {sortedDates.length} dates)
+            ({treatmentPlots.length} plots across {datesWithPhotos.length} dates with photos)
           </span>
         </div>
 
@@ -1512,7 +1549,7 @@ const PresentationMode = ({
                 <th className="p-2 text-left text-sm font-semibold text-gray-400 sticky left-0 bg-gray-800 z-10 min-w-[80px]">
                   Plot
                 </th>
-                {sortedDates.map((dateObj) => (
+                {datesWithPhotos.map((dateObj) => (
                   <th key={dateObj.date} className="p-2 text-center text-sm font-semibold text-gray-300 min-w-[120px]">
                     {dateObj.date}
                   </th>
@@ -1528,7 +1565,7 @@ const PresentationMode = ({
                       <span>{plot.id}</span>
                     </div>
                   </td>
-                  {sortedDates.map((dateObj) => {
+                  {datesWithPhotos.map((dateObj) => {
                     const photo = getPhotosForPlotOnDate(plot.id, dateObj.date);
 
                     return (
