@@ -46,6 +46,7 @@ const ImageryAnalyzer = ({
   const [batchFiles, setBatchFiles] = useState([]);
   const [batchUploading, setBatchUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState({ current: 0, total: 0 });
+  const [uploadComplete, setUploadComplete] = useState(false);
 
   // Refs (required for canvas and file input)
   const fileInputRef = useRef(null);
@@ -544,6 +545,7 @@ const ImageryAnalyzer = ({
     }
 
     setBatchUploading(true);
+    setUploadComplete(false);
     setUploadProgress({ current: 0, total: batchFiles.length });
 
     const updatedFiles = [...batchFiles];
@@ -589,26 +591,39 @@ const ImageryAnalyzer = ({
     }
 
     setBatchUploading(false);
+    setUploadComplete(true);
 
-    // Check if all succeeded
-    const failedCount = updatedFiles.filter(f => f.status === 'error').length;
-    if (failedCount === 0) {
-      alert(`✓ Success!\n\n${updatedFiles.length} images uploaded.\n\nThey are now available as unassigned images in the Imagery section.`);
-      setShowBatchUpload(false);
-      setBatchFiles([]);
-    } else {
-      alert(`Upload completed with ${failedCount} failures.\n\nYou can retry failed uploads.`);
-    }
+    // Don't auto-close - let user review results or close manually
+    console.log('[ImageryAnalyzer] Batch upload complete');
   };
 
-  // Cancel batch upload
+  // Cancel/Close batch upload
   const handleCancelBatch = () => {
-    // Cleanup preview URLs
+    // If currently uploading, just close the modal (uploads continue in background)
+    if (batchUploading) {
+      setShowBatchUpload(false);
+      return;
+    }
+
+    // If not uploading, cleanup and close
     batchFiles.forEach(f => {
       if (f.preview) URL.revokeObjectURL(f.preview);
     });
     setBatchFiles([]);
     setShowBatchUpload(false);
+    setUploadComplete(false);
+    if (batchFileInputRef.current) {
+      batchFileInputRef.current.value = '';
+    }
+  };
+
+  // Dismiss completed upload notification
+  const dismissUploadComplete = () => {
+    batchFiles.forEach(f => {
+      if (f.preview) URL.revokeObjectURL(f.preview);
+    });
+    setBatchFiles([]);
+    setUploadComplete(false);
     if (batchFileInputRef.current) {
       batchFileInputRef.current.value = '';
     }
@@ -769,9 +784,8 @@ const ImageryAnalyzer = ({
               <h3 className="text-xl font-bold text-blue-900">Batch Upload Drone Images</h3>
               <button
                 onClick={handleCancelBatch}
-                disabled={batchUploading}
                 className="p-2 hover:bg-blue-100 rounded transition"
-                title="Cancel"
+                title={batchUploading ? "Close (uploads continue in background)" : "Close"}
               >
                 <X size={20} />
               </button>
@@ -806,6 +820,9 @@ const ImageryAnalyzer = ({
                       style={{ width: `${(uploadProgress.current / uploadProgress.total) * 100}%` }}
                     />
                   </div>
+                  <p className="text-xs text-blue-700 mt-2">
+                    💡 You can close this window and start gridding uploaded images while others upload
+                  </p>
                 </div>
               )}
 
@@ -869,10 +886,9 @@ const ImageryAnalyzer = ({
             <div className="px-6 py-4 border-t bg-gray-50 flex justify-end gap-2">
               <button
                 onClick={handleCancelBatch}
-                disabled={batchUploading}
-                className="px-4 py-2 border border-gray-300 rounded hover:bg-gray-100 transition disabled:opacity-50"
+                className="px-4 py-2 border border-gray-300 rounded hover:bg-gray-100 transition"
               >
-                Cancel
+                {batchUploading ? 'Close (Continue in Background)' : 'Cancel'}
               </button>
               <button
                 onClick={handleBatchUpload}
@@ -882,6 +898,81 @@ const ImageryAnalyzer = ({
                 {batchUploading ? 'Uploading...' : `Upload ${batchFiles.length} Images`}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Background Upload Progress Indicator */}
+      {!showBatchUpload && batchUploading && (
+        <div className="fixed bottom-4 right-4 bg-white rounded-lg shadow-2xl p-4 border-2 border-blue-500 z-40 min-w-[300px]">
+          <div className="flex items-start justify-between gap-3 mb-2">
+            <div className="flex-1">
+              <p className="text-sm font-bold text-blue-900">Uploading Images</p>
+              <p className="text-xs text-gray-600">
+                {uploadProgress.current} of {uploadProgress.total} complete
+              </p>
+            </div>
+            <button
+              onClick={() => setShowBatchUpload(true)}
+              className="text-blue-600 hover:text-blue-800 text-xs underline"
+            >
+              Show Details
+            </button>
+          </div>
+          <div className="w-full bg-blue-200 rounded-full h-2">
+            <div
+              className="bg-blue-600 h-full rounded-full transition-all"
+              style={{ width: `${(uploadProgress.current / uploadProgress.total) * 100}%` }}
+            />
+          </div>
+          <div className="mt-2 flex items-center gap-2">
+            <div className="text-xs text-gray-600">
+              {batchFiles.filter(f => f.status === 'uploaded').length} uploaded,
+              {batchFiles.filter(f => f.status === 'error').length} failed
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Upload Complete Notification */}
+      {!showBatchUpload && uploadComplete && !batchUploading && (
+        <div className="fixed bottom-4 right-4 bg-white rounded-lg shadow-2xl p-4 border-2 border-green-500 z-40 min-w-[300px]">
+          <div className="flex items-start justify-between gap-3 mb-2">
+            <div className="flex-1">
+              <div className="flex items-center gap-2 mb-1">
+                <Check size={20} className="text-green-600" />
+                <p className="text-sm font-bold text-green-900">Upload Complete!</p>
+              </div>
+              <p className="text-xs text-gray-600">
+                {batchFiles.filter(f => f.status === 'uploaded').length} images uploaded successfully
+              </p>
+              {batchFiles.filter(f => f.status === 'error').length > 0 && (
+                <p className="text-xs text-red-600 mt-1">
+                  {batchFiles.filter(f => f.status === 'error').length} failed - click "Show Details" to review
+                </p>
+              )}
+            </div>
+            <button
+              onClick={dismissUploadComplete}
+              className="text-gray-400 hover:text-gray-600"
+              title="Dismiss"
+            >
+              <X size={16} />
+            </button>
+          </div>
+          <div className="flex gap-2 mt-3">
+            <button
+              onClick={() => setShowBatchUpload(true)}
+              className="flex-1 px-3 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700"
+            >
+              Show Details
+            </button>
+            <button
+              onClick={dismissUploadComplete}
+              className="px-3 py-1 text-xs border border-gray-300 rounded hover:bg-gray-100"
+            >
+              Dismiss
+            </button>
           </div>
         </div>
       )}
