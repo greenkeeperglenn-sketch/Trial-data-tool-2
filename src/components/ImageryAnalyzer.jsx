@@ -1,7 +1,10 @@
 import React, { useState, useRef, useEffect } from 'react';
 import piexif from 'piexifjs';
+import { Upload, X, Check, AlertCircle } from 'lucide-react';
+import { uploadPlotImage } from '../services/storage';
 
 const ImageryAnalyzer = ({
+  trialId,
   gridLayout,
   config,
   assessmentDates,
@@ -38,8 +41,15 @@ const ImageryAnalyzer = ({
   const [draggingCorner, setDraggingCorner] = useState(null);
   const [loading, setLoading] = useState(false);
 
+  // Batch upload state
+  const [showBatchUpload, setShowBatchUpload] = useState(false);
+  const [batchFiles, setBatchFiles] = useState([]);
+  const [batchUploading, setBatchUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState({ current: 0, total: 0 });
+
   // Refs (required for canvas and file input)
   const fileInputRef = useRef(null);
+  const batchFileInputRef = useRef(null);
   const canvasRef = useRef(null);
   const imageRef = useRef(null);
   const cornersRef = useRef(corners); // Keep corners in ref for fast access during drag
@@ -472,6 +482,138 @@ const ImageryAnalyzer = ({
     }
   };
 
+  // Extract EXIF date from file
+  const extractEXIFDate = async (file) => {
+    try {
+      const arrayBuffer = await file.arrayBuffer();
+      const data = new Uint8Array(arrayBuffer);
+      const exif = piexif.load(data);
+      if (exif.Exif && exif.Exif[piexif.ExifIFD.DateTimeOriginal]) {
+        const exifDate = exif.Exif[piexif.ExifIFD.DateTimeOriginal];
+        const dateArray = String.fromCharCode.apply(null, exifDate).split(' ')[0].split(':');
+        return `${dateArray[0]}-${dateArray[1]}-${dateArray[2]}`;
+      }
+    } catch (e) {
+      console.warn('Could not extract EXIF date from', file.name);
+    }
+
+    // Fallback to file modification date
+    const modifiedDate = new Date(file.lastModified);
+    return modifiedDate.toISOString().split('T')[0];
+  };
+
+  // Handle batch file selection
+  const handleBatchFileSelect = async (e) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+
+    setLoading(true);
+    const fileDataArray = [];
+
+    for (const file of files) {
+      const date = await extractEXIFDate(file);
+      const preview = URL.createObjectURL(file);
+
+      fileDataArray.push({
+        file,
+        name: file.name,
+        date,
+        preview,
+        status: 'pending', // pending, uploading, uploaded, error
+        error: null
+      });
+    }
+
+    setBatchFiles(fileDataArray);
+    setShowBatchUpload(true);
+    setLoading(false);
+  };
+
+  // Handle date edit for a specific file
+  const handleDateEdit = (index, newDate) => {
+    setBatchFiles(prev => prev.map((f, i) =>
+      i === index ? { ...f, date: newDate } : f
+    ));
+  };
+
+  // Handle batch upload
+  const handleBatchUpload = async () => {
+    if (!trialId) {
+      alert('Trial ID is missing. Cannot upload images.');
+      return;
+    }
+
+    setBatchUploading(true);
+    setUploadProgress({ current: 0, total: batchFiles.length });
+
+    const updatedFiles = [...batchFiles];
+
+    for (let i = 0; i < updatedFiles.length; i++) {
+      const fileData = updatedFiles[i];
+
+      // Update status to uploading
+      updatedFiles[i] = { ...fileData, status: 'uploading' };
+      setBatchFiles([...updatedFiles]);
+
+      try {
+        // Upload to storage with unassigned marker
+        const storagePath = await uploadPlotImage(
+          trialId,
+          fileData.date,
+          'unassigned', // Special marker for unassigned images
+          fileData.file,
+          i
+        );
+
+        // Add to photos object with special unassigned key
+        const photoKey = `${fileData.date}_unassigned_${i}`;
+        const updatedPhotos = {
+          ...photos,
+          [photoKey]: [storagePath]
+        };
+        onPhotosChange(updatedPhotos);
+
+        // Update status to uploaded
+        updatedFiles[i] = { ...fileData, status: 'uploaded' };
+        setUploadProgress({ current: i + 1, total: batchFiles.length });
+      } catch (error) {
+        console.error('Upload failed for', fileData.name, error);
+        updatedFiles[i] = {
+          ...fileData,
+          status: 'error',
+          error: error.message || 'Upload failed'
+        };
+      }
+
+      setBatchFiles([...updatedFiles]);
+    }
+
+    setBatchUploading(false);
+
+    // Check if all succeeded
+    const failedCount = updatedFiles.filter(f => f.status === 'error').length;
+    if (failedCount === 0) {
+      alert(`✓ Success!\n\n${updatedFiles.length} images uploaded.\n\nThey are now available as unassigned images in the Imagery section.`);
+      setShowBatchUpload(false);
+      setBatchFiles([]);
+    } else {
+      alert(`Upload completed with ${failedCount} failures.\n\nYou can retry failed uploads.`);
+    }
+  };
+
+  // Cancel batch upload
+  const handleCancelBatch = () => {
+    // Cleanup preview URLs
+    batchFiles.forEach(f => {
+      if (f.preview) URL.revokeObjectURL(f.preview);
+    });
+    setBatchFiles([]);
+    setShowBatchUpload(false);
+    if (batchFileInputRef.current) {
+      batchFileInputRef.current.value = '';
+    }
+  };
+
   return (
     <div className="space-y-4">
       <div className="bg-white rounded-lg shadow p-6">
@@ -482,7 +624,7 @@ const ImageryAnalyzer = ({
           </p>
         </div>
 
-        {/* Upload Button */}
+        {/* Upload Buttons */}
         <div className="flex gap-2 mb-4">
           <button
             onClick={() => fileInputRef.current?.click()}
@@ -493,13 +635,35 @@ const ImageryAnalyzer = ({
                 : 'bg-emerald-600 hover:bg-emerald-700'
             }`}
           >
-            {loading ? 'Loading...' : 'Upload Image'}
+            {loading ? 'Loading...' : 'Upload Single Image'}
           </button>
           <input
             ref={fileInputRef}
             type="file"
             accept="image/jpeg,image/jpg,image/png"
             onChange={(event) => handleFileUpload(event.target.files?.[0])}
+            className="hidden"
+            disabled={loading}
+          />
+
+          <button
+            onClick={() => batchFileInputRef.current?.click()}
+            disabled={loading}
+            className={`flex items-center gap-2 px-4 py-2 rounded text-white text-sm transition ${
+              loading
+                ? 'bg-gray-400 cursor-not-allowed'
+                : 'bg-blue-600 hover:bg-blue-700'
+            }`}
+          >
+            <Upload size={16} />
+            {loading ? 'Loading...' : 'Batch Upload Drone Images'}
+          </button>
+          <input
+            ref={batchFileInputRef}
+            type="file"
+            accept="image/jpeg,image/jpg,image/png"
+            multiple
+            onChange={handleBatchFileSelect}
             className="hidden"
             disabled={loading}
           />
@@ -595,6 +759,132 @@ const ImageryAnalyzer = ({
           </div>
         )}
       </div>
+
+      {/* Batch Upload Modal */}
+      {showBatchUpload && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+            {/* Header */}
+            <div className="px-6 py-4 border-b flex justify-between items-center bg-blue-50">
+              <h3 className="text-xl font-bold text-blue-900">Batch Upload Drone Images</h3>
+              <button
+                onClick={handleCancelBatch}
+                disabled={batchUploading}
+                className="p-2 hover:bg-blue-100 rounded transition"
+                title="Cancel"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="flex-1 overflow-y-auto px-6 py-4">
+              {!batchUploading && batchFiles.length > 0 && (
+                <div className="mb-4 p-4 bg-blue-50 rounded-lg">
+                  <p className="text-sm text-blue-900">
+                    <strong>{batchFiles.length} files selected</strong>
+                  </p>
+                  <p className="text-xs text-blue-700 mt-1">
+                    Review dates extracted from EXIF metadata. Click on a date to edit it.
+                  </p>
+                </div>
+              )}
+
+              {batchUploading && (
+                <div className="mb-4 p-4 bg-blue-100 rounded-lg">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-medium text-blue-900">
+                      Uploading {uploadProgress.current} of {uploadProgress.total}...
+                    </span>
+                    <span className="text-xs text-blue-700">
+                      {Math.round((uploadProgress.current / uploadProgress.total) * 100)}%
+                    </span>
+                  </div>
+                  <div className="w-full bg-blue-200 rounded-full h-2">
+                    <div
+                      className="bg-blue-600 h-full rounded-full transition-all"
+                      style={{ width: `${(uploadProgress.current / uploadProgress.total) * 100}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* File List */}
+              <div className="space-y-2">
+                {batchFiles.map((fileData, index) => (
+                  <div
+                    key={index}
+                    className={`flex items-center gap-3 p-3 rounded-lg border ${
+                      fileData.status === 'uploaded'
+                        ? 'bg-green-50 border-green-200'
+                        : fileData.status === 'error'
+                        ? 'bg-red-50 border-red-200'
+                        : fileData.status === 'uploading'
+                        ? 'bg-blue-50 border-blue-200'
+                        : 'bg-gray-50 border-gray-200'
+                    }`}
+                  >
+                    {/* Thumbnail */}
+                    <img
+                      src={fileData.preview}
+                      alt={fileData.name}
+                      className="w-16 h-16 object-cover rounded"
+                    />
+
+                    {/* File Info */}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">{fileData.name}</p>
+                      <div className="flex items-center gap-2 mt-1">
+                        <input
+                          type="date"
+                          value={fileData.date}
+                          onChange={(e) => handleDateEdit(index, e.target.value)}
+                          disabled={batchUploading}
+                          className="text-xs px-2 py-1 border rounded"
+                        />
+                        {fileData.error && (
+                          <span className="text-xs text-red-600">{fileData.error}</span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Status Icon */}
+                    <div className="flex-shrink-0">
+                      {fileData.status === 'uploaded' && (
+                        <Check size={20} className="text-green-600" />
+                      )}
+                      {fileData.status === 'error' && (
+                        <AlertCircle size={20} className="text-red-600" />
+                      )}
+                      {fileData.status === 'uploading' && (
+                        <div className="w-5 h-5 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="px-6 py-4 border-t bg-gray-50 flex justify-end gap-2">
+              <button
+                onClick={handleCancelBatch}
+                disabled={batchUploading}
+                className="px-4 py-2 border border-gray-300 rounded hover:bg-gray-100 transition disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleBatchUpload}
+                disabled={batchUploading || batchFiles.length === 0}
+                className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {batchUploading ? 'Uploading...' : `Upload ${batchFiles.length} Images`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

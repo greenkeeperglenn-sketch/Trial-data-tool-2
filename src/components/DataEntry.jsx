@@ -540,6 +540,7 @@ const DataEntry = ({
           {viewMode === 'imagery' && (
             <ErrorBoundary>
               <ImageryAnalyzer
+                trialId={trialId}
                 gridLayout={gridLayout}
                 config={config}
                 assessmentDates={assessmentDates}
