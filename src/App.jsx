@@ -658,6 +658,7 @@ const App = () => {
     return (
       <Suspense fallback={<LoadingFallback />}>
         <DataEntry
+          trialId={currentTrialId}
           config={config}
           gridLayout={gridLayout}
           orientation={orientation}

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ChevronLeft, ChevronRight, Calendar, Image as ImageIcon, FileText, TrendingUp, Eye, EyeOff, ArrowUp, ArrowDown, Maximize2, MapPin, Grid } from 'lucide-react';
 import { jStat } from 'jstat';
+import { getImageUrl } from '../services/storage';
 
 // Helper function to normalize date format to YYYY-MM-DD
 const normalizeDateFormat = (dateStr) => {
@@ -1222,7 +1223,7 @@ const PresentationMode = ({
                       {/* Show photo if available, otherwise show data */}
                       {plotData?.image ? (
                         <img
-                          src={plotData.image}
+                          src={getImageUrl(plotData.image)}
                           alt={plot.id}
                           className="w-full h-full object-cover"
                         />
@@ -1286,7 +1287,7 @@ const PresentationMode = ({
                           {/* Show photo if available */}
                           {plotData.image ? (
                             <img
-                              src={plotData.image}
+                              src={getImageUrl(plotData.image)}
                               alt={plotData.plotId}
                               className="w-full h-full object-cover"
                             />
@@ -1318,7 +1319,7 @@ const PresentationMode = ({
           >
             <div className="relative w-full h-full flex items-center justify-center">
               <img
-                src={expandedPhotoData.image}
+                src={getImageUrl(expandedPhotoData.image)}
                 alt={expandedPhotoData.plotId}
                 className="max-w-full max-h-full object-contain rounded-lg shadow-2xl"
                 style={{ border: `8px solid ${expandedPhotoData.color}` }}

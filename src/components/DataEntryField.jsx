@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
 import { Eye, Camera, Plus, RotateCw } from 'lucide-react';
+import { uploadPlotImage } from '../services/storage';
 
 const DataEntryField = ({
+  trialId,
   config,
   gridLayout,
   currentDateObj,
@@ -68,19 +70,35 @@ const DataEntryField = ({
   };
 
   // Handle photo upload
-  const handlePhotoUpload = (plotId, e) => {
+  const handlePhotoUpload = async (plotId, e) => {
     const file = e.target.files[0];
     if (!file) return;
-    
-    const reader = new FileReader();
-    reader.onload = (event) => {
+
+    try {
       const key = `${currentDateObj.date}_${plotId}`;
+      const existingPhotos = photos[key] || [];
+      const index = existingPhotos.length;
+
+      // Upload to Supabase Storage
+      const storagePath = await uploadPlotImage(
+        trialId,
+        currentDateObj.date,
+        plotId,
+        file,
+        index
+      );
+
+      // Update photos state with storage path
       onPhotosChange({
         ...photos,
-        [key]: [...(photos[key] || []), event.target.result]
+        [key]: [...existingPhotos, storagePath]
       });
-    };
-    reader.readAsDataURL(file);
+
+      console.log('[DataEntryField] Photo uploaded successfully:', storagePath);
+    } catch (error) {
+      console.error('[DataEntryField] Photo upload failed:', error);
+      alert('Failed to upload photo. Please try again.');
+    }
   };
 
   return (

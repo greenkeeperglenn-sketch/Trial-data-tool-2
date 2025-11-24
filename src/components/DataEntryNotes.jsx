@@ -1,5 +1,6 @@
 import React from 'react';
-import { X } from 'lucide-react';
+import { X, Trash2 } from 'lucide-react';
+import { getImageUrl, deletePlotImage, deletePlotImages } from '../services/storage';
 
 const DataEntryNotes = ({
   config,
@@ -20,13 +21,86 @@ const DataEntryNotes = ({
     });
   };
 
-  const deletePhoto = (plotId, photoIndex) => {
+  const deletePhoto = async (plotId, photoIndex) => {
     const key = `${currentDateObj.date}_${plotId}`;
-    const updatedPhotos = {
-      ...photos,
-      [key]: photos[key].filter((_, idx) => idx !== photoIndex)
-    };
-    onPhotosChange(updatedPhotos);
+    const photoPath = photos[key][photoIndex];
+
+    try {
+      // Delete from storage
+      await deletePlotImage(photoPath);
+
+      // Update state
+      const updatedPhotos = {
+        ...photos,
+        [key]: photos[key].filter((_, idx) => idx !== photoIndex)
+      };
+      onPhotosChange(updatedPhotos);
+
+      console.log('[DataEntryNotes] Photo deleted successfully');
+    } catch (error) {
+      console.error('[DataEntryNotes] Failed to delete photo:', error);
+      alert('Failed to delete photo. Please try again.');
+    }
+  };
+
+  const deleteAllPhotosForDate = async () => {
+    const dateKeys = Object.keys(photos).filter(key =>
+      key.startsWith(currentDateObj.date)
+    );
+
+    const photoCount = dateKeys.reduce((count, key) =>
+      count + (photos[key]?.length || 0), 0
+    );
+
+    if (photoCount === 0) {
+      alert('No photos to delete for this date.');
+      return;
+    }
+
+    if (!confirm(`Delete all ${photoCount} photo(s) from ${currentDateObj.date}?\n\nThis cannot be undone.`)) {
+      return;
+    }
+
+    try {
+      // Collect all photo paths for this date
+      const photoPaths = [];
+      dateKeys.forEach(key => {
+        if (photos[key]) {
+          photoPaths.push(...photos[key]);
+        }
+      });
+
+      // Delete from storage
+      await deletePlotImages(photoPaths);
+
+      // Update state
+      const updatedPhotos = {};
+      Object.keys(photos).forEach(key => {
+        if (!key.startsWith(currentDateObj.date)) {
+          updatedPhotos[key] = photos[key];
+        }
+      });
+      onPhotosChange(updatedPhotos);
+
+      console.log('[DataEntryNotes] All photos for date deleted successfully');
+    } catch (error) {
+      console.error('[DataEntryNotes] Failed to delete photos:', error);
+      alert('Failed to delete some photos. Please try again.');
+    }
+  };
+
+  const clearNotes = () => {
+    if (!notes[notesKey] || notes[notesKey].trim() === '') {
+      return;
+    }
+
+    if (!confirm('Clear all notes for this assessment?\n\nThis cannot be undone.')) {
+      return;
+    }
+
+    const updatedNotes = { ...notes };
+    delete updatedNotes[notesKey];
+    onNotesChange(updatedNotes);
   };
 
   return (
@@ -37,7 +111,18 @@ const DataEntryNotes = ({
       
       {/* Assessment Notes */}
       <div className="mb-6">
-        <label className="block text-sm font-medium mb-2">Assessment Notes</label>
+        <div className="flex justify-between items-center mb-2">
+          <label className="block text-sm font-medium">Assessment Notes</label>
+          {notes[notesKey] && notes[notesKey].trim() !== '' && (
+            <button
+              onClick={clearNotes}
+              className="flex items-center gap-1 px-3 py-1 bg-red-500 text-white text-xs rounded hover:bg-red-600 transition"
+              title="Clear all notes"
+            >
+              <Trash2 size={12} /> Clear Notes
+            </button>
+          )}
+        </div>
         <textarea
           value={notes[notesKey] || ''}
           onChange={(e) => updateNotes(e.target.value)}
@@ -59,7 +144,18 @@ const DataEntryNotes = ({
 
       {/* Photo Gallery */}
       <div>
-        <h4 className="font-medium mb-3">Photos from this Assessment</h4>
+        <div className="flex justify-between items-center mb-3">
+          <h4 className="font-medium">Photos from this Assessment</h4>
+          {Object.keys(photos).filter(key => key.startsWith(currentDateObj.date)).length > 0 && (
+            <button
+              onClick={deleteAllPhotosForDate}
+              className="flex items-center gap-1 px-3 py-1 bg-red-500 text-white text-xs rounded hover:bg-red-600 transition"
+              title="Delete all photos from this date"
+            >
+              <Trash2 size={12} /> Delete All Photos
+            </button>
+          )}
+        </div>
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
           {gridLayout.flat().filter(p => !p.isBlank).map(plot => {
             const photoKey = `${currentDateObj.date}_${plot.id}`;
@@ -67,9 +163,9 @@ const DataEntryNotes = ({
             
             return plotPhotos.map((photo, photoIdx) => (
               <div key={`${plot.id}-${photoIdx}`} className="relative group">
-                <img 
-                  src={photo} 
-                  alt={`${plot.id}`} 
+                <img
+                  src={getImageUrl(photo)}
+                  alt={`${plot.id}`}
                   className="w-full h-32 object-cover rounded border shadow-sm"
                 />
                 <div className="absolute top-1 left-1 bg-black/70 text-white text-xs px-2 py-1 rounded">
