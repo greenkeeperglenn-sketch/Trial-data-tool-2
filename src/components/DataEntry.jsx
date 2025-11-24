@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
-import { Download, Unlock, Grid, List, FileText, BarChart3, Camera, Presentation, Settings } from 'lucide-react';
-import DateNavigation from './DateNavigation';
+import { Download, Unlock, Grid, List, FileText, BarChart3, Camera, Presentation, Settings, ChevronLeft, ChevronRight, Trash2, Plus } from 'lucide-react';
 import DataEntryField from './DataEntryField';
 import DataEntryTable from './DataEntryTable';
 import DataEntryNotes from './DataEntryNotes';
@@ -33,6 +32,7 @@ const DataEntry = ({
   const [viewMode, setViewMode] = useState('field'); // 'field', 'table', 'notes', 'analysis', 'imagery', 'presentation'
   const [showInputDropdown, setShowInputDropdown] = useState(false);
   const [showConfigEditor, setShowConfigEditor] = useState(false);
+  const [newDateInput, setNewDateInput] = useState('');
 
   const currentDateObj = assessmentDates[currentDateIndex];
 
@@ -233,9 +233,52 @@ const DataEntry = ({
   };
 
   return (
-    <div className="p-4 max-w-7xl mx-auto">
-      {/* Header */}
-      <div className="mb-4 flex justify-between items-center flex-wrap gap-2">
+    <div className="relative">
+      {/* Fixed Side Date Navigation - Only show when we have dates */}
+      {assessmentDates.length > 0 && (
+        <div className="fixed right-8 top-1/2 -translate-y-1/2 z-30 flex flex-col gap-3">
+          <button
+            onClick={() => setCurrentDateIndex(Math.max(0, currentDateIndex - 1))}
+            disabled={currentDateIndex === 0}
+            className="p-3 rounded-full bg-blue-600 hover:bg-blue-700 disabled:opacity-30 disabled:cursor-not-allowed transition shadow-xl hover:scale-110"
+            title="Previous date"
+          >
+            <ChevronLeft size={24} />
+          </button>
+
+          <div className="bg-white rounded-lg px-3 py-2 text-center shadow-xl min-w-[120px] border-2 border-blue-500">
+            <div className="text-xs text-gray-500 mb-1">Assessment</div>
+            <div className="text-sm font-bold text-blue-600">{currentDateObj?.date}</div>
+            <div className="text-xs text-gray-500 mt-1">{currentDateIndex + 1}/{assessmentDates.length}</div>
+            <button
+              onClick={() => {
+                const dateToDelete = assessmentDates[currentDateIndex].date;
+                if (!confirm(`Delete assessment date "${dateToDelete}"?\n\nThis will remove:\n• All assessment data for this date\n• All photos from this date\n• All notes from this date\n\nThis cannot be undone.`)) {
+                  return;
+                }
+                handleDeleteDate(currentDateIndex);
+              }}
+              className="mt-2 flex items-center gap-1 px-2 py-1 bg-red-500 text-white text-xs rounded hover:bg-red-600 transition mx-auto"
+              title="Delete this assessment date"
+            >
+              <Trash2 size={12} /> Delete
+            </button>
+          </div>
+
+          <button
+            onClick={() => setCurrentDateIndex(Math.min(assessmentDates.length - 1, currentDateIndex + 1))}
+            disabled={currentDateIndex === assessmentDates.length - 1}
+            className="p-3 rounded-full bg-blue-600 hover:bg-blue-700 disabled:opacity-30 disabled:cursor-not-allowed transition shadow-xl hover:scale-110"
+            title="Next date"
+          >
+            <ChevronRight size={24} />
+          </button>
+        </div>
+      )}
+
+      <div className="p-4 max-w-7xl mx-auto pr-52">
+        {/* Header */}
+        <div className="mb-4 flex justify-between items-center flex-wrap gap-2">
         <div>
           <h1 className="text-2xl font-bold">{config.trialName}</h1>
           <p className="text-sm text-gray-600">
@@ -290,14 +333,31 @@ const DataEntry = ({
         </div>
       </div>
 
-      {/* Date Navigation */}
-      <DateNavigation
-        assessmentDates={assessmentDates}
-        currentDateIndex={currentDateIndex}
-        onDateChange={setCurrentDateIndex}
-        onAddDate={handleAddDate}
-        onDeleteDate={handleDeleteDate}
-      />
+      {/* Add Date Section - Only show when we have no dates or at the top */}
+      <div className="bg-white p-4 rounded-lg shadow mb-4">
+        <div className="flex gap-2 items-end">
+          <div className="flex-1">
+            <label className="block text-sm font-medium mb-2">Add Assessment Date</label>
+            <input
+              type="date"
+              value={newDateInput}
+              onChange={(e) => setNewDateInput(e.target.value)}
+              className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            />
+          </div>
+          <button
+            onClick={() => {
+              if (newDateInput) {
+                handleAddDate(newDateInput);
+                setNewDateInput('');
+              }
+            }}
+            className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 flex items-center gap-2 transition"
+          >
+            <Plus size={20} /> Add Date
+          </button>
+        </div>
+      </div>
 
       {assessmentDates.length === 0 && (
         <div className="bg-blue-50 border-2 border-blue-200 rounded-lg p-8 text-center mt-4">
@@ -482,6 +542,7 @@ const DataEntry = ({
           )}
         </>
       )}
+      </div>
 
       {/* Config Editor Modal */}
       {showConfigEditor && (
