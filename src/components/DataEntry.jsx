@@ -234,20 +234,20 @@ const DataEntry = ({
 
   return (
     <div className="relative">
-      {/* Fixed Side Date Navigation - Only show when we have dates */}
-      {assessmentDates.length > 0 && (
-        <div className="fixed right-8 top-1/2 -translate-y-1/2 z-30 flex flex-col gap-3">
+      {/* Fixed Side Date Navigation - Only show for input views (not imagery/presentation) */}
+      {assessmentDates.length > 0 && !['imagery', 'presentation'].includes(viewMode) && (
+        <div className="fixed right-8 top-1/2 -translate-y-1/2 z-20 flex flex-col gap-4">
           <button
             onClick={() => setCurrentDateIndex(Math.max(0, currentDateIndex - 1))}
             disabled={currentDateIndex === 0}
-            className="p-3 rounded-full bg-blue-600 hover:bg-blue-700 disabled:opacity-30 disabled:cursor-not-allowed transition shadow-xl hover:scale-110"
+            className="p-4 rounded-full bg-blue-600 hover:bg-blue-700 disabled:opacity-30 disabled:cursor-not-allowed transition shadow-2xl hover:scale-110"
             title="Previous date"
           >
-            <ChevronLeft size={24} />
+            <ChevronLeft size={28} />
           </button>
 
-          <div className="bg-white rounded-lg px-3 py-2 text-center shadow-xl min-w-[120px] border-2 border-blue-500">
-            <div className="text-xs text-gray-500 mb-1">Assessment</div>
+          <div className="bg-white rounded-lg px-3 py-2 text-center shadow-2xl min-w-[100px] border-2 border-blue-500">
+            <div className="text-xs text-gray-500 mb-1">Current</div>
             <div className="text-sm font-bold text-blue-600">{currentDateObj?.date}</div>
             <div className="text-xs text-gray-500 mt-1">{currentDateIndex + 1}/{assessmentDates.length}</div>
             <button
@@ -268,15 +268,15 @@ const DataEntry = ({
           <button
             onClick={() => setCurrentDateIndex(Math.min(assessmentDates.length - 1, currentDateIndex + 1))}
             disabled={currentDateIndex === assessmentDates.length - 1}
-            className="p-3 rounded-full bg-blue-600 hover:bg-blue-700 disabled:opacity-30 disabled:cursor-not-allowed transition shadow-xl hover:scale-110"
+            className="p-4 rounded-full bg-blue-600 hover:bg-blue-700 disabled:opacity-30 disabled:cursor-not-allowed transition shadow-2xl hover:scale-110"
             title="Next date"
           >
-            <ChevronRight size={24} />
+            <ChevronRight size={28} />
           </button>
         </div>
       )}
 
-      <div className="p-4 max-w-7xl mx-auto pr-52">
+      <div className={`p-4 max-w-7xl mx-auto ${!['imagery', 'presentation'].includes(viewMode) ? 'pr-52' : ''}`}>
         {/* Header */}
         <div className="mb-4 flex justify-between items-center flex-wrap gap-2">
         <div>
