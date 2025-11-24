@@ -8,8 +8,10 @@ import ImageryAnalyzer from './ImageryAnalyzer';
 import ErrorBoundary from './ErrorBoundary';
 import PresentationMode from './PresentationMode';
 import TrialConfigEditor from './TrialConfigEditor';
+import { deletePlotImages } from '../services/storage';
 
 const DataEntry = ({
+  trialId,
   config,
   gridLayout,
   orientation,
@@ -59,34 +61,57 @@ const DataEntry = ({
   };
 
   // Delete assessment date and all associated data
-  const handleDeleteDate = (dateIndex) => {
+  const handleDeleteDate = async (dateIndex) => {
     const dateToDelete = assessmentDates[dateIndex].date;
 
-    // Remove the date from assessmentDates
-    const updatedDates = assessmentDates.filter((_, idx) => idx !== dateIndex);
-    onAssessmentDatesChange(updatedDates);
+    try {
+      // Collect all photo paths for this date
+      const dateKeys = Object.keys(photos).filter(key =>
+        key.startsWith(dateToDelete)
+      );
+      const photoPaths = [];
+      dateKeys.forEach(key => {
+        if (photos[key]) {
+          photoPaths.push(...photos[key]);
+        }
+      });
 
-    // Remove all photos from this date
-    const updatedPhotos = {};
-    Object.keys(photos).forEach(key => {
-      if (!key.startsWith(dateToDelete)) {
-        updatedPhotos[key] = photos[key];
+      // Delete photos from storage
+      if (photoPaths.length > 0) {
+        await deletePlotImages(photoPaths);
       }
-    });
-    onPhotosChange(updatedPhotos);
 
-    // Remove all notes from this date
-    const updatedNotes = {};
-    Object.keys(notes).forEach(key => {
-      if (!key.startsWith(dateToDelete)) {
-        updatedNotes[key] = notes[key];
+      // Remove the date from assessmentDates
+      const updatedDates = assessmentDates.filter((_, idx) => idx !== dateIndex);
+      onAssessmentDatesChange(updatedDates);
+
+      // Remove all photos from this date
+      const updatedPhotos = {};
+      Object.keys(photos).forEach(key => {
+        if (!key.startsWith(dateToDelete)) {
+          updatedPhotos[key] = photos[key];
+        }
+      });
+      onPhotosChange(updatedPhotos);
+
+      // Remove all notes from this date
+      const updatedNotes = {};
+      Object.keys(notes).forEach(key => {
+        if (!key.startsWith(dateToDelete)) {
+          updatedNotes[key] = notes[key];
+        }
+      });
+      onNotesChange(updatedNotes);
+
+      // Adjust current date index if needed
+      if (dateIndex <= currentDateIndex) {
+        setCurrentDateIndex(Math.max(0, currentDateIndex - 1));
       }
-    });
-    onNotesChange(updatedNotes);
 
-    // Adjust current date index if needed
-    if (dateIndex <= currentDateIndex) {
-      setCurrentDateIndex(Math.max(0, currentDateIndex - 1));
+      console.log('[DataEntry] Assessment date and all associated data deleted successfully');
+    } catch (error) {
+      console.error('[DataEntry] Failed to delete assessment date:', error);
+      alert('Failed to delete some data. Please try again.');
     }
   };
 
@@ -468,6 +493,7 @@ const DataEntry = ({
           {/* Render appropriate view */}
           {viewMode === 'field' && currentDateObj && selectedAssessmentType && (
             <DataEntryField
+              trialId={trialId}
               config={config}
               gridLayout={gridLayout}
               currentDateObj={currentDateObj}

@@ -1,5 +1,6 @@
 import React from 'react';
 import { X, Trash2 } from 'lucide-react';
+import { getImageUrl, deletePlotImage, deletePlotImages } from '../services/storage';
 
 const DataEntryNotes = ({
   config,
@@ -20,19 +21,36 @@ const DataEntryNotes = ({
     });
   };
 
-  const deletePhoto = (plotId, photoIndex) => {
+  const deletePhoto = async (plotId, photoIndex) => {
     const key = `${currentDateObj.date}_${plotId}`;
-    const updatedPhotos = {
-      ...photos,
-      [key]: photos[key].filter((_, idx) => idx !== photoIndex)
-    };
-    onPhotosChange(updatedPhotos);
+    const photoPath = photos[key][photoIndex];
+
+    try {
+      // Delete from storage
+      await deletePlotImage(photoPath);
+
+      // Update state
+      const updatedPhotos = {
+        ...photos,
+        [key]: photos[key].filter((_, idx) => idx !== photoIndex)
+      };
+      onPhotosChange(updatedPhotos);
+
+      console.log('[DataEntryNotes] Photo deleted successfully');
+    } catch (error) {
+      console.error('[DataEntryNotes] Failed to delete photo:', error);
+      alert('Failed to delete photo. Please try again.');
+    }
   };
 
-  const deleteAllPhotosForDate = () => {
-    const photoCount = Object.keys(photos).filter(key =>
+  const deleteAllPhotosForDate = async () => {
+    const dateKeys = Object.keys(photos).filter(key =>
       key.startsWith(currentDateObj.date)
-    ).reduce((count, key) => count + (photos[key]?.length || 0), 0);
+    );
+
+    const photoCount = dateKeys.reduce((count, key) =>
+      count + (photos[key]?.length || 0), 0
+    );
 
     if (photoCount === 0) {
       alert('No photos to delete for this date.');
@@ -43,13 +61,32 @@ const DataEntryNotes = ({
       return;
     }
 
-    const updatedPhotos = {};
-    Object.keys(photos).forEach(key => {
-      if (!key.startsWith(currentDateObj.date)) {
-        updatedPhotos[key] = photos[key];
-      }
-    });
-    onPhotosChange(updatedPhotos);
+    try {
+      // Collect all photo paths for this date
+      const photoPaths = [];
+      dateKeys.forEach(key => {
+        if (photos[key]) {
+          photoPaths.push(...photos[key]);
+        }
+      });
+
+      // Delete from storage
+      await deletePlotImages(photoPaths);
+
+      // Update state
+      const updatedPhotos = {};
+      Object.keys(photos).forEach(key => {
+        if (!key.startsWith(currentDateObj.date)) {
+          updatedPhotos[key] = photos[key];
+        }
+      });
+      onPhotosChange(updatedPhotos);
+
+      console.log('[DataEntryNotes] All photos for date deleted successfully');
+    } catch (error) {
+      console.error('[DataEntryNotes] Failed to delete photos:', error);
+      alert('Failed to delete some photos. Please try again.');
+    }
   };
 
   const clearNotes = () => {
@@ -126,9 +163,9 @@ const DataEntryNotes = ({
             
             return plotPhotos.map((photo, photoIdx) => (
               <div key={`${plot.id}-${photoIdx}`} className="relative group">
-                <img 
-                  src={photo} 
-                  alt={`${plot.id}`} 
+                <img
+                  src={getImageUrl(photo)}
+                  alt={`${plot.id}`}
                   className="w-full h-32 object-cover rounded border shadow-sm"
                 />
                 <div className="absolute top-1 left-1 bg-black/70 text-white text-xs px-2 py-1 rounded">
