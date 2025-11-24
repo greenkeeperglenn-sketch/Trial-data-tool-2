@@ -39,7 +39,7 @@ const DataEntry = ({
   // Add new assessment date
   const handleAddDate = (dateStr) => {
     const newDate = { date: dateStr, assessments: {} };
-    
+
     // Initialize all assessment types for all plots
     config.assessmentTypes.forEach(type => {
       newDate.assessments[type.name] = {};
@@ -49,12 +49,44 @@ const DataEntry = ({
         }
       });
     });
-    
+
     onAssessmentDatesChange([...assessmentDates, newDate]);
     setCurrentDateIndex(assessmentDates.length);
-    
+
     if (!selectedAssessmentType && config.assessmentTypes.length > 0) {
       setSelectedAssessmentType(config.assessmentTypes[0].name);
+    }
+  };
+
+  // Delete assessment date and all associated data
+  const handleDeleteDate = (dateIndex) => {
+    const dateToDelete = assessmentDates[dateIndex].date;
+
+    // Remove the date from assessmentDates
+    const updatedDates = assessmentDates.filter((_, idx) => idx !== dateIndex);
+    onAssessmentDatesChange(updatedDates);
+
+    // Remove all photos from this date
+    const updatedPhotos = {};
+    Object.keys(photos).forEach(key => {
+      if (!key.startsWith(dateToDelete)) {
+        updatedPhotos[key] = photos[key];
+      }
+    });
+    onPhotosChange(updatedPhotos);
+
+    // Remove all notes from this date
+    const updatedNotes = {};
+    Object.keys(notes).forEach(key => {
+      if (!key.startsWith(dateToDelete)) {
+        updatedNotes[key] = notes[key];
+      }
+    });
+    onNotesChange(updatedNotes);
+
+    // Adjust current date index if needed
+    if (dateIndex <= currentDateIndex) {
+      setCurrentDateIndex(Math.max(0, currentDateIndex - 1));
     }
   };
 
@@ -264,6 +296,7 @@ const DataEntry = ({
         currentDateIndex={currentDateIndex}
         onDateChange={setCurrentDateIndex}
         onAddDate={handleAddDate}
+        onDeleteDate={handleDeleteDate}
       />
 
       {assessmentDates.length === 0 && (

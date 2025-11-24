@@ -1,11 +1,12 @@
 import React from 'react';
-import { ChevronLeft, ChevronRight, Plus } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, Trash2 } from 'lucide-react';
 
-const DateNavigation = ({ 
-  assessmentDates, 
-  currentDateIndex, 
-  onDateChange, 
-  onAddDate 
+const DateNavigation = ({
+  assessmentDates,
+  currentDateIndex,
+  onDateChange,
+  onAddDate,
+  onDeleteDate
 }) => {
   const [newDate, setNewDate] = React.useState('');
 
@@ -13,6 +14,14 @@ const DateNavigation = ({
     if (!newDate) return;
     onAddDate(newDate);
     setNewDate('');
+  };
+
+  const handleDeleteDate = () => {
+    const dateToDelete = assessmentDates[currentDateIndex].date;
+    if (!confirm(`Delete assessment date "${dateToDelete}"?\n\nThis will remove:\n• All assessment data for this date\n• All photos from this date\n• All notes from this date\n\nThis cannot be undone.`)) {
+      return;
+    }
+    onDeleteDate(currentDateIndex);
   };
 
   const currentDate = assessmentDates[currentDateIndex];
@@ -71,21 +80,30 @@ const DateNavigation = ({
             onClick={() => onDateChange(Math.max(0, currentDateIndex - 1))}
             disabled={currentDateIndex === 0}
             className={`p-2 rounded transition ${
-              currentDateIndex === 0 
-                ? 'text-gray-300 cursor-not-allowed' 
+              currentDateIndex === 0
+                ? 'text-gray-300 cursor-not-allowed'
                 : 'text-blue-600 hover:bg-blue-50'
             }`}
           >
             <ChevronLeft size={24} />
           </button>
-          
-          <div className="text-center">
+
+          <div className="text-center flex-1">
             <div className="text-xl font-bold">{currentDate?.date}</div>
             <div className="text-sm text-gray-600">
               Assessment {currentDateIndex + 1} of {assessmentDates.length}
             </div>
+            {onDeleteDate && (
+              <button
+                onClick={handleDeleteDate}
+                className="mt-2 flex items-center gap-1 px-3 py-1 bg-red-500 text-white text-xs rounded hover:bg-red-600 transition mx-auto"
+                title="Delete this assessment date and all its data"
+              >
+                <Trash2 size={14} /> Delete Date
+              </button>
+            )}
           </div>
-          
+
           <button
             onClick={() => onDateChange(Math.min(assessmentDates.length - 1, currentDateIndex + 1))}
             disabled={currentDateIndex === assessmentDates.length - 1}

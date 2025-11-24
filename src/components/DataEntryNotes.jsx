@@ -1,5 +1,5 @@
 import React from 'react';
-import { X } from 'lucide-react';
+import { X, Trash2 } from 'lucide-react';
 
 const DataEntryNotes = ({
   config,
@@ -29,6 +29,43 @@ const DataEntryNotes = ({
     onPhotosChange(updatedPhotos);
   };
 
+  const deleteAllPhotosForDate = () => {
+    const photoCount = Object.keys(photos).filter(key =>
+      key.startsWith(currentDateObj.date)
+    ).reduce((count, key) => count + (photos[key]?.length || 0), 0);
+
+    if (photoCount === 0) {
+      alert('No photos to delete for this date.');
+      return;
+    }
+
+    if (!confirm(`Delete all ${photoCount} photo(s) from ${currentDateObj.date}?\n\nThis cannot be undone.`)) {
+      return;
+    }
+
+    const updatedPhotos = {};
+    Object.keys(photos).forEach(key => {
+      if (!key.startsWith(currentDateObj.date)) {
+        updatedPhotos[key] = photos[key];
+      }
+    });
+    onPhotosChange(updatedPhotos);
+  };
+
+  const clearNotes = () => {
+    if (!notes[notesKey] || notes[notesKey].trim() === '') {
+      return;
+    }
+
+    if (!confirm('Clear all notes for this assessment?\n\nThis cannot be undone.')) {
+      return;
+    }
+
+    const updatedNotes = { ...notes };
+    delete updatedNotes[notesKey];
+    onNotesChange(updatedNotes);
+  };
+
   return (
     <div className="bg-white p-6 rounded-lg shadow">
       <h3 className="text-xl font-bold mb-4">
@@ -37,7 +74,18 @@ const DataEntryNotes = ({
       
       {/* Assessment Notes */}
       <div className="mb-6">
-        <label className="block text-sm font-medium mb-2">Assessment Notes</label>
+        <div className="flex justify-between items-center mb-2">
+          <label className="block text-sm font-medium">Assessment Notes</label>
+          {notes[notesKey] && notes[notesKey].trim() !== '' && (
+            <button
+              onClick={clearNotes}
+              className="flex items-center gap-1 px-3 py-1 bg-red-500 text-white text-xs rounded hover:bg-red-600 transition"
+              title="Clear all notes"
+            >
+              <Trash2 size={12} /> Clear Notes
+            </button>
+          )}
+        </div>
         <textarea
           value={notes[notesKey] || ''}
           onChange={(e) => updateNotes(e.target.value)}
@@ -59,7 +107,18 @@ const DataEntryNotes = ({
 
       {/* Photo Gallery */}
       <div>
-        <h4 className="font-medium mb-3">Photos from this Assessment</h4>
+        <div className="flex justify-between items-center mb-3">
+          <h4 className="font-medium">Photos from this Assessment</h4>
+          {Object.keys(photos).filter(key => key.startsWith(currentDateObj.date)).length > 0 && (
+            <button
+              onClick={deleteAllPhotosForDate}
+              className="flex items-center gap-1 px-3 py-1 bg-red-500 text-white text-xs rounded hover:bg-red-600 transition"
+              title="Delete all photos from this date"
+            >
+              <Trash2 size={12} /> Delete All Photos
+            </button>
+          )}
+        </div>
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
           {gridLayout.flat().filter(p => !p.isBlank).map(plot => {
             const photoKey = `${currentDateObj.date}_${plot.id}`;
