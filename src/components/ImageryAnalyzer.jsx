@@ -486,21 +486,38 @@ const ImageryAnalyzer = ({
   // Extract EXIF date from file
   const extractEXIFDate = async (file) => {
     try {
-      const arrayBuffer = await file.arrayBuffer();
-      const data = new Uint8Array(arrayBuffer);
-      const exif = piexif.load(data);
+      // Read file as data URL for piexifjs
+      const reader = new FileReader();
+      const dataUrlPromise = new Promise((resolve, reject) => {
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+
+      const dataUrl = await dataUrlPromise;
+
+      // Extract EXIF data
+      const exif = piexif.load(dataUrl);
+
       if (exif.Exif && exif.Exif[piexif.ExifIFD.DateTimeOriginal]) {
         const exifDate = exif.Exif[piexif.ExifIFD.DateTimeOriginal];
-        const dateArray = String.fromCharCode.apply(null, exifDate).split(' ')[0].split(':');
+        // EXIF date format: "YYYY:MM:DD HH:MM:SS"
+        const dateStr = typeof exifDate === 'string' ? exifDate : String.fromCharCode.apply(null, exif.Exif[piexif.ExifIFD.DateTimeOriginal]);
+        const dateArray = dateStr.split(' ')[0].split(':');
+        console.log('[ImageryAnalyzer] EXIF date found:', dateArray.join('-'));
         return `${dateArray[0]}-${dateArray[1]}-${dateArray[2]}`;
       }
+
+      console.log('[ImageryAnalyzer] No EXIF date in', file.name, ', using file date');
     } catch (e) {
-      console.warn('Could not extract EXIF date from', file.name);
+      console.warn('[ImageryAnalyzer] Could not extract EXIF date from', file.name, ':', e.message);
     }
 
     // Fallback to file modification date
     const modifiedDate = new Date(file.lastModified);
-    return modifiedDate.toISOString().split('T')[0];
+    const fallbackDate = modifiedDate.toISOString().split('T')[0];
+    console.log('[ImageryAnalyzer] Using fallback date:', fallbackDate);
+    return fallbackDate;
   };
 
   // Handle batch file selection
@@ -508,26 +525,49 @@ const ImageryAnalyzer = ({
     const files = Array.from(e.target.files || []);
     if (files.length === 0) return;
 
+    console.log('[ImageryAnalyzer] Batch upload: Processing', files.length, 'files');
     setLoading(true);
-    const fileDataArray = [];
 
-    for (const file of files) {
-      const date = await extractEXIFDate(file);
-      const preview = URL.createObjectURL(file);
+    try {
+      const fileDataArray = [];
 
-      fileDataArray.push({
-        file,
-        name: file.name,
-        date,
-        preview,
-        status: 'pending', // pending, uploading, uploaded, error
-        error: null
-      });
+      for (const file of files) {
+        try {
+          const date = await extractEXIFDate(file);
+          const preview = URL.createObjectURL(file);
+
+          fileDataArray.push({
+            file,
+            name: file.name,
+            date,
+            preview,
+            status: 'pending', // pending, uploading, uploaded, error
+            error: null
+          });
+          console.log('[ImageryAnalyzer] Processed:', file.name, 'date:', date);
+        } catch (error) {
+          console.error('[ImageryAnalyzer] Error processing file:', file.name, error);
+          // Still add the file with fallback date
+          fileDataArray.push({
+            file,
+            name: file.name,
+            date: new Date().toISOString().split('T')[0],
+            preview: URL.createObjectURL(file),
+            status: 'pending',
+            error: null
+          });
+        }
+      }
+
+      console.log('[ImageryAnalyzer] All files processed, showing modal');
+      setBatchFiles(fileDataArray);
+      setShowBatchUpload(true);
+    } catch (error) {
+      console.error('[ImageryAnalyzer] Batch file selection error:', error);
+      alert('Error processing files: ' + error.message);
+    } finally {
+      setLoading(false);
     }
-
-    setBatchFiles(fileDataArray);
-    setShowBatchUpload(true);
-    setLoading(false);
   };
 
   // Handle date edit for a specific file
