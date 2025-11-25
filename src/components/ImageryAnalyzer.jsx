@@ -40,6 +40,7 @@ const ImageryAnalyzer = ({
   ]);
   const [draggingCorner, setDraggingCorner] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [currentUnassignedKey, setCurrentUnassignedKey] = useState(null); // Track which unassigned image is loaded
 
   // Batch upload state
   const [showBatchUpload, setShowBatchUpload] = useState(false);
@@ -89,6 +90,7 @@ const ImageryAnalyzer = ({
         imageRef.current = img;
         // Use blob URL instead of data URL - much faster for large files
         setImageSrc(blobUrl);
+        setCurrentUnassignedKey(null); // This is a new upload, not from unassigned
 
         // Set corner positions based on image size
         setCorners([
@@ -466,6 +468,12 @@ const ImageryAnalyzer = ({
         }
       }
 
+      // Remove the unassigned image if this was loaded from batch upload
+      if (currentUnassignedKey && newPhotos[currentUnassignedKey]) {
+        console.log('[ImageryAnalyzer] Removing unassigned image:', currentUnassignedKey);
+        delete newPhotos[currentUnassignedKey];
+      }
+
       // Update photos state
       onPhotosChange(newPhotos);
 
@@ -474,6 +482,7 @@ const ImageryAnalyzer = ({
       // Reset the component for next image
       setImageSrc(null);
       setFileDate(null);
+      setCurrentUnassignedKey(null);
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
       }
@@ -683,6 +692,7 @@ const ImageryAnalyzer = ({
         imageRef.current = img;
         setImageSrc(imageUrl);
         setFileDate(imageData.date);
+        setCurrentUnassignedKey(imageData.key); // Track the unassigned key
 
         // Set corner positions based on image size
         setCorners([
