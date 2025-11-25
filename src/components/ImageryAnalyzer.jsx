@@ -485,38 +485,44 @@ const ImageryAnalyzer = ({
 
   // Extract EXIF date from file
   const extractEXIFDate = async (file) => {
+    const fallbackDate = new Date(file.lastModified).toISOString().split('T')[0];
+
     try {
+      // Add timeout to prevent hanging
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('EXIF extraction timeout')), 5000)
+      );
+
       // Read file as data URL for piexifjs
-      const reader = new FileReader();
-      const dataUrlPromise = new Promise((resolve, reject) => {
+      const fileReadPromise = new Promise((resolve, reject) => {
+        const reader = new FileReader();
         reader.onload = () => resolve(reader.result);
         reader.onerror = reject;
         reader.readAsDataURL(file);
       });
 
-      const dataUrl = await dataUrlPromise;
+      const dataUrl = await Promise.race([fileReadPromise, timeoutPromise]);
 
       // Extract EXIF data
       const exif = piexif.load(dataUrl);
 
-      if (exif.Exif && exif.Exif[piexif.ExifIFD.DateTimeOriginal]) {
+      if (exif?.Exif?.[piexif.ExifIFD.DateTimeOriginal]) {
         const exifDate = exif.Exif[piexif.ExifIFD.DateTimeOriginal];
         // EXIF date format: "YYYY:MM:DD HH:MM:SS"
-        const dateStr = typeof exifDate === 'string' ? exifDate : String.fromCharCode.apply(null, exif.Exif[piexif.ExifIFD.DateTimeOriginal]);
+        const dateStr = typeof exifDate === 'string' ? exifDate : String.fromCharCode.apply(null, exifDate);
         const dateArray = dateStr.split(' ')[0].split(':');
-        console.log('[ImageryAnalyzer] EXIF date found:', dateArray.join('-'));
-        return `${dateArray[0]}-${dateArray[1]}-${dateArray[2]}`;
+        const extractedDate = `${dateArray[0]}-${dateArray[1]}-${dateArray[2]}`;
+        console.log('[ImageryAnalyzer] ✓ EXIF date found for', file.name, ':', extractedDate);
+        return extractedDate;
       }
 
-      console.log('[ImageryAnalyzer] No EXIF date in', file.name, ', using file date');
+      console.log('[ImageryAnalyzer] No EXIF date in', file.name);
     } catch (e) {
-      console.warn('[ImageryAnalyzer] Could not extract EXIF date from', file.name, ':', e.message);
+      console.warn('[ImageryAnalyzer] EXIF extraction failed for', file.name, ':', e.message);
     }
 
     // Fallback to file modification date
-    const modifiedDate = new Date(file.lastModified);
-    const fallbackDate = modifiedDate.toISOString().split('T')[0];
-    console.log('[ImageryAnalyzer] Using fallback date:', fallbackDate);
+    console.log('[ImageryAnalyzer] Using fallback date for', file.name, ':', fallbackDate);
     return fallbackDate;
   };
 
