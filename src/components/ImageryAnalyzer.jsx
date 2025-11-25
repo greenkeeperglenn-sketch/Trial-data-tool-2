@@ -483,46 +483,21 @@ const ImageryAnalyzer = ({
     }
   };
 
-  // Extract EXIF date from file
+  // Extract date from file - skip EXIF for large files (too slow)
   const extractEXIFDate = async (file) => {
-    const fallbackDate = new Date(file.lastModified).toISOString().split('T')[0];
-
-    try {
-      // Add timeout to prevent hanging
-      const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('EXIF extraction timeout')), 5000)
-      );
-
-      // Read file as data URL for piexifjs
-      const fileReadPromise = new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result);
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-      });
-
-      const dataUrl = await Promise.race([fileReadPromise, timeoutPromise]);
-
-      // Extract EXIF data
-      const exif = piexif.load(dataUrl);
-
-      if (exif?.Exif?.[piexif.ExifIFD.DateTimeOriginal]) {
-        const exifDate = exif.Exif[piexif.ExifIFD.DateTimeOriginal];
-        // EXIF date format: "YYYY:MM:DD HH:MM:SS"
-        const dateStr = typeof exifDate === 'string' ? exifDate : String.fromCharCode.apply(null, exifDate);
-        const dateArray = dateStr.split(' ')[0].split(':');
-        const extractedDate = `${dateArray[0]}-${dateArray[1]}-${dateArray[2]}`;
-        console.log('[ImageryAnalyzer] ✓ EXIF date found for', file.name, ':', extractedDate);
-        return extractedDate;
-      }
-
-      console.log('[ImageryAnalyzer] No EXIF date in', file.name);
-    } catch (e) {
-      console.warn('[ImageryAnalyzer] EXIF extraction failed for', file.name, ':', e.message);
+    // Try to extract date from filename first (DD.MM.YY format)
+    const filenameMatch = file.name.match(/(\d{2})\.(\d{2})\.(\d{2})/);
+    if (filenameMatch) {
+      const [, day, month, year] = filenameMatch;
+      const fullYear = `20${year}`; // Assume 20xx
+      const extractedDate = `${fullYear}-${month}-${day}`;
+      console.log('[ImageryAnalyzer] ✓ Date from filename:', file.name, '→', extractedDate);
+      return extractedDate;
     }
 
     // Fallback to file modification date
-    console.log('[ImageryAnalyzer] Using fallback date for', file.name, ':', fallbackDate);
+    const fallbackDate = new Date(file.lastModified).toISOString().split('T')[0];
+    console.log('[ImageryAnalyzer] Using file date for', file.name, ':', fallbackDate);
     return fallbackDate;
   };
 
