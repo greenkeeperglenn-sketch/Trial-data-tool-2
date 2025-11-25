@@ -794,39 +794,44 @@ const ImageryAnalyzer = ({
             {/* Content */}
             <div className="flex-1 overflow-y-auto px-6 py-4">
               {!batchUploading && batchFiles.length > 0 && (
-                <div className="mb-4 p-4 bg-blue-50 rounded-lg">
+                <div className="mb-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
                   <p className="text-sm text-blue-900">
-                    <strong>{batchFiles.length} files selected</strong>
+                    <strong>{batchFiles.length} files ready to upload</strong>
                   </p>
                   <p className="text-xs text-blue-700 mt-1">
-                    Review dates extracted from EXIF metadata. Click on a date to edit it.
+                    Review dates extracted from EXIF metadata. Edit any date if needed, then click "Upload" below.
                   </p>
                 </div>
               )}
 
               {batchUploading && (
-                <div className="mb-4 p-4 bg-blue-100 rounded-lg">
+                <div className="mb-4 p-4 bg-blue-100 rounded-lg border-2 border-blue-400">
                   <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm font-medium text-blue-900">
-                      Uploading {uploadProgress.current} of {uploadProgress.total}...
+                    <span className="text-sm font-bold text-blue-900">
+                      📤 Uploading: {uploadProgress.current} of {uploadProgress.total} complete
                     </span>
-                    <span className="text-xs text-blue-700">
+                    <span className="text-sm font-bold text-blue-700">
                       {Math.round((uploadProgress.current / uploadProgress.total) * 100)}%
                     </span>
                   </div>
-                  <div className="w-full bg-blue-200 rounded-full h-2">
+                  <div className="w-full bg-blue-200 rounded-full h-3 mb-2">
                     <div
                       className="bg-blue-600 h-full rounded-full transition-all"
                       style={{ width: `${(uploadProgress.current / uploadProgress.total) * 100}%` }}
                     />
                   </div>
-                  <p className="text-xs text-blue-700 mt-2">
-                    💡 You can close this window and start gridding uploaded images while others upload
+                  <p className="text-xs text-blue-700">
+                    💡 Close this window to start gridding uploaded images while others upload
                   </p>
                 </div>
               )}
 
               {/* File List */}
+              {batchFiles.length > 0 && (
+                <div className="mb-3">
+                  <h4 className="text-sm font-bold text-gray-700 mb-2">Files:</h4>
+                </div>
+              )}
               <div className="space-y-2">
                 {batchFiles.map((fileData, index) => (
                   <div
@@ -865,16 +870,28 @@ const ImageryAnalyzer = ({
                       </div>
                     </div>
 
-                    {/* Status Icon */}
-                    <div className="flex-shrink-0">
+                    {/* Status Icon and Label */}
+                    <div className="flex-shrink-0 flex items-center gap-2">
                       {fileData.status === 'uploaded' && (
-                        <Check size={20} className="text-green-600" />
+                        <>
+                          <Check size={20} className="text-green-600" />
+                          <span className="text-xs font-medium text-green-700">Uploaded</span>
+                        </>
                       )}
                       {fileData.status === 'error' && (
-                        <AlertCircle size={20} className="text-red-600" />
+                        <>
+                          <AlertCircle size={20} className="text-red-600" />
+                          <span className="text-xs font-medium text-red-700">Failed</span>
+                        </>
                       )}
                       {fileData.status === 'uploading' && (
-                        <div className="w-5 h-5 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+                        <>
+                          <div className="w-5 h-5 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+                          <span className="text-xs font-medium text-blue-700">Uploading...</span>
+                        </>
+                      )}
+                      {fileData.status === 'pending' && (
+                        <span className="text-xs font-medium text-gray-500">Pending</span>
                       )}
                     </div>
                   </div>
