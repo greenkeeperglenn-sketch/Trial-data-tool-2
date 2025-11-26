@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import piexif from 'piexifjs';
-import { Upload, X, Check, AlertCircle, Image as ImageIcon } from 'lucide-react';
+import { Upload, X, Check, AlertCircle, Image as ImageIcon, Grid, MapPin, Calendar } from 'lucide-react';
 import { uploadPlotImage, getImageUrl } from '../services/storage';
 
 const ImageryAnalyzer = ({
@@ -48,6 +48,10 @@ const ImageryAnalyzer = ({
   const [batchUploading, setBatchUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState({ current: 0, total: 0 });
   const [uploadComplete, setUploadComplete] = useState(false);
+
+  // Plot picker state
+  const [showPlotPicker, setShowPlotPicker] = useState(false);
+  const [selectedImageForAssignment, setSelectedImageForAssignment] = useState(null);
 
   // Refs (required for canvas and file input)
   const fileInputRef = useRef(null);
@@ -719,6 +723,49 @@ const ImageryAnalyzer = ({
     }
   };
 
+  // Update date for an unassigned image
+  const updateImageDate = (imageKey, newDate) => {
+    const newPhotos = { ...photos };
+    // Update the key in the photos object
+    if (newPhotos[imageKey]) {
+      const imagePaths = newPhotos[imageKey];
+      delete newPhotos[imageKey];
+
+      // Create new key with updated date
+      const parts = imageKey.split('_');
+      const newKey = `${newDate}_${parts[1]}_${parts[2]}`;
+      newPhotos[newKey] = imagePaths;
+
+      onPhotosChange(newPhotos);
+      console.log('[ImageryAnalyzer] Updated image date:', imageKey, '→', newKey);
+    }
+  };
+
+  // Assign image directly to a plot
+  const assignImageToPlot = (imageData, plotId, date) => {
+    const newPhotos = { ...photos };
+
+    // Get the image path from unassigned
+    const imagePaths = newPhotos[imageData.key];
+    if (!imagePaths || imagePaths.length === 0) return;
+
+    // Create new key for the plot
+    const photoKey = `${date}_${plotId}`;
+    newPhotos[photoKey] = imagePaths;
+
+    // Remove from unassigned
+    delete newPhotos[imageData.key];
+
+    onPhotosChange(newPhotos);
+    console.log('[ImageryAnalyzer] Assigned image to plot:', plotId, 'date:', date);
+  };
+
+  // Open plot picker for assignment
+  const openPlotPicker = (imageData) => {
+    setSelectedImageForAssignment(imageData);
+    setShowPlotPicker(true);
+  };
+
   const unassignedImages = getUnassignedImages();
 
   return (
@@ -776,36 +823,69 @@ const ImageryAnalyzer = ({
           />
         </div>
 
-        {/* Unassigned Images Section */}
+        {/* Unassigned Images Section - Dropbox Style */}
         {unassignedImages.length > 0 && !imageSrc && !loading && (
-          <div className="border-2 border-orange-300 rounded-lg p-4 bg-orange-50">
-            <div className="flex items-center gap-2 mb-3">
-              <ImageIcon size={20} className="text-orange-700" />
-              <h3 className="font-semibold text-orange-900">
-                Unassigned Images ({unassignedImages.length})
-              </h3>
+          <div className="border-2 border-blue-300 rounded-lg p-6 bg-gradient-to-br from-blue-50 to-indigo-50">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <ImageIcon size={24} className="text-blue-700" />
+                <h3 className="text-lg font-bold text-blue-900">
+                  Image Library ({unassignedImages.length})
+                </h3>
+              </div>
             </div>
-            <p className="text-sm text-orange-700 mb-3">
-              Click an image below to load it for gridding:
+            <p className="text-sm text-blue-700 mb-4">
+              Select an action for each image: extract a grid of plots or assign directly to a specific plot.
             </p>
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {unassignedImages.map((img, idx) => (
-                <button
+                <div
                   key={`${img.key}-${idx}`}
-                  onClick={() => loadUnassignedImage(img)}
-                  className="group relative aspect-square border-2 border-orange-200 rounded-lg overflow-hidden hover:border-orange-500 transition bg-white"
+                  className="bg-white border-2 border-blue-200 rounded-lg overflow-hidden shadow-sm hover:shadow-md transition"
                 >
-                  <img
-                    src={getImageUrl(img.path)}
-                    alt={`Unassigned ${img.date}`}
-                    className="w-full h-full object-cover"
-                  />
-                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition flex items-center justify-center">
-                    <div className="opacity-0 group-hover:opacity-100 transition text-white text-xs font-medium text-center p-2">
-                      {img.date}
+                  {/* Image Preview */}
+                  <div className="relative aspect-video bg-gray-100">
+                    <img
+                      src={getImageUrl(img.path)}
+                      alt={`Image ${img.date}`}
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+
+                  {/* Image Info & Actions */}
+                  <div className="p-3 space-y-3">
+                    {/* Date Editor */}
+                    <div className="flex items-center gap-2">
+                      <Calendar size={16} className="text-gray-500" />
+                      <input
+                        type="date"
+                        value={img.date}
+                        onChange={(e) => updateImageDate(img.key, e.target.value)}
+                        className="flex-1 text-sm px-2 py-1 border border-gray-300 rounded focus:border-blue-500 focus:outline-none"
+                      />
+                    </div>
+
+                    {/* Action Buttons */}
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        onClick={() => loadUnassignedImage(img)}
+                        className="flex items-center justify-center gap-1 px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-medium rounded transition"
+                        title="Extract grid of plot images"
+                      >
+                        <Grid size={14} />
+                        Grid
+                      </button>
+                      <button
+                        onClick={() => openPlotPicker(img)}
+                        className="flex items-center justify-center gap-1 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded transition"
+                        title="Assign to specific plot"
+                      >
+                        <MapPin size={14} />
+                        Assign
+                      </button>
                     </div>
                   </div>
-                </button>
+                </div>
               ))}
             </div>
           </div>
@@ -1117,6 +1197,81 @@ const ImageryAnalyzer = ({
             >
               Dismiss
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Plot Picker Modal */}
+      {showPlotPicker && selectedImageForAssignment && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+            {/* Header */}
+            <div className="px-6 py-4 border-b bg-blue-50 flex justify-between items-center">
+              <h3 className="text-xl font-bold text-blue-900">Assign Image to Plot</h3>
+              <button
+                onClick={() => {
+                  setShowPlotPicker(false);
+                  setSelectedImageForAssignment(null);
+                }}
+                className="p-2 hover:bg-blue-100 rounded transition"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="flex-1 overflow-y-auto p-6">
+              <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                <p className="text-sm text-blue-900">
+                  <strong>Date:</strong> {selectedImageForAssignment.date}
+                </p>
+                <p className="text-xs text-blue-700 mt-1">
+                  Click a plot below to assign this image to it.
+                </p>
+              </div>
+
+              {/* Grid Layout */}
+              <div className="space-y-1">
+                {gridLayout && gridLayout.map((row, rowIdx) => (
+                  <div key={rowIdx} className="flex gap-1">
+                    {row.map((plot, colIdx) => (
+                      <button
+                        key={`${rowIdx}-${colIdx}`}
+                        onClick={() => {
+                          if (!plot.isBlank) {
+                            assignImageToPlot(selectedImageForAssignment, plot.id, selectedImageForAssignment.date);
+                            setShowPlotPicker(false);
+                            setSelectedImageForAssignment(null);
+                          }
+                        }}
+                        disabled={plot.isBlank}
+                        className={`flex-1 aspect-square flex items-center justify-center text-xs font-medium rounded transition ${
+                          plot.isBlank
+                            ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                            : 'bg-blue-100 hover:bg-blue-500 hover:text-white border-2 border-blue-300 cursor-pointer'
+                        }`}
+                        title={plot.isBlank ? 'Blank plot' : `Assign to ${plot.id}`}
+                      >
+                        {plot.isBlank ? '—' : plot.id}
+                      </button>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="px-6 py-4 border-t bg-gray-50 flex justify-end">
+              <button
+                onClick={() => {
+                  setShowPlotPicker(false);
+                  setSelectedImageForAssignment(null);
+                }}
+                className="px-4 py-2 border border-gray-300 rounded hover:bg-gray-100 transition"
+              >
+                Cancel
+              </button>
+            </div>
           </div>
         </div>
       )}
